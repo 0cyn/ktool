@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import pprint
+
+from kdump.headers import HeaderGenerator
+from macho.machofile import MachOFile, MachOFileType
+from objc.objc_library import ObjCLibrary
+
+
+def main():
+    parser = argparse.ArgumentParser(description="ktool")
+    subparsers = parser.add_subparsers(help='sub-command help')
+
+    parser_file = subparsers.add_parser('file', help='file help')
+    parser_file.add_argument('filename')
+    parser_file.set_defaults(func=file)
+
+    parser_info = subparsers.add_parser('info', help='info help')
+    parser_info.add_argument('--slice', dest='slice_index', type=int)
+    parser_info.add_argument('--vm', dest='get_vm', action='store_true')
+    parser_info.add_argument('filename')
+    parser_info.set_defaults(func=info, get_vm=False, slice_index=0)
+
+    parser_binding = subparsers.add_parser('binding', help='binding help')
+    parser_binding.add_argument('filename')
+    parser_binding.set_defaults(func=binding)
+
+    parser_dump = subparsers.add_parser('dump', help='dump help')
+    parser_dump.add_argument('--slice', dest='slice_index', type=int)
+    parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
+    parser_dump.add_argument('--out', dest='outdir')
+    parser_dump.add_argument('filename')
+    parser_dump.set_defaults(func=dump, slice_index=0)
+
+    args = parser.parse_args()
+
+    args.func(args)
+
+
+def file(args):
+    fd = open(args.filename, 'rb')
+    machofile = MachOFile(fd)
+    print(f'\n{args.filename} '.ljust(60, '-') + '\n')
+
+    if machofile.type == MachOFileType.FAT:
+        print('Fat MachO Binary')
+        print(f'{len(machofile.slices)} Slices:')
+
+        print(f'{"Offset".ljust(15, " ")} | {"CPU Type".ljust(15, " ")} | {"CPU Subtype".ljust(15, " ")}')
+        for slice in machofile.slices:
+            print(f'{hex(slice.offset).ljust(15, " ")} | {slice.type.name.ljust(15, " ")} | {slice.subtype.name.ljust(15, " ")}')
+    else:
+        print('Thin MachO Binary')
+
+
+def info(args):
+    fd = open(args.filename, 'rb')
+    machofile = MachOFile(fd)
+    library = machofile.slices[args.slice_index].library
+    if args.get_vm:
+        print(library.vm)
+    fd.close()
+
+
+
+def binding(args):
+    fd = open(args.filename, 'rb')
+    machofile = MachOFile(fd)
+    library = machofile.slices[args.slice_index].library
+    print('\nBinding Info Actions '.ljust(60, '-') + '\n')
+    for action in library.binding_actions:
+        print(f'{hex(action.vmaddr).ljust(15, " ")} | {action.libname.ljust(20, " ")} | {action.item}')
+    fd.close()
+
+
+def dump(args):
+    fd = open(args.filename, 'rb')
+    machofile = MachOFile(fd)
+    library = machofile.slices[args.slice_index].library
+    if library.name == "":
+        library.name = args.filename
+    objc_lib = ObjCLibrary(library)
+
+    if args.outdir is None:
+        raise AssertionError("Missing --out flag (--out <directory>), specifies directory to place headers")
+    generator = HeaderGenerator(objc_lib)
+    for header_name, header in generator.headers.items():
+        if args.outdir == "kdbg":  # something i can put into IDE args that wont accidentally get used by a user
+            print('\n\n')
+            print(header_name)
+            print()
+            print(header)
+        else:
+            os.makedirs(args.outdir, exist_ok=True)
+            with open(args.outdir + '/' + header_name, 'w') as out:
+                out.write(str(header))
+
+    fd.close()
+
+
+if __name__ == "__main__":
+    main()
