@@ -13,7 +13,12 @@ pip3 install k2l
 ```shell
 usage: ktool [command] <flags> [filename]
 
+dumping headers:
+ktool dump --headers --out <directory> [filename]
+
 ```
+
+Will document other features soon, more are on the way.
 
 ---
 
