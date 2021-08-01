@@ -1,6 +1,6 @@
 from objc.objcclass import Class
 
-_KTOOL_VERSION = "0.1.4"
+_KTOOL_VERSION = "0.1.6"
 
 class HeaderGenerator:
     def __init__(self, library):
