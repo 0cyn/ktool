@@ -29,6 +29,9 @@ dyld_header_t = struct(dyld_header, [4, 4, 4, 4, 4, 4, 4, 4])
 dylib = namedtuple("dylib", ["off", "name", "timestamp", "current_version", "compatibility_version"])
 dylib_t = struct(dylib, [4,4,4,4])
 
+unk_command = namedtuple("unk_command", ["off", "cmd", "cmdsize"])
+unk_command_t = struct(unk_command, [4, 4])
+
 dylib_command = namedtuple("dylib_command", ["off", "cmd", "cmdsize", "dylib"])
 dylib_command_t = struct(dylib_command, [4, 4, 16])
 
@@ -92,6 +95,7 @@ LOAD_COMMAND_TYPEMAP = {
     0x26: linkedit_data_command_t,
     0x29: linkedit_data_command_t,
     0x1D: linkedit_data_command_t,
+    0x1E: linkedit_data_command_t,
 }
 
 def sizeof(t: struct):

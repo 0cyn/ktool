@@ -1,5 +1,7 @@
 from objc.objcclass import Class
 
+_KTOOL_VERSION = "0.1.3"
+
 class HeaderGenerator:
     def __init__(self, library):
         self.library = library
@@ -65,6 +67,13 @@ class Header:
 
     def _generate_text(self):
 
+        prefix = "// Headers generated with ktool v" + _KTOOL_VERSION + "\n"
+        prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
+        prefix += f'// Platform: {self.library.platform.name} | '
+        prefix += f'Minimum OS: {self.library.minos.x}.{self.library.minos.y}.{self.library.minos.z} | '
+        prefix += f'SDK: {self.library.sdk_version.x}.{self.library.sdk_version.y}.{self.library.sdk_version.z}'
+
+
         imports = ""
         for libname in self.objc_class.linkedlibs:
             # '/System/Library/Frameworks/UIKit.framework/UIKit']
@@ -121,7 +130,7 @@ class Header:
         foot = "@end"
 
         endif = "#endif"
-        return ifndef + '\n\n' + imports + '\n\n' + head + ivars + '\n\n' + props + '\n\n' + meths + '\n\n' + foot + '\n\n' + endif
+        return prefix + ifndef + '\n\n' + imports + '\n\n' + head + ivars + '\n\n' + props + '\n\n' + meths + '\n\n' + foot + '\n\n' + endif
 
     def _process_self_imports(self):
         self_import_classes = []

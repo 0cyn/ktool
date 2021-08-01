@@ -20,12 +20,14 @@ def main():
     parser_info = subparsers.add_parser('info', help='info help')
     parser_info.add_argument('--slice', dest='slice_index', type=int)
     parser_info.add_argument('--vm', dest='get_vm', action='store_true')
+    parser_info.add_argument('--cmds', dest='get_lcs', action='store_true')
     parser_info.add_argument('filename')
-    parser_info.set_defaults(func=info, get_vm=False, slice_index=0)
+    parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, slice_index=0)
 
     parser_binding = subparsers.add_parser('binding', help='binding help')
+    parser_binding.add_argument('--slice', dest='slice_index', type=int)
     parser_binding.add_argument('filename')
-    parser_binding.set_defaults(func=binding)
+    parser_binding.set_defaults(func=binding, slice_index=0)
 
     parser_dump = subparsers.add_parser('dump', help='dump help')
     parser_dump.add_argument('--slice', dest='slice_index', type=int)
@@ -59,10 +61,23 @@ def info(args):
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
     library = machofile.slices[args.slice_index].library
+    filt = False
     if args.get_vm:
         print(library.vm)
-    fd.close()
+        filt = True
+    if args.get_lcs:
+        pprint.pprint(library.macho_header.load_commands)
+        filt = True
 
+    if not filt:
+        print(f'Name: {library.name}')
+        print(f'UUID: {hex(library.uuid)}')
+        print(f'Platform: {library.platform.name}')
+        print(f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z}')
+        print(f'SDK Version: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')
+
+
+    fd.close()
 
 
 def binding(args):

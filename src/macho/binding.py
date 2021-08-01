@@ -1,14 +1,20 @@
-
-# Cell
 from enum import IntEnum
 
 from collections import namedtuple
 
 action = namedtuple("action", ["vmaddr", "libname", "item"])
-record = namedtuple("record", ["seg_index", "seg_offset", "lib_ordinal", "type", "flags", "name", "addend", "special_dylib"])
+record = namedtuple("record",
+                    ["seg_index", "seg_offset", "lib_ordinal", "type", "flags", "name", "addend", "special_dylib"])
 
 
 class BindingProcessor:
+    """
+    This doesn't do a whole lot at the moment;
+
+    It simply parses through the binding info in the library, and then creates a list of actions specified in the
+        binding info.
+    """
+
     def __init__(self, lib):
         self.lib = lib
         self.import_stack = self._load_binding_info()
@@ -18,20 +24,19 @@ class BindingProcessor:
         actions = []
         for bind_command in self.import_stack:
             segment = list(self.lib.segments.values())[bind_command.seg_index]
-            vmaddr = segment.vmaddr + bind_command.seg_offset
+            vm_addr = segment.vmaddr + bind_command.seg_offset
             try:
-                lib = self.lib.linked[bind_command.lib_ordinal-1].install_name
+                lib = self.lib.linked[bind_command.lib_ordinal - 1].install_name
             except IndexError:
-                lib = ""
+                lib = str(bind_command.lib_ordinal)
             item = bind_command.name
-            actions.append(action(vmaddr & 0xFFFFFFFFF, lib, item))
+            actions.append(action(vm_addr & 0xFFFFFFFFF, lib, item))
         return actions
-
 
     def _load_binding_info(self):
         lib = self.lib
         ea = lib.info.bind_off
-        IMPORT_STACK = []
+        import_stack = []
         while True:
             # print(hex(ea))
             if ea - lib.info.bind_size >= lib.info.bind_off:
@@ -51,7 +56,7 @@ class BindingProcessor:
                 VALUE = self.lib.get_bytes(ea, 1) & 0x0F
                 ea += 1
                 if OP == OPCODE.BIND_OPCODE_DONE:
-                    IMPORT_STACK.append(
+                    import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     break
                 elif OP == OPCODE.BIND_OPCODE_SET_DYLIB_ORDINAL_IMM:
@@ -81,58 +86,49 @@ class BindingProcessor:
                     seg_offset += o
                     ea = bump
                 elif OP == OPCODE.BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB:
-                    IMPORT_STACK.append(
+                    import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset += 8
-                    o, bump =  self.lib.decode_uleb128(ea)
+                    o, bump = self.lib.decode_uleb128(ea)
                     seg_offset += o
                     ea = bump
 
                 elif OP == OPCODE.BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED:
-                    IMPORT_STACK.append(
+                    import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset = seg_offset + (VALUE * 8) + 8
                 elif OP == OPCODE.BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
-                    t, bump =  self.lib.decode_uleb128(ea)
+                    t, bump = self.lib.decode_uleb128(ea)
                     count = t
                     ea = bump
-                    s, bump =  self.lib.decode_uleb128(ea)
+                    s, bump = self.lib.decode_uleb128(ea)
                     skip = s
                     ea = bump
                     for i in range(0, count):
-                        IMPORT_STACK.append(
+                        import_stack.append(
                             record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                         seg_offset += skip + 8
                 elif OP == OPCODE.BIND_OPCODE_DO_BIND:
-                    IMPORT_STACK.append(
+                    import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset += 8
                 else:
                     assert 0 == 1
 
-        return IMPORT_STACK
+        return import_stack
 
 
-
-# Cell
-"""
-BINDING SHIT
-"""
-#export
 class OPCODE(IntEnum):
-    BIND_OPCODE_DONE=0x0
-    BIND_OPCODE_SET_DYLIB_ORDINAL_IMM=0x10
-    BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB=0x20
-    BIND_OPCODE_SET_DYLIB_SPECIAL_IMM=0x30
-    BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM=0x40
-    BIND_OPCODE_SET_TYPE_IMM=0x50
-    BIND_OPCODE_SET_ADDEND_SLEB=0x60
-    BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB=0x70
-    BIND_OPCODE_ADD_ADDR_ULEB=0x80
-    BIND_OPCODE_DO_BIND=0x90
-    BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB=0xa0
-    BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED=0xb0
-    BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB=0xc0
-
-
-# Cell
+    BIND_OPCODE_DONE = 0x0
+    BIND_OPCODE_SET_DYLIB_ORDINAL_IMM = 0x10
+    BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB = 0x20
+    BIND_OPCODE_SET_DYLIB_SPECIAL_IMM = 0x30
+    BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM = 0x40
+    BIND_OPCODE_SET_TYPE_IMM = 0x50
+    BIND_OPCODE_SET_ADDEND_SLEB = 0x60
+    BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB = 0x70
+    BIND_OPCODE_ADD_ADDR_ULEB = 0x80
+    BIND_OPCODE_DO_BIND = 0x90
+    BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB = 0xa0
+    BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED = 0xb0
+    BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB = 0xc0

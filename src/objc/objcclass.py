@@ -61,6 +61,19 @@ class Class:
         except:
             bad_addr = True
 
+        if bad_addr:
+            # Linked Superclass
+            struct_size = sizeof(objc2_class_t)
+            struct_location = objc2_class_item.off
+            for action in self.library.library.binding_actions:
+                try:
+                    action_file_location = self.library.library.vm.get_file_address(action.vmaddr)
+                except ValueError:
+                    continue
+                if action_file_location == struct_location + 0x8:
+                    self.superclass = action.item
+                    self.linkedlibs.append(action.libname)
+                    break
         if objc2_class_item.isa != 0 and objc2_class_item.isa <= 0xFFFFFFFFFF and not self.meta:
             try:
                 metaclass_item: objc2_class = self.library.load_struct(objc2_class_item.isa, objc2_class_t)

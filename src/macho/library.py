@@ -1,9 +1,50 @@
+from enum import Enum
+
 from macho.segment import Segment
 
 from macho.binding import BindingProcessor
 
 from macho._vm import _VirtualMemoryMap
 from .structs import *
+from collections import namedtuple
+
+
+os_version = namedtuple("os_version", ["x", "y", "z"])
+
+
+class PlatformType(Enum):
+    MACOS = 1
+    IOS = 2
+    TVOS = 3
+    WATCHOS = 4
+    BRIDGEOS = 5
+    MACCATALYST = 6
+    IOSSIMULATOR = 7
+    TVOSSIMULATOR = 8
+    WATCHOSSIMULATOR = 9
+    DRIVERKIT = 10
+
+
+class ToolType(Enum):
+    CLANG = 1
+    SWIFT = 2
+    LD = 3
+
+
+class Dylib:
+    """
+    Represents any dynamiclibrary including self and off-image ones
+
+
+    """
+    def __init__(self, library, cmd):
+        self.library = library
+        self.install_name = self._get_name(cmd)
+        self.local = cmd.cmd == 0xD
+
+    def _get_name(self, cmd):
+        ea = cmd.off + sizeof(dylib_command_t)
+        return self.library.get_cstr_at(ea)
 
 
 class LibraryHeader:
@@ -39,7 +80,8 @@ class LibraryHeader:
             try:
                 load_cmd = slice.load_struct(ea, LOAD_COMMAND_TYPEMAP[cmd])
             except KeyError as ex:
-                continue
+                unk_lc = slice.load_struct(ea, unk_command_t)
+                load_cmd = unk_lc
 
             self.load_commands.append(load_cmd)
             ea += load_cmd.cmdsize
@@ -67,6 +109,13 @@ class Library:
 
         self.info = None
         self.dylib = None
+        self.uuid = None
+
+        self.platform = None
+
+        self.minos = None
+        self.sdk_version = None
+
 
         self._parse_load_commands()
         if self.info:
@@ -101,7 +150,7 @@ class Library:
         return self.slice.decode_uleb128(readHead)
 
     def _load_binding(self):
-        binding = BindingProcessor(self)
+        binding  = BindingProcessor(self)
 
         return binding.actions
 
@@ -119,10 +168,20 @@ class Library:
             if isinstance(cmd, dyld_info_command):
                 self.info = cmd
 
-            #if isinstance(cmd, dylib_command):
-            ##    ea += sizeof(dylib_command_t)
-             #   if cmd.cmd == 0xD:  # local
-             #       self.dylib = Library(fd, cmd)
-             ##   else:
-              #      self.linked.append(Library(fd, cmd))
+            if isinstance(cmd, uuid_command):
+                self.uuid = cmd.uuid
+
+            # https://www.rubydoc.info/gems/ruby-macho/0.1.8/MachO/SourceVersionCommand
+
+            if isinstance(cmd, build_version_command):
+                self.platform = PlatformType(cmd.platform)
+                self.minos = os_version(x=self.get_bytes(cmd.off + 14, 2), y=self.get_bytes(cmd.off + 13, 1), z=self.get_bytes(cmd.off + 12, 1))
+                self.sdk_version = os_version(x=self.get_bytes(cmd.off + 18, 2), y=self.get_bytes(cmd.off + 17, 1), z=self.get_bytes(cmd.off + 16, 1))
+
+            if isinstance(cmd, dylib_command):
+                ea += sizeof(dylib_command_t)
+                if cmd.cmd == 0xD:  # local
+                    self.dylib = Dylib(self, cmd)
+                else:
+                    self.linked.append(Dylib(self, cmd))
 

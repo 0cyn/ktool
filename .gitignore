@@ -3,3 +3,4 @@ venv/
 .idea/
 *.i64
 dist/
+CHANGELOG.md
