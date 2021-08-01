@@ -1,6 +1,6 @@
 from objc.objcclass import Class
 
-_KTOOL_VERSION = "0.1.3"
+_KTOOL_VERSION = "0.1.4"
 
 class HeaderGenerator:
     def __init__(self, library):
@@ -69,9 +69,9 @@ class Header:
 
         prefix = "// Headers generated with ktool v" + _KTOOL_VERSION + "\n"
         prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
-        prefix += f'// Platform: {self.library.platform.name} | '
-        prefix += f'Minimum OS: {self.library.minos.x}.{self.library.minos.y}.{self.library.minos.z} | '
-        prefix += f'SDK: {self.library.sdk_version.x}.{self.library.sdk_version.y}.{self.library.sdk_version.z}'
+        prefix += f'// Platform: {self.library.library.platform.name} | '
+        prefix += f'Minimum OS: {self.library.library.minos.x}.{self.library.library.minos.y}.{self.library.library.minos.z} | '
+        prefix += f'SDK: {self.library.library.sdk_version.x}.{self.library.library.sdk_version.y}.{self.library.library.sdk_version.z}\n\n'
 
 
         imports = ""
@@ -150,6 +150,8 @@ class Header:
 
     def _process_properties(self):
         for property in self.objc_class.properties:
+            if not hasattr(property, 'type'):
+                continue
             if property.type.lower() == 'bool':
                 gettername = 'is' + property.name[0].upper() + property.name[1:]
                 self.getters.append(gettername)
