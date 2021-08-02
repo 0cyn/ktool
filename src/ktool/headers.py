@@ -1,4 +1,4 @@
-from objc.objcclass import Class
+from ktool.objc import Class
 
 _KTOOL_VERSION = "0.2.0"
 

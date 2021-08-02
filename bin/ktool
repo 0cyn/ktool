@@ -4,10 +4,10 @@ import argparse
 import os
 import pprint
 
-from dyld.dyld import Dyld
+from ktool.dyld import Dyld
 from ktool.headers import HeaderGenerator
-from macho.machofile import MachOFile, MachOFileType
-from objc.objc_library import ObjCLibrary
+from ktool.macho import MachOFileType, MachOFile
+from ktool.objc import ObjCLibrary
 
 
 def main():

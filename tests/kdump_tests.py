@@ -1,8 +1,8 @@
 import unittest
 
-from dyld.dyld import Dyld
-from macho.machofile import MachOFile
-from objc.objc_library import ObjCLibrary
+from ktool.dyld import Dyld
+from ktool.macho import MachOFile
+from ktool.objc import ObjCLibrary
 from ktool.headers import *
 
 class KDumpTestCase(unittest.TestCase):
