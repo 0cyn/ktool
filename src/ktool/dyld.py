@@ -4,7 +4,7 @@ from enum import IntEnum, Enum
 import ktool.structs
 from ktool.structs import symtab_entry_t, dyld_header, dyld_header_t, unk_command_t, dylib_command, dylib_command_t, \
     dyld_info_command, symtab_command, uuid_command, build_version_command, segment_command_64, LOAD_COMMAND_TYPEMAP, \
-    sizeof, struct
+    sizeof, struct, sub_client_command
 from ktool.macho import _VirtualMemoryMap, Segment
 
 
@@ -39,6 +39,10 @@ class Dyld:
             if isinstance(cmd, uuid_command):
                 library.uuid = cmd.uuid
 
+            if isinstance(cmd, sub_client_command):
+                string = library.get_cstr_at(cmd.off + cmd.offset)
+                library.allowed_clients.append(string)
+
             # https://www.rubydoc.info/gems/ruby-macho/0.1.8/MachO/SourceVersionCommand
 
             if isinstance(cmd, build_version_command):
@@ -52,12 +56,12 @@ class Dyld:
             if isinstance(cmd, dylib_command):
                 ea += sizeof(dylib_command_t)
                 if cmd.cmd == 0xD:  # local
-                    ktool.structs.dylib = ExternalDylib(library, cmd)
+                    library.dylib = ExternalDylib(library, cmd)
                 else:
                     library.linked.append(ExternalDylib(library, cmd))
 
-        if ktool.structs.dylib is not None:
-            library.name = ktool.structs.dylib.install_name.split('/')[-1]
+        if library.dylib is not None:
+            library.name = library.dylib.install_name.split('/')[-1]
         else:
             library.name = ""
 
@@ -88,6 +92,8 @@ class Library:
         self.uuid = None
 
         self.platform = None
+
+        self.allowed_clients = []
 
         self.minos = None
         self.sdk_version = None
@@ -193,9 +199,28 @@ class LibraryHeader:
             ea += load_cmd.cmdsize
 
 
+class SymbolType(Enum):
+    CLASS = 0
+    METACLASS = 1
+    IVAR = 2
+    FUNC = 3
+
+
+
 class Symbol:
     def __init__(self, lib, cmd, entry):
-        self.name = lib.get_cstr_at(entry.str_index + cmd.stroff)
+        self.fullname = lib.get_cstr_at(entry.str_index + cmd.stroff)
+        if '_$_' in self.fullname:
+            if self.fullname.startswith('_OBJC_CLASS_$'):
+                self.type = SymbolType.CLASS
+            elif self.fullname.startswith('_OBJC_METACLASS_$'):
+                self.type = SymbolType.METACLASS
+            elif self.fullname.startswith('_OBJC_IVAR_$'):
+                self.type = SymbolType.IVAR
+            self.name = self.fullname.split('$')[1]
+        else:
+            self.name = self.fullname
+            self.type = SymbolType.FUNC
         self.entry = entry
 
 
@@ -203,6 +228,7 @@ class SymbolTable:
     def __init__(self, library, cmd: symtab_command):
         self.library = library
         self.cmd = cmd
+        self.ext = []
         self.table = self._load_symbol_table()
 
     def _load_symbol_table(self):
@@ -213,7 +239,10 @@ class SymbolTable:
 
         table = []
         for sym in symbol_table:
-            table.append(Symbol(self.library, self.cmd, sym))
+            symbol = Symbol(self.library, self.cmd, sym)
+            table.append(symbol)
+            if sym.type == 0xf:
+                self.ext.append(symbol)
         return table
 
 

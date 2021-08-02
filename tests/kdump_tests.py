@@ -3,7 +3,7 @@ import unittest
 from ktool.dyld import Dyld
 from ktool.macho import MachOFile
 from ktool.objc import ObjCLibrary
-from ktool.headers import *
+from ktool.generator import *
 
 class KDumpTestCase(unittest.TestCase):
     def test_kdump(self):
@@ -14,9 +14,10 @@ class KDumpTestCase(unittest.TestCase):
         objc_lib = ObjCLibrary(library)
         objc_class = objc_lib.classlist[0]
         header = Header(objc_lib, objc_class)
-        print(header)
-        for sym in library.symbol_table.table:
+        #print(header)
+        for sym in library.symbol_table.ext:
             print(sym.name)
+        #print(library.allowed_clients)
         fd.close()
 
 

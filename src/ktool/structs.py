@@ -56,6 +56,9 @@ build_version_command_t = struct(build_version_command, [4,4,4,4,4,4])
 source_version_command = namedtuple("source_version_command", ["off", "cmd", "cmdsize", "version"])
 source_version_command_t = struct(source_version_command, [4, 4, 8])
 
+sub_client_command = namedtuple("sub_client_command", ["off", "cmd", "cmdsize", "offset"])
+sub_client_command_t = struct(sub_client_command, [4, 4, 4])
+
 linkedit_data_command = namedtuple("linkedit_data_command", ["off", "cmd", "cmdsize", "dataoff", "datasize"])
 linkedit_data_command_t = struct(linkedit_data_command, [4, 4, 4, 4])
 
@@ -64,23 +67,25 @@ segment_command_64_t = struct(segment_command_64, [4, 4, 16, 8, 8, 8, 8, 4, 4, 4
 
 section_64 = namedtuple("section_64", ["off", "sectname", "segname", "addr", "size", "offset", "align", "reloff", "nreloc", "flags", "void1", "void2", "void3"])
 section_64_t = struct(section_64, [16, 16, 8, 8, 4, 4, 4, 4, 4, 4, 4, 4])
+
 LOAD_COMMAND_TYPEMAP = {
-    0x19: segment_command_64_t,
+    0x2: symtab_command_t,
+    0xB: dysymtab_command_t,
+    0xC: dylib_command_t,
     0xD: dylib_command_t,
+    0xe: dylinker_command_t,
+    0x14: sub_client_command_t,
+    0x19: segment_command_64_t,
+    0x1B: uuid_command_t,
+    0x1D: linkedit_data_command_t,
+    0x1E: linkedit_data_command_t,
+    0x2A: source_version_command_t,
+    0x26: linkedit_data_command_t,
+    0x29: linkedit_data_command_t,
+    0x32: build_version_command_t,
     0x80000022: dyld_info_command_t,
     0x80000028: entry_point_command_t,
     0x8000001C: rpath_command_t,
-    0x2: symtab_command_t,
-    0xB: dysymtab_command_t,
-    0xe: dylinker_command_t,
-    0x1B: uuid_command_t,
-    0x32: build_version_command_t,
-    0x2A: source_version_command_t,
-    0xC: dylib_command_t,
-    0x26: linkedit_data_command_t,
-    0x29: linkedit_data_command_t,
-    0x1D: linkedit_data_command_t,
-    0x1E: linkedit_data_command_t,
 }
 objc2_class = namedtuple("objc2_class", ["off", "isa", "superclass", "cache", "vtable", "info"])
 objc2_class_t = struct(objc2_class, [8, 8, 8, 8, 8])

@@ -1,6 +1,48 @@
+from ktool.dyld import SymbolType
 from ktool.objc import Class
 
 _KTOOL_VERSION = "0.2.0"
+
+
+class TBDGenerator:
+    def __init__(self, library, general=True):
+        self.library = library
+        self.general = general
+        self.dict = self._generate_dict()
+
+    def _generate_dict(self):
+        tbd = {}
+        if self.general:
+            tbd['archs'] = ['armv7', 'armv7s', 'arm64', 'arm64e']
+            tbd['platform'] = '(null)'
+            tbd['install-name'] = self.library.dylib.install_name
+            tbd['current-version'] = 1
+            tbd['compatibility-version'] = 1
+
+            exports = []
+            export_dict = {'archs': ['armv7', 'armv7s', 'arm64', 'arm64e']}
+
+            if len(self.library.allowed_clients) > 0:
+                export_dict['allowed-clients'] = self.library.allowed_clients
+
+            syms = []
+            classes = []
+            ivars = []
+
+            for item in self.library.symbol_table.ext:
+                if item.type == SymbolType.FUNC:
+                    syms.append(item.name)
+                elif item.type == SymbolType.CLASS:
+                    classes.append(item.name)
+                elif item.type == SymbolType.IVAR:
+                    ivars.append(item.name)
+            export_dict['symbols'] = syms
+            export_dict['objc-classes'] = classes
+            export_dict['objc-ivars'] = ivars
+
+            tbd['exports'] = [export_dict]
+        return tbd
+
 
 
 class HeaderGenerator:
@@ -59,7 +101,7 @@ class Header:
         self._process_ivars()
 
         self.self_importing_classnames = self._process_self_imports()
-        #        self.self_importing_classnames.append(self.library.name + '-Structs')
+        # self.self_importing_classnames.append(self.library.name + '-Structs')
         self.text = self._generate_text()
 
     def __str__(self):

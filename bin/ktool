@@ -3,9 +3,10 @@
 import argparse
 import os
 import pprint
+import yaml
 
 from ktool.dyld import Dyld
-from ktool.headers import HeaderGenerator
+from ktool.generator import HeaderGenerator, TBDGenerator
 from ktool.macho import MachOFileType, MachOFile
 from ktool.objc import ObjCLibrary
 
@@ -33,9 +34,10 @@ def main():
     parser_dump = subparsers.add_parser('dump', help='Dump items (headers) from binary')
     parser_dump.add_argument('--slice', dest='slice_index', type=int, help="Specify Index of Slice (in FAT MachO) to examine")
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
+    parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
     parser_dump.add_argument('filename')
-    parser_dump.set_defaults(func=dump, slice_index=0)
+    parser_dump.set_defaults(func=dump, do_headers=False, do_tbd=False, slice_index=0)
 
     args = parser.parse_args()
 
@@ -92,28 +94,38 @@ def binding(args):
 
 
 def dump(args):
-    fd = open(args.filename, 'rb')
-    machofile = MachOFile(fd)
-    library = Dyld.load(machofile.slices[args.slice_index])
-    if library.name == "":
-        library.name = args.filename
-    objc_lib = ObjCLibrary(library)
+    if args.do_headers:
+        fd = open(args.filename, 'rb')
+        machofile = MachOFile(fd)
+        library = Dyld.load(machofile.slices[args.slice_index])
+        if library.name == "":
+            library.name = args.filename
+        objc_lib = ObjCLibrary(library)
 
-    if args.outdir is None:
-        raise AssertionError("Missing --out flag (--out <directory>), specifies directory to place headers")
-    generator = HeaderGenerator(objc_lib)
-    for header_name, header in generator.headers.items():
-        if args.outdir == "kdbg":  # something i can put into IDE args that wont accidentally get used by a user
-            print('\n\n')
-            print(header_name)
-            print()
-            print(header)
-        else:
-            os.makedirs(args.outdir, exist_ok=True)
-            with open(args.outdir + '/' + header_name, 'w') as out:
-                out.write(str(header))
+        if args.outdir is None:
+            raise AssertionError("Missing --out flag (--out <directory>), specifies directory to place headers")
+        generator = HeaderGenerator(objc_lib)
+        for header_name, header in generator.headers.items():
+            if args.outdir == "kdbg":  # something i can put into IDE args that wont accidentally get used by a user
+                print('\n\n')
+                print(header_name)
+                print()
+                print(header)
+            else:
+                os.makedirs(args.outdir, exist_ok=True)
+                with open(args.outdir + '/' + header_name, 'w') as out:
+                    out.write(str(header))
 
-    fd.close()
+        fd.close()
+
+    if args.do_tbd:
+        fd = open(args.filename, 'rb')
+        machofile = MachOFile(fd)
+        library = Dyld.load(machofile.slices[args.slice_index])
+        tbdgen = TBDGenerator(library, True)
+        with open(library.name + '.tbd', 'w') as filen:
+            tbd = yaml.dump(tbdgen.dict, filen)
+        fd.close()
 
 
 if __name__ == "__main__":
