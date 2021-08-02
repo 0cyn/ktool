@@ -3,7 +3,7 @@ from collections import namedtuple
 from enum import Enum
 from typing import Tuple
 
-from ktool.structs import fat_header, fat_header_t, fat_arch, fat_arch_t, segment_command_64_t, section_64_t, sizeof, struct
+from ktool.structs import fat_header, fat_header_t, fat_arch_t, segment_command_64_t, section_64_t, sizeof, struct
 
 
 class MachOFileType(Enum):
@@ -34,8 +34,7 @@ class MachOFile:
             return MachOFileType.THIN
 
     def _load_struct(self, addr: int, struct_type: struct, endian="little"):
-        sizeOf = sum(struct_type.sizes)
-        fieldNames = list(struct_type.struct.__dict__['_fields'])  # unimportant?
+        field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?
         fields = [addr]
         ea = addr
 
@@ -44,9 +43,10 @@ class MachOFile:
             fields.append(self._get_at(field_addr, field, endian))
             ea += field
 
-        if len(fields) != len(fieldNames):
+        if len(fields) != len(field_names):
             raise ValueError(
-                f'Field-Fieldname count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size Array.')
+                f'Field-Fieldname count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size '
+                f'Array.')
 
         return struct_type.struct._make(fields)
 
@@ -66,16 +66,17 @@ class Segment:
     ["off", "cmd", "cmdsize", "segname", "vmaddr", "vmsize", "fileoff", "filesize",
         "maxprot", "initprot", "nsects", "flags"]
     """
+
     def __init__(self, library, cmd):
         self.library = library
         self.cmd = cmd
-        self.vmaddr = cmd.vmaddr
-        self.fileaddr = cmd.fileoff
+        self.vm_address = cmd.vmaddr
+        self.file_address = cmd.fileoff
         self.size = cmd.vmsize
         self.name = ""
         for i, c in enumerate(hex(cmd.segname)[2:]):
             if i % 2 == 0:
-                self.name += chr(int(c + hex(cmd.segname)[2:][i+1], 16))
+                self.name += chr(int(c + hex(cmd.segname)[2:][i + 1], 16))
         self.name = self.name[::-1]
         self.sections = self._process_sections()
 
@@ -106,14 +107,14 @@ class Section:
      "offset", FILE ADDRESS
      "align", "reloff", "nreloc", "flags", "void1", "void2", "void3"]
     """
+
     def __init__(self, segment, cmd):
         self.cmd = cmd
         self.segment = segment
         self.name = segment.library.get_str_at(cmd.off, 16)
-        self.vmaddr = cmd.addr
-        self.fileaddr = cmd.offset
+        self.vm_address = cmd.addr
+        self.file_address = cmd.offset
         self.size = cmd.size
-
 
 
 vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr", "name"])
@@ -135,11 +136,12 @@ class _VirtualMemoryMap:
     Some other VM related offsets are changed/modified via binding info(citation needed)
     """
 
-    def __init__(self, slice):
+    def __init__(self, macho_slice):
         # name: vm_obj
-        self.slice = slice
+        self.slice = macho_slice
         self.map = {}
         self.stats = {}
+        self.sorted_map = {}
 
     def __str__(self):
         """
@@ -150,7 +152,7 @@ class _VirtualMemoryMap:
 
         ret = ""
         # Sort our map by VM Address, this should already be how it is but cant hurt
-        sortedmap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
+        sortedmap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vm_address)}
 
         for (key, obj) in sortedmap.items():
             # 'string'.ljust(16) adds space padding
@@ -158,8 +160,8 @@ class _VirtualMemoryMap:
             #       then we just re-add the 0x manually.
 
             # this gives us a nice list with visually clear columns and rows
-            ret += f'{key.ljust(16)}  ||  Start: 0x{hex(obj.vmaddr)[2:].zfill(9)}  |  End: 0x{hex(obj.vmend)[2:].zfill(9)}  |  Size: 0x{hex(obj.size)[2:].zfill(9)}  |  Slice ' \
-                   f'Offset:  0x{hex(obj.fileaddr)[2:].zfill(9)}  ||  File Offset: 0x{hex(obj.fileaddr + self.slice.offset)[2:].zfill(9)}\n'
+            ret += f'{key.ljust(16)}  ||  Start: 0x{hex(obj.vm_address)[2:].zfill(9)}  |  End: 0x{hex(obj.vmend)[2:].zfill(9)}  |  Size: 0x{hex(obj.size)[2:].zfill(9)}  |  Slice ' \
+                   f'Offset:  0x{hex(obj.file_address)[2:].zfill(9)}  ||  File Offset: 0x{hex(obj.file_address + self.slice.offset)[2:].zfill(9)}\n '
         return ret
 
     def get_vm_start(self):
@@ -168,49 +170,55 @@ class _VirtualMemoryMap:
         Method selector dumping uses this
         :return:
         """
-        sortedmap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
+        sortedmap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vm_address)}
         if list(sortedmap.keys())[0] == "__PAGEZERO":
-            return list(sortedmap.values())[1].vmaddr
+            return list(sortedmap.values())[1].vm_address
         else:
-            return list(sortedmap.values())[0].vmaddr
+            return list(sortedmap.values())[0].vm_address
 
-    def get_file_address(self, vm_address: int, sname = None):
-        # This function gets called hundreds of thousands of times during processing and is the main source of overhead
-        if sname is not None:
-            o = self.map[sname]
+    def get_file_address(self, vm_address: int, segment_name=None):
+        # This function gets called *a lot*
+        # It needs to be fast as shit.
+        if segment_name is not None:
+            o = self.map[segment_name]
+
+            # noinspection PyChainedComparisons
             if vm_address >= o.vmaddr and o.vmend >= vm_address:
                 return o.fileaddr + vm_address - o.vmaddr
             else:
                 try:
                     o = self.map['__EXTRA_OBJC']
+                    # noinspection PyChainedComparisons
                     if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                        return o.fileaddr + vm_address - o.vmaddr
+                        return o.fileaddr + vm_address - o.vm_address
                 except:
                     for o in self.map.values():
+                        # noinspection PyChainedComparisons
                         if vm_address >= o.vmaddr and o.vmend >= vm_address:
                             # self.stats[o.name] += 1
                             return o.fileaddr + vm_address - o.vmaddr
+
         for o in self.map.values():
+            # noinspection PyChainedComparisons
             if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                #self.stats[o.name] += 1
+                # self.stats[o.name] += 1
                 return o.fileaddr + vm_address - o.vmaddr
-        #print(f'VM MAPPING:')
-        #print(self)
+
         raise ValueError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
 
     def add_segment(self, segment: Segment):
         if len(segment.sections) == 0:
-            seg_obj = vm_obj(segment.vmaddr, segment.vmaddr+segment.size, segment.size, segment.fileaddr, segment.name)
+            seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,
+                             segment.name)
             self.map[segment.name] = seg_obj
             self.stats[segment.name] = 0
         else:
             for section in segment.sections.values():
                 name = section.name if section.name not in self.map.keys() else section.name + '2'
-                sect_obj = vm_obj(section.vmaddr, section.vmaddr+section.size, section.size, section.fileaddr, name)
+                sect_obj = vm_obj(section.vm_address, section.vm_address + section.size, section.size, section.file_address, name)
                 self.map[name] = sect_obj
-                self.smap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
+                self.sorted_map = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
                 self.stats[name] = 0
-
 
 
 class CPUType(Enum):
@@ -230,7 +238,16 @@ class CPUSubType(Enum):
 
 
 class Slice:
-    def __init__(self, macho_file, arch_struct: fat_arch, offset=0):
+    """
+
+    """
+    def __init__(self, macho_file, arch_struct, offset=0):
+        """
+
+        :param macho_file:
+        :param arch_struct:
+        :param offset:
+        """
         self.macho_file = macho_file
         self.arch_struct = arch_struct
 
@@ -242,8 +259,7 @@ class Slice:
             self.offset = offset
 
     def load_struct(self, addr: int, struct_type: struct, endian="little"):
-        sizeOf = sum(struct_type.sizes)
-        fieldNames = list(struct_type.struct.__dict__['_fields'])  # unimportant?
+        field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?
         fields = [addr]
         ea = addr
 
@@ -252,7 +268,7 @@ class Slice:
             fields.append(self.get_at(field_addr, field, endian))
             ea += field
 
-        if len(fields) != len(fieldNames):
+        if len(fields) != len(field_names):
             raise ValueError(
                 f'Field-Fieldname count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size Array.')
         return struct_type.struct._make(fields)
@@ -293,13 +309,6 @@ class Slice:
         return ret
 
     def decode_uleb128(self, readHead: int) -> Tuple[int, int]:
-        """Read a Uleb128 value.
-        Args:
-            buffer: The data source.
-            readHead: The initial offset to read from.
-        Returns:
-            A tuple containing the result and the new read head.
-        """
 
         value = 0
         shift = 0
@@ -319,35 +328,35 @@ class Slice:
         return (value, readHead)
 
     def _load_type(self):
-        type = self.arch_struct.cputype
+        cputype = self.arch_struct.cputype
 
-        if type & 0xF0000000 != 0:
-            if type & 0xF == 0x7:
+        if cputype & 0xF0000000 != 0:
+            if cputype & 0xF == 0x7:
                 return CPUType.X86_64
-            elif type & 0xF == 0xC:
+            elif cputype & 0xF == 0xC:
                 return CPUType.ARM64
         else:
-            if type & 0xF == 0x7:
+            if cputype & 0xF == 0x7:
                 return CPUType.X86
-            elif type & 0xF == 0xC:
+            elif cputype & 0xF == 0xC:
                 return CPUType.ARM
 
         raise ValueError(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct})')
 
     def _load_subtype(self):
-        type = self.arch_struct.cpusubtype
+        cpusubtype = self.arch_struct.cpusubtype
 
-        if type == 3:
+        if cpusubtype == 3:
             return CPUSubType.X86_64_ALL
-        elif type == 8:
+        elif cpusubtype == 8:
             return CPUSubType.X86_64_H
-        elif type == 9:
+        elif cpusubtype == 9:
             return CPUSubType.ARMV7
-        elif type == 11:
+        elif cpusubtype == 11:
             return CPUSubType.ARMV7S
-        elif type == 0:
+        elif cpusubtype == 0:
             return CPUSubType.ARM64_ALL
-        elif type == 1:
+        elif cpusubtype == 1:
             return CPUSubType.ARM64_V8
 
-        raise ValueError(f'Unknown CPU SubType ({hex(type)})')
+        raise ValueError(f'Unknown CPU SubType ({hex(cpusubtype)})')

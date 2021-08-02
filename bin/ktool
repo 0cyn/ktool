@@ -87,7 +87,7 @@ def binding(args):
     library = Dyld.load(machofile.slices[args.slice_index])
     print('\nBinding Info Actions '.ljust(60, '-') + '\n')
     for action in library.binding_actions:
-        print(f'{hex(action.vmaddr).ljust(15, " ")} | {action.libname.ljust(20, " ")} | {action.item}')
+        print(f'{hex(action.vm_address).ljust(15, " ")} | {action.libname.ljust(20, " ")} | {action.item}')
     fd.close()
 
 

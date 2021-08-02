@@ -269,9 +269,9 @@ class ObjCLibrary:
         cnt = sect.size // 0x8
         for i in range(0, cnt):
             if classlimit is None:
-                classes.append(Class(self, sect.vmaddr + i * 0x8))
+                classes.append(Class(self, sect.vm_address + i * 0x8))
             else:
-                oc = Class(self, sect.vmaddr + i * 0x8)
+                oc = Class(self, sect.vm_address + i * 0x8)
                 if classlimit == oc.name:
                     classes.append(oc)
         return classes

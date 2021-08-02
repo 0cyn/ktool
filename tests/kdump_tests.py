@@ -15,7 +15,7 @@ class KDumpTestCase(unittest.TestCase):
         objc_class = objc_lib.classlist[0]
         header = Header(objc_lib, objc_class)
         print(header)
-        for sym in library.symtab.table:
+        for sym in library.symbol_table.table:
             print(sym.name)
         fd.close()
 

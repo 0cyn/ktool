@@ -2,6 +2,7 @@ from ktool.objc import Class
 
 _KTOOL_VERSION = "0.2.0"
 
+
 class HeaderGenerator:
     def __init__(self, library):
         self.library = library
@@ -58,7 +59,7 @@ class Header:
         self._process_ivars()
 
         self.self_importing_classnames = self._process_self_imports()
-#        self.self_importing_classnames.append(self.library.name + '-Structs')
+        #        self.self_importing_classnames.append(self.library.name + '-Structs')
         self.text = self._generate_text()
 
     def __str__(self):
@@ -72,13 +73,12 @@ class Header:
         prefix += f'Minimum OS: {self.library.library.minos.x}.{self.library.library.minos.y}.{self.library.library.minos.z} | '
         prefix += f'SDK: {self.library.library.sdk_version.x}.{self.library.library.sdk_version.y}.{self.library.library.sdk_version.z}\n\n'
 
-
         imports = ""
         for libname in self.objc_class.linkedlibs:
             # '/System/Library/Frameworks/UIKit.framework/UIKit']
             binname = libname.split('/')[-1]
             if binname != "":
-                imports += '#include <' + binname + '/' + binname +'.h>\n'
+                imports += '#include <' + binname + '/' + binname + '.h>\n'
         if len(self.self_importing_classnames) > 0:
             imports += "\n"
             for classname in self.self_importing_classnames:
@@ -112,7 +112,6 @@ class Header:
                 ivars += '    ' + str(ivar) + ';\n'
             ivars += '}\n'
 
-
         props = ""
         for prop in self.properties:
             props += str(prop) + ';'
@@ -120,7 +119,6 @@ class Header:
                 props += ' // ivar: ' + prop.ivarname + '\n'
             else:
                 props += '\n'
-
 
         meths = ""
         for i in self.methods:
@@ -134,16 +132,16 @@ class Header:
     def _process_self_imports(self):
         self_import_classes = []
         for property in self.properties:
-            for oclass in self.classlist:
-                if oclass.name == property.type:
-                    if oclass.name not in self_import_classes:
-                        self_import_classes.append(oclass.name)
+            for objc_class in self.classlist:
+                if objc_class.name == property.type:
+                    if objc_class.name not in self_import_classes:
+                        self_import_classes.append(objc_class.name)
                         break
         for property in self.ivars:
-            for oclass in self.classlist:
-                if oclass.name == property.type:
-                    if oclass.name not in self_import_classes:
-                        self_import_classes.append(oclass.name)
+            for objc_class in self.classlist:
+                if objc_class.name == property.type:
+                    if objc_class.name not in self_import_classes:
+                        self_import_classes.append(objc_class.name)
                         break
         return self_import_classes
 
@@ -189,5 +187,3 @@ class Header:
         if self.objc_class.metaclass is not None:
             for method in self.objc_class.metaclass.methods:
                 self.methods.append(method)
-
-
