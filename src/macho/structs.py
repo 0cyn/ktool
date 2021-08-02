@@ -99,5 +99,4 @@ LOAD_COMMAND_TYPEMAP = {
 }
 
 def sizeof(t: struct):
-    assert isinstance(t, struct)
     return sum(t.sizes)

@@ -1,6 +1,6 @@
 from objc.objcclass import Class
 
-_KTOOL_VERSION = "0.1.6"
+_KTOOL_VERSION = "0.2.0"
 
 class HeaderGenerator:
     def __init__(self, library):
@@ -24,6 +24,7 @@ class UmbrellaHeader:
     def __str__(self):
         return self.text
 
+
 class StructHeader:
     def __init__(self, library):
         text = ""
@@ -32,8 +33,6 @@ class StructHeader:
             text += str(struct) + '\n\n'
 
         self.text = text
-
-
 
     def __str__(self):
         return self.text

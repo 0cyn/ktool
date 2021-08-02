@@ -1,10 +1,8 @@
-from macho.library import Library
-
 from .structs import *
 from .type import TypeProcessor
 
 from .objcclass import Class
-from macho.segment import Segment, Section
+from macho.segment import Section
 
 
 class ObjCLibrary:

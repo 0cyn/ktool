@@ -4,7 +4,8 @@ import argparse
 import os
 import pprint
 
-from kdump.headers import HeaderGenerator
+from dyld.dyld import Dyld
+from ktool.headers import HeaderGenerator
 from macho.machofile import MachOFile, MachOFileType
 from objc.objc_library import ObjCLibrary
 
@@ -60,7 +61,7 @@ def file(args):
 def info(args):
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
-    library = machofile.slices[args.slice_index].library
+    library = Dyld.load(machofile.slices[args.slice_index])
     filt = False
     if args.get_vm:
         print(library.vm)
@@ -83,7 +84,7 @@ def info(args):
 def binding(args):
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
-    library = machofile.slices[args.slice_index].library
+    library = Dyld.load(machofile.slices[args.slice_index])
     print('\nBinding Info Actions '.ljust(60, '-') + '\n')
     for action in library.binding_actions:
         print(f'{hex(action.vmaddr).ljust(15, " ")} | {action.libname.ljust(20, " ")} | {action.item}')
@@ -93,7 +94,7 @@ def binding(args):
 def dump(args):
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
-    library = machofile.slices[args.slice_index].library
+    library = Dyld.load(machofile.slices[args.slice_index])
     if library.name == "":
         library.name = args.filename
     objc_lib = ObjCLibrary(library)

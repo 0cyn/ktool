@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Tuple
 
-from .library import Library
+from dyld.library import Library
 from .structs import *
 
 
@@ -32,10 +32,6 @@ class Slice:
             self.subtype = self._load_subtype()
         else:
             self.offset = offset
-
-        self.library = self.load_library()
-    def load_library(self):
-        return Library(self)
 
     def load_struct(self, addr: int, struct_type: struct, endian="little"):
         sizeOf = sum(struct_type.sizes)

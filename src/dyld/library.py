@@ -2,49 +2,11 @@ from enum import Enum
 
 from macho.segment import Segment
 
-from macho.binding import BindingProcessor
+from dyld.binding import BindingProcessor
 
 from macho._vm import _VirtualMemoryMap
-from .structs import *
+from macho.structs import *
 from collections import namedtuple
-
-
-os_version = namedtuple("os_version", ["x", "y", "z"])
-
-
-class PlatformType(Enum):
-    MACOS = 1
-    IOS = 2
-    TVOS = 3
-    WATCHOS = 4
-    BRIDGEOS = 5
-    MACCATALYST = 6
-    IOSSIMULATOR = 7
-    TVOSSIMULATOR = 8
-    WATCHOSSIMULATOR = 9
-    DRIVERKIT = 10
-
-
-class ToolType(Enum):
-    CLANG = 1
-    SWIFT = 2
-    LD = 3
-
-
-class Dylib:
-    """
-    Represents any dynamiclibrary including self and off-image ones
-
-
-    """
-    def __init__(self, library, cmd):
-        self.library = library
-        self.install_name = self._get_name(cmd)
-        self.local = cmd.cmd == 0xD
-
-    def _get_name(self, cmd):
-        ea = cmd.off + sizeof(dylib_command_t)
-        return self.library.get_cstr_at(ea)
 
 
 class LibraryHeader:
@@ -115,16 +77,10 @@ class Library:
 
         self.minos = None
         self.sdk_version = None
+        self.binding_actions = None
 
+        self.symtab = None
 
-        self._parse_load_commands()
-        if self.info:
-            self.binding_actions = self._load_binding()
-
-        if self.dylib is not None:
-            self.name = self.dylib.install_name.split('/')[-1]
-        else:
-            self.name = ""
 
     def get_bytes(self, offset: int, length: int, vm=False, sectname=None):
         if vm:
@@ -149,39 +105,4 @@ class Library:
     def decode_uleb128(self, readHead: int):
         return self.slice.decode_uleb128(readHead)
 
-    def _load_binding(self):
-        binding  = BindingProcessor(self)
-
-        return binding.actions
-
-    def _parse_load_commands(self):
-        for cmd in self.macho_header.load_commands:
-            # my structLoad function *ALWAYS* saves the offset on-disk to the .off field, regardless of the struct
-            #   loaded.
-            ea = cmd.off
-
-            if isinstance(cmd, segment_command_64):
-                segment = Segment(self, cmd)
-                self.vm.add_segment(segment)
-                self.segments[segment.name] = segment
-
-            if isinstance(cmd, dyld_info_command):
-                self.info = cmd
-
-            if isinstance(cmd, uuid_command):
-                self.uuid = cmd.uuid
-
-            # https://www.rubydoc.info/gems/ruby-macho/0.1.8/MachO/SourceVersionCommand
-
-            if isinstance(cmd, build_version_command):
-                self.platform = PlatformType(cmd.platform)
-                self.minos = os_version(x=self.get_bytes(cmd.off + 14, 2), y=self.get_bytes(cmd.off + 13, 1), z=self.get_bytes(cmd.off + 12, 1))
-                self.sdk_version = os_version(x=self.get_bytes(cmd.off + 18, 2), y=self.get_bytes(cmd.off + 17, 1), z=self.get_bytes(cmd.off + 16, 1))
-
-            if isinstance(cmd, dylib_command):
-                ea += sizeof(dylib_command_t)
-                if cmd.cmd == 0xD:  # local
-                    self.dylib = Dylib(self, cmd)
-                else:
-                    self.linked.append(Dylib(self, cmd))
 
