@@ -1,5 +1,5 @@
 from ktool.dyld import SymbolType
-from ktool.objc import Class
+from ktool.objc import Class, ObjCLibrary
 
 _KTOOL_VERSION = "0.2.0"
 
@@ -32,10 +32,11 @@ class TBDGenerator:
             for item in self.library.symbol_table.ext:
                 if item.type == SymbolType.FUNC:
                     syms.append(item.name)
-                elif item.type == SymbolType.CLASS:
-                    classes.append(item.name)
-                elif item.type == SymbolType.IVAR:
-                    ivars.append(item.name)
+            objc_library = ObjCLibrary(self.library)
+            for objc_class in objc_library.classlist:
+                classes.append('_' +objc_class.name)
+                for ivar in objc_class.ivars:
+                    ivars.append('_' +objc_class.name + '.' + ivar.name)
             export_dict['symbols'] = syms
             export_dict['objc-classes'] = classes
             export_dict['objc-ivars'] = ivars

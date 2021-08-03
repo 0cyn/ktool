@@ -9,6 +9,7 @@ from ktool.dyld import Dyld
 from ktool.generator import HeaderGenerator, TBDGenerator
 from ktool.macho import MachOFileType, MachOFile
 from ktool.objc import ObjCLibrary
+from ktool.util import TapiYAMLWriter
 
 
 def main():
@@ -124,7 +125,7 @@ def dump(args):
         library = Dyld.load(machofile.slices[args.slice_index])
         tbdgen = TBDGenerator(library, True)
         with open(library.name + '.tbd', 'w') as filen:
-            tbd = yaml.dump(tbdgen.dict, filen)
+            filen.write(TapiYAMLWriter.write_out(tbdgen.dict))
         fd.close()
 
 

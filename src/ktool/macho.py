@@ -152,7 +152,7 @@ class _VirtualMemoryMap:
 
         ret = ""
         # Sort our map by VM Address, this should already be how it is but cant hurt
-        sortedmap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vm_address)}
+        sortedmap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
 
         for (key, obj) in sortedmap.items():
             # 'string'.ljust(16) adds space padding
@@ -160,8 +160,8 @@ class _VirtualMemoryMap:
             #       then we just re-add the 0x manually.
 
             # this gives us a nice list with visually clear columns and rows
-            ret += f'{key.ljust(16)}  ||  Start: 0x{hex(obj.vm_address)[2:].zfill(9)}  |  End: 0x{hex(obj.vmend)[2:].zfill(9)}  |  Size: 0x{hex(obj.size)[2:].zfill(9)}  |  Slice ' \
-                   f'Offset:  0x{hex(obj.file_address)[2:].zfill(9)}  ||  File Offset: 0x{hex(obj.file_address + self.slice.offset)[2:].zfill(9)}\n '
+            ret += f'{key.ljust(16)}  ||  Start: 0x{hex(obj.vmaddr)[2:].zfill(9)}  |  End: 0x{hex(obj.vmend)[2:].zfill(9)}  |  Size: 0x{hex(obj.size)[2:].zfill(9)}  |  Slice ' \
+                   f'Offset:  0x{hex(obj.fileaddr)[2:].zfill(9)}  ||  File Offset: 0x{hex(obj.fileaddr + self.slice.offset)[2:].zfill(9)}\n '
         return ret
 
     def get_vm_start(self):

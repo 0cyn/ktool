@@ -441,8 +441,8 @@ class Class:
         protlist: objc2_prot_list = self.library.load_struct(self.objc2_class_ro.base_prots, objc2_prot_list_t)
         ea = protlist.off
         for i in range(1, protlist.cnt + 1):
-            prot_loc = self.library.get_bytes(ea + i * 8, 8, vm=True)
-            prot = self.library.load_struct(prot_loc, objc2_prot_t)
+            prot_loc = self.library.get_bytes(ea + i * 8, 8, vm=False)
+            prot = self.library.load_struct(prot_loc, objc2_prot_t, vm=True)
             prots.append(Protocol(self.library, self, prot, prot_loc))
         return prots
 
@@ -454,7 +454,7 @@ class Class:
         ea = ivarlist.off + 8
         for i in range(1, ivarlist.cnt + 1):
             ivar_loc = ea + sizeof(objc2_ivar_t) * (i - 1)
-            ivar = self.library.load_struct(ivar_loc, objc2_ivar_t)
+            ivar = self.library.load_struct(ivar_loc, objc2_ivar_t, vm=False)
             ivars.append(Ivar(self.library, self, ivar, ivar_loc))
         return ivars
 
