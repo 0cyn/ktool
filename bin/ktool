@@ -24,13 +24,9 @@ def main():
     parser_info.add_argument('--slice', dest='slice_index', type=int, help="Specify Index of Slice (in FAT MachO) to examine")
     parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO Library")
     parser_info.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
+    parser_info.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Actions")
     parser_info.add_argument('filename')
-    parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, slice_index=0)
-
-    parser_binding = subparsers.add_parser('binding', help='Print Binding Info Commands')
-    parser_binding.add_argument('--slice', dest='slice_index', type=int, help="Specify Index of Slice (in FAT MachO) to examine")
-    parser_binding.add_argument('filename')
-    parser_binding.set_defaults(func=binding, slice_index=0)
+    parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, get_binding=False, slice_index=0)
 
     parser_dump = subparsers.add_parser('dump', help='Dump items (headers) from binary')
     parser_dump.add_argument('--slice', dest='slice_index', type=int, help="Specify Index of Slice (in FAT MachO) to examine")
@@ -72,6 +68,10 @@ def info(args):
     if args.get_lcs:
         pprint.pprint(library.macho_header.load_commands)
         filt = True
+    if args.get_binding:
+        print('\nBinding Info Actions '.ljust(60, '-') + '\n')
+        for action in library.binding_actions:
+            print(f'{hex(action.vmaddr).ljust(15, " ")} | {action.libname.ljust(20, " ")} | {action.item}')
 
     if not filt:
         print(f'Name: {library.name}')
@@ -81,16 +81,6 @@ def info(args):
         print(f'SDK Version: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')
 
 
-    fd.close()
-
-
-def binding(args):
-    fd = open(args.filename, 'rb')
-    machofile = MachOFile(fd)
-    library = Dyld.load(machofile.slices[args.slice_index])
-    print('\nBinding Info Actions '.ljust(60, '-') + '\n')
-    for action in library.binding_actions:
-        print(f'{hex(action.vm_address).ljust(15, " ")} | {action.libname.ljust(20, " ")} | {action.item}')
     fd.close()
 
 

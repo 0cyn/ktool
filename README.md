@@ -13,8 +13,19 @@ pip3 install k2l
 ```shell
 usage: ktool [command] <flags> [filename]
 
-dumping headers:
-ktool dump --headers --out <directory> [filename]
+ktool dump:
+ktool dump --headers --out <directory> [filename] - Dump set of headers for a bin/framework
+ktool dump --tbd [filename] - Dump .tbd for a framework
+
+ktool file:
+ktool file [filename] - Prints (very) basic info about a file (e.g. "Thin MachO Binary")
+
+ktool info:
+usage: ktool info [-h] [--slice SLICE_INDEX] [--vm] [--cmds] [--binding] filename
+ktool info [--slice n] [filename] - Print generic info about a MachO File
+ktool info [--slice n] --vm [filename] - Print VM -> Slice -> File address mapping for a slice of a MachO File
+ktool info [--slice n] --cmds [filename] - Print list of load commands for a file 
+ktool info [--slice n] --binding [filename] - Print binding actions for a file
 
 ```
 
