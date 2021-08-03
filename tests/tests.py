@@ -25,7 +25,7 @@ class SymTabTestCase(unittest.TestCase):
 class KDumpTestCase(unittest.TestCase):
     def test_kdump(self):
 
-        fd = open('bins/PreferencesUI', 'rb')
+        fd = open('bins/SpringBoardHome', 'rb')
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         objc_lib = ObjCLibrary(library)
@@ -36,6 +36,7 @@ class KDumpTestCase(unittest.TestCase):
         #    print(sym.name)
         #print(library.allowed_clients)
         fd.close()
+
     def test_tapi_dump(self):
         with open('bins/PreferencesUI.dyldex', 'rb') as file:
             machofile = MachOFile(file)

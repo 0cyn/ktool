@@ -361,6 +361,7 @@ class Class:
                     continue
                 if action_file_location == struct_location + 0x8:
                     try:
+                        self.superclass = symbol.name[1:]
                         self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[int(symbol.ordinal) - 1].install_name))
                     except IndexError:
                         continue
