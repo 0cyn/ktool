@@ -69,6 +69,7 @@ def info(args):
         pprint.pprint(library.macho_header.load_commands)
         filt = True
     if args.get_binding:
+        filt = True
         print('\nBinding Info Actions '.ljust(60, '-') + '\n')
         for action in library.binding_actions:
             print(f'{hex(action.vmaddr).ljust(15, " ")} | {action.libname.ljust(20, " ")} | {action.item}')
