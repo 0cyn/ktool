@@ -3,7 +3,6 @@
 import argparse
 import os
 import pprint
-import yaml
 
 from ktool.dyld import Dyld
 from ktool.generator import HeaderGenerator, TBDGenerator
