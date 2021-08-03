@@ -5,8 +5,9 @@ _KTOOL_VERSION = "0.2.3"
 
 
 class TBDGenerator:
-    def __init__(self, library, general=True):
+    def __init__(self, library, general=True, objclib=None):
         self.library = library
+        self.objclib = objclib
         self.general = general
         self.dict = self._generate_dict()
 
@@ -32,18 +33,20 @@ class TBDGenerator:
             for item in self.library.symbol_table.ext:
                 if item.type == SymbolType.FUNC:
                     syms.append(item.name)
-            objc_library = ObjCLibrary(self.library)
+            if self.objclib:
+                objc_library = self.objclib
+            else:
+                objc_library = ObjCLibrary(self.library)
             for objc_class in objc_library.classlist:
-                classes.append('_' +objc_class.name)
+                classes.append('_' + objc_class.name)
                 for ivar in objc_class.ivars:
-                    ivars.append('_' +objc_class.name + '.' + ivar.name)
+                    ivars.append('_' + objc_class.name + '.' + ivar.name)
             export_dict['symbols'] = syms
             export_dict['objc-classes'] = classes
             export_dict['objc-ivars'] = ivars
 
             tbd['exports'] = [export_dict]
         return tbd
-
 
 
 class HeaderGenerator:
