@@ -7,9 +7,6 @@ from ktool.structs import objc2_class, objc2_class_t, objc2_class_ro_t, objc2_me
     objc2_prot_list_t, objc2_prot, objc2_prot_t, objc2_ivar_list, objc2_ivar_list_t, objc2_ivar, objc2_ivar_t, \
     sizeof, struct
 
-
-
-
 type_encodings = {
     "c": "char",
     "i": "int",
@@ -256,6 +253,7 @@ class Method:
 
 
 class ObjCLibrary:
+
     def __init__(self, library):
         self.library = library
         self.tp = TypeProcessor()
@@ -289,6 +287,12 @@ class ObjCLibrary:
         return self.library.get_cstr_at(addr, limit, vm, sectname)
 
 
+class LinkedClass:
+    def __init__(self, classname, libname):
+        self.classname = classname
+        self.libname = libname
+
+
 class Class:
     """
     Objective C Class
@@ -310,6 +314,7 @@ class Class:
         self.metaclass = None
         self.superclass = ""
         self.linkedlibs = []
+        self.linked_classes = []
         # Classes imported in this class from the same mach-o
         if not objc2class:
             self.objc2_class: objc2_class = self._load_objc2_class(ptr)
@@ -349,14 +354,15 @@ class Class:
             # Linked Superclass
             struct_size = sizeof(objc2_class_t)
             struct_location = objc2_class_item.off
-            for action in self.library.library.binding_actions:
+            for symbol in self.library.library.binding_table.symbol_table:
                 try:
-                    action_file_location = self.library.library.vm.get_file_address(action.vmaddr)
+                    action_file_location = self.library.library.vm.get_file_address(symbol.addr)
                 except ValueError:
                     continue
                 if action_file_location == struct_location + 0x8:
-                    self.superclass = action.item
-                    self.linkedlibs.append(action.libname)
+                    self.superclass = symbol.name[1:]
+                    self.linkedlibs.append(self.library.library.linked[int(symbol.ordinal) - 1].install_name)
+                    self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[int(symbol.ordinal) - 1].install_name))
                     break
         if objc2_class_item.isa != 0 and objc2_class_item.isa <= 0xFFFFFFFFFF and not self.meta:
             try:

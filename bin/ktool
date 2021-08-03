@@ -70,8 +70,9 @@ def info(args):
     if args.get_binding:
         filt = True
         print('\nBinding Info Actions '.ljust(60, '-') + '\n')
-        for action in library.binding_actions:
-            print(f'{hex(action.vmaddr).ljust(15, " ")} | {action.libname.ljust(20, " ")} | {action.item}')
+        print(library.linked)
+        for sym in library.binding_table.symbol_table:
+            print(f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal)-1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
 
     if not filt:
         print(f'Name: {library.name}')

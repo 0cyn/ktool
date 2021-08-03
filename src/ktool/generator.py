@@ -117,11 +117,9 @@ class Header:
         prefix += f'SDK: {self.library.library.sdk_version.x}.{self.library.library.sdk_version.y}.{self.library.library.sdk_version.z}\n\n'
 
         imports = ""
-        for libname in self.objc_class.linkedlibs:
-            # '/System/Library/Frameworks/UIKit.framework/UIKit']
-            binname = libname.split('/')[-1]
-            if binname != "":
-                imports += '#include <' + binname + '/' + binname + '.h>\n'
+        for linked_class in self.objc_class.linked_classes:
+            imports += '#include <' + linked_class.libname.split('/')[-1] + '/' + linked_class.classname + '.h>\n'
+
         if len(self.self_importing_classnames) > 0:
             imports += "\n"
             for classname in self.self_importing_classnames:

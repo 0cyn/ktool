@@ -30,8 +30,7 @@ class Dyld:
 
             if isinstance(cmd, dyld_info_command):
                 library.info = cmd
-                binding = BindingProcessor(library)
-                library.binding_actions = binding.actions
+                library.binding_table = BindingTable(library)
 
             if isinstance(cmd, symtab_command):
                 library.symbol_table = SymbolTable(library, cmd)
@@ -97,7 +96,7 @@ class Library:
 
         self.minos = None
         self.sdk_version = None
-        self.binding_actions = None
+        self.binding_table = None
 
         self.symbol_table = None
 
@@ -208,8 +207,11 @@ class SymbolType(Enum):
 
 
 class Symbol:
-    def __init__(self, lib, cmd, entry):
-        self.fullname = lib.get_cstr_at(entry.str_index + cmd.stroff)
+    def __init__(self, lib, cmd=None, entry=None, fullname=None, ordinal=None, addr=None):
+        if fullname:
+            self.fullname = fullname
+        else:
+            self.fullname = lib.get_cstr_at(entry.str_index + cmd.stroff)
         if '_$_' in self.fullname:
             if self.fullname.startswith('_OBJC_CLASS_$'):
                 self.type = SymbolType.CLASS
@@ -221,7 +223,14 @@ class Symbol:
         else:
             self.name = self.fullname
             self.type = SymbolType.FUNC
+        if entry:
+            self.external = False
+            self.addr = entry.value
+        else:
+            self.external = True
+            self.addr = addr
         self.entry = entry
+        self.ordinal = ordinal
 
 
 class SymbolTable:
@@ -246,26 +255,32 @@ class SymbolTable:
         return table
 
 
-class BindingProcessor:
-    """
-    This doesn't do a whole lot at the moment;
+action = namedtuple("action", ["vmaddr", "libname", "item"])
+record = namedtuple("record",
+                    ["seg_index", "seg_offset", "lib_ordinal", "type", "flags", "name", "addend", "special_dylib"])
 
-    It simply parses through the binding info in the library, and then creates a list of actions specified in the
-        binding info.
-    """
 
-    def __init__(self, lib):
-        self.lib = lib
+class BindingTable:
+    def __init__(self, library):
+        self.library = library
         self.import_stack = self._load_binding_info()
         self.actions = self._create_action_list()
+        self.symbol_table = self._load_symbol_table()
+
+    def _load_symbol_table(self):
+        table = []
+        for act in self.actions:
+            if act.item:
+                table.append(Symbol(self.library, fullname=act.item, ordinal=act.libname, addr=act.vmaddr))
+        return table
 
     def _create_action_list(self):
         actions = []
         for bind_command in self.import_stack:
-            segment = list(self.lib.segments.values())[bind_command.seg_index]
+            segment = list(self.library.segments.values())[bind_command.seg_index]
             vm_address = segment.vm_address + bind_command.seg_offset
             try:
-                lib = self.lib.linked[bind_command.lib_ordinal - 1].install_name
+                lib = self.library.linked[bind_command.lib_ordinal - 1].install_name
             except IndexError:
                 lib = str(bind_command.lib_ordinal)
             item = bind_command.name
@@ -273,7 +288,7 @@ class BindingProcessor:
         return actions
 
     def _load_binding_info(self):
-        lib = self.lib
+        lib = self.library
         ea = lib.info.bind_off
         import_stack = []
         while True:
@@ -291,8 +306,8 @@ class BindingProcessor:
             while True:
                 # There are 0xc opcodes total
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
-                op = self.lib.get_bytes(ea, 1) & 0xF0
-                value = self.lib.get_bytes(ea, 1) & 0x0F
+                op = self.library.get_bytes(ea, 1) & 0xF0
+                value = self.library.get_bytes(ea, 1) & 0x0F
                 ea += 1
                 if op == OPCODE.BIND_OPCODE_DONE:
                     import_stack.append(
@@ -301,14 +316,14 @@ class BindingProcessor:
                 elif op == OPCODE.BIND_OPCODE_SET_DYLIB_ORDINAL_IMM:
                     lib_ordinal = value
                 elif op == OPCODE.BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB:
-                    lib_ordinal, bump = self.lib.decode_uleb128(ea)
+                    lib_ordinal, bump = self.library.decode_uleb128(ea)
                     ea = bump
                 elif op == OPCODE.BIND_OPCODE_SET_DYLIB_SPECIAL_IMM:
                     special_dylib = 0x1
                     lib_ordinal = value
                 elif op == OPCODE.BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM:
                     flags = value
-                    name = self.lib.get_cstr_at(ea)
+                    name = self.library.get_cstr_at(ea)
                     ea += len(name)
                     ea += 1
                 elif op == OPCODE.BIND_OPCODE_SET_TYPE_IMM:
@@ -317,18 +332,18 @@ class BindingProcessor:
                     ea += 1
                 elif op == OPCODE.BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB:
                     seg_index = value
-                    number, head = self.lib.decode_uleb128(ea)
+                    number, head = self.library.decode_uleb128(ea)
                     seg_offset = number
                     ea = head
                 elif op == OPCODE.BIND_OPCODE_ADD_ADDR_ULEB:
-                    o, bump = self.lib.decode_uleb128(ea)
+                    o, bump = self.library.decode_uleb128(ea)
                     seg_offset += o
                     ea = bump
                 elif op == OPCODE.BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB:
                     import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset += 8
-                    o, bump = self.lib.decode_uleb128(ea)
+                    o, bump = self.library.decode_uleb128(ea)
                     seg_offset += o
                     ea = bump
 
@@ -337,10 +352,10 @@ class BindingProcessor:
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset = seg_offset + (value * 8) + 8
                 elif op == OPCODE.BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
-                    t, bump = self.lib.decode_uleb128(ea)
+                    t, bump = self.library.decode_uleb128(ea)
                     count = t
                     ea = bump
-                    s, bump = self.lib.decode_uleb128(ea)
+                    s, bump = self.library.decode_uleb128(ea)
                     skip = s
                     ea = bump
                     for i in range(0, count):
@@ -356,10 +371,6 @@ class BindingProcessor:
 
         return import_stack
 
-
-action = namedtuple("action", ["vmaddr", "libname", "item"])
-record = namedtuple("record",
-                    ["seg_index", "seg_offset", "lib_ordinal", "type", "flags", "name", "addend", "special_dylib"])
 
 
 class OPCODE(IntEnum):
