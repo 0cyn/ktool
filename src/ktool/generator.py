@@ -1,7 +1,7 @@
 from ktool.dyld import SymbolType
 from ktool.objc import Class, ObjCLibrary
 
-_KTOOL_VERSION = "0.2.0"
+_KTOOL_VERSION = "0.2.1"
 
 
 class TBDGenerator:

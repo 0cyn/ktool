@@ -19,11 +19,15 @@ class TapiYAMLWriter:
     def serialize_export_arch(export_dict):
         text = []
         text.append('  - ' + 'archs:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['archs']))
-        text.append \
-            ('    ' + 'allowed-clients:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['allowed-clients']))
-        text.append('    ' + 'symbols:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['symbols']))
-        text.append('    ' + 'objc-classes:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['objc-classes']))
-        text.append('    ' + 'objc-ivars:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['objc-ivars']))
+        if 'allowed-clients' in export_dict:
+            text.append \
+                ('    ' + 'allowed-clients:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['allowed-clients']))
+        if 'symbols' in export_dict:
+            text.append('    ' + 'symbols:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['symbols']))
+        if 'objc-classes' in export_dict:
+            text.append('    ' + 'objc-classes:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['objc-classes']))
+        if 'objc-ivars' in export_dict:
+            text.append('    ' + 'objc-ivars:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['objc-ivars']))
         return '\n'.join(text)
 
     @staticmethod
