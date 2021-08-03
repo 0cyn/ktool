@@ -301,7 +301,7 @@ class Slice:
                 if limit != 0:
                     if ea - addr >= limit:
                         break
-                if ea - addr >= 20000:
+                if ea - addr >= 0x20000:
                     print(f'Endless String fallback; addr={addr}')
                     print(ret)
                     raise ValueError("Endless String Possibly Detected")

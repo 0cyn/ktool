@@ -254,8 +254,9 @@ class Method:
 
 class ObjCLibrary:
 
-    def __init__(self, library):
+    def __init__(self, library, safe=False):
         self.library = library
+        self.safe = safe
         self.tp = TypeProcessor()
         self.name = library.name
 
@@ -407,7 +408,7 @@ class Class:
             try:
                 methods.append(Method(self.library, self, meth, vm_ea))
             except Exception as ex:
-                continue
+                pass
             if uses_relative_methods:
                 ea += sizeof(objc2_meth_list_entry_t)
                 vm_ea += sizeof(objc2_meth_list_entry_t)
@@ -436,7 +437,7 @@ class Class:
                 properties.append(Property(self.library, self, prop, vm_ea))
             except ValueError as ex:
                 # continue
-                raise ex
+                pass
             ea += sizeof(objc2_prop_t)
             vm_ea += sizeof(objc2_prop_t)
 
@@ -451,7 +452,10 @@ class Class:
         for i in range(1, protlist.cnt + 1):
             prot_loc = self.library.get_bytes(ea + i * 8, 8, vm=False)
             prot = self.library.load_struct(prot_loc, objc2_prot_t, vm=True)
-            prots.append(Protocol(self.library, self, prot, prot_loc))
+            try:
+                prots.append(Protocol(self.library, self, prot, prot_loc))
+            except Exception as ex:
+                continue
         return prots
 
     def _process_ivars(self):
@@ -463,7 +467,10 @@ class Class:
         for i in range(1, ivarlist.cnt + 1):
             ivar_loc = ea + sizeof(objc2_ivar_t) * (i - 1)
             ivar = self.library.load_struct(ivar_loc, objc2_ivar_t, vm=False)
-            ivars.append(Ivar(self.library, self, ivar, ivar_loc))
+            try:
+                ivars.append(Ivar(self.library, self, ivar, ivar_loc))
+            except Exception as ex:
+                continue
         return ivars
 
 
