@@ -142,6 +142,7 @@ class _VirtualMemoryMap:
         self.map = {}
         self.stats = {}
         self.sorted_map = {}
+        self.cache = {}
 
     def __str__(self):
         """
@@ -179,30 +180,40 @@ class _VirtualMemoryMap:
     def get_file_address(self, vm_address: int, segment_name=None):
         # This function gets called *a lot*
         # It needs to be fast as shit.
+        if vm_address in self.cache:
+            return self.cache[vm_address]
         if segment_name is not None:
             o = self.map[segment_name]
 
             # noinspection PyChainedComparisons
             if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                return o.fileaddr + vm_address - o.vmaddr
+                faddr = o.fileaddr + vm_address - o.vmaddr
+                self.cache[vm_address] = faddr
+                return faddr
             else:
                 try:
                     o = self.map['__EXTRA_OBJC']
                     # noinspection PyChainedComparisons
                     if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                        return o.fileaddr + vm_address - o.vm_address
+                        faddr = o.fileaddr + vm_address - o.vmaddr
+                        self.cache[vm_address] = faddr
+                        return faddr
                 except:
                     for o in self.map.values():
                         # noinspection PyChainedComparisons
                         if vm_address >= o.vmaddr and o.vmend >= vm_address:
                             # self.stats[o.name] += 1
-                            return o.fileaddr + vm_address - o.vmaddr
+                            faddr = o.fileaddr + vm_address - o.vmaddr
+                            self.cache[vm_address] = faddr
+                            return faddr
 
         for o in self.map.values():
             # noinspection PyChainedComparisons
             if vm_address >= o.vmaddr and o.vmend >= vm_address:
                 # self.stats[o.name] += 1
-                return o.fileaddr + vm_address - o.vmaddr
+                faddr = o.fileaddr + vm_address - o.vmaddr
+                self.cache[vm_address] = faddr
+                return faddr
 
         raise ValueError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
 

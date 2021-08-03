@@ -13,6 +13,8 @@ from ktool.util import TapiYAMLWriter
 
 def main():
     parser = argparse.ArgumentParser(description="ktool")
+    parser.add_argument('--bench', dest='bench', action='store_true')
+    parser.set_defaults(func=help_prompt, bench=False)
     subparsers = parser.add_subparsers(help='sub-command help')
 
     parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
@@ -20,7 +22,8 @@ def main():
     parser_file.set_defaults(func=file)
 
     parser_info = subparsers.add_parser('info', help='Print Info about a MachO Library')
-    parser_info.add_argument('--slice', dest='slice_index', type=int, help="Specify Index of Slice (in FAT MachO) to examine")
+    parser_info.add_argument('--slice', dest='slice_index', type=int,
+                             help="Specify Index of Slice (in FAT MachO) to examine")
     parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO Library")
     parser_info.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
     parser_info.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Actions")
@@ -28,7 +31,8 @@ def main():
     parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, get_binding=False, slice_index=0)
 
     parser_dump = subparsers.add_parser('dump', help='Dump items (headers) from binary')
-    parser_dump.add_argument('--slice', dest='slice_index', type=int, help="Specify Index of Slice (in FAT MachO) to examine")
+    parser_dump.add_argument('--slice', dest='slice_index', type=int,
+                             help="Specify Index of Slice (in FAT MachO) to examine")
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
     parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
@@ -37,7 +41,36 @@ def main():
 
     args = parser.parse_args()
 
-    args.func(args)
+    if args.bench:
+        import cProfile
+        import pstats
+
+        profile = cProfile.Profile()
+        profile.runcall(args.func, args)
+        ps = pstats.Stats(profile)
+        ps.sort_stats('time', 'calls')
+        ps.print_stats(10)
+    else:
+        args.func(args)
+
+
+def help_prompt(args):
+    string = """usage: ktool [command] <flags> [filename]
+
+ktool dump:
+ktool dump --headers --out <directory> [filename] - Dump set of headers for a bin/framework
+ktool dump --tbd [filename] - Dump .tbd for a framework
+
+ktool file:
+ktool file [filename] - Prints (very) basic info about a file (e.g. "Thin MachO Binary")
+
+ktool info:
+usage: ktool info [-h] [--slice SLICE_INDEX] [--vm] [--cmds] [--binding] filename
+ktool info [--slice n] [filename] - Print generic info about a MachO File
+ktool info [--slice n] --vm [filename] - Print VM -> Slice -> File address mapping for a slice of a MachO File
+ktool info [--slice n] --cmds [filename] - Print list of load commands for a file 
+ktool info [--slice n] --binding [filename] - Print binding actions for a file"""
+    print(string)
 
 
 def file(args):
@@ -51,7 +84,8 @@ def file(args):
 
         print(f'{"Offset".ljust(15, " ")} | {"CPU Type".ljust(15, " ")} | {"CPU Subtype".ljust(15, " ")}')
         for slice in machofile.slices:
-            print(f'{hex(slice.offset).ljust(15, " ")} | {slice.type.name.ljust(15, " ")} | {slice.subtype.name.ljust(15, " ")}')
+            print(
+                f'{hex(slice.offset).ljust(15, " ")} | {slice.type.name.ljust(15, " ")} | {slice.subtype.name.ljust(15, " ")}')
     else:
         print('Thin MachO Binary')
 
@@ -70,9 +104,10 @@ def info(args):
     if args.get_binding:
         filt = True
         print('\nBinding Info Actions '.ljust(60, '-') + '\n')
-        print(library.linked)
+        # print(library.linked)
         for sym in library.binding_table.symbol_table:
-            print(f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal)-1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+            print(
+                f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
 
     if not filt:
         print(f'Name: {library.name}')
@@ -80,7 +115,6 @@ def info(args):
         print(f'Platform: {library.platform.name}')
         print(f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z}')
         print(f'SDK Version: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')
-
 
     fd.close()
 

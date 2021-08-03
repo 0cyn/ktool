@@ -360,9 +360,10 @@ class Class:
                 except ValueError:
                     continue
                 if action_file_location == struct_location + 0x8:
-                    self.superclass = symbol.name[1:]
-                    self.linkedlibs.append(self.library.library.linked[int(symbol.ordinal) - 1].install_name)
-                    self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[int(symbol.ordinal) - 1].install_name))
+                    try:
+                        self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[int(symbol.ordinal) - 1].install_name))
+                    except IndexError:
+                        continue
                     break
         if objc2_class_item.isa != 0 and objc2_class_item.isa <= 0xFFFFFFFFFF and not self.meta:
             try:
