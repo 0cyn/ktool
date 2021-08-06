@@ -263,7 +263,14 @@ class ObjCLibrary:
         self.classlist = self._generate_classlist(None)
 
     def _generate_classlist(self, classlimit):
-        sect: Section = self.library.segments['__DATA_CONST'].sections['__objc_classlist']
+        sect = None
+        for seg in self.library.segments:
+            for sec in self.library.segments[seg].sections:
+                if sec == "__objc_classlist":
+                    sect = self.library.segments[seg].sections[sec]
+        # sect: Section = self.library.segments['__DATA_CONST'].sections['__objc_classlist']
+        if not sect:
+            raise ValueError("No Classlist Found")
         classes = []
         cnt = sect.size // 0x8
         for i in range(0, cnt):
@@ -316,6 +323,8 @@ class Class:
         self.superclass = ""
         self.linkedlibs = []
         self.linked_classes = []
+        self.fdec_classes = []
+        self.fdec_prots = []
         # Classes imported in this class from the same mach-o
         if not objc2class:
             self.objc2_class: objc2_class = self._load_objc2_class(ptr)

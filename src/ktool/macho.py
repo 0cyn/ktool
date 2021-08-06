@@ -369,5 +369,7 @@ class Slice:
             return CPUSubType.ARM64_ALL
         elif cpusubtype == 1:
             return CPUSubType.ARM64_V8
+        elif cpusubtype == 2:
+            return CPUSubType.ARM64_V8
 
         raise ValueError(f'Unknown CPU SubType ({hex(cpusubtype)})')

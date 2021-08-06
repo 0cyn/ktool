@@ -121,7 +121,13 @@ class Header:
 
         imports = ""
         for linked_class in self.objc_class.linked_classes:
-            imports += '#include <' + linked_class.libname.split('/')[-1] + '/' + linked_class.classname + '.h>\n'
+            if 'libobjc.A.dylib' in linked_class.libname:
+                binname = 'Foundation'
+                classname = 'Foundation'
+            else:
+                binname = linked_class.libname.split('/')[-1]
+                classname = linked_class.classname
+            imports += '#include <' + binname + '/' + classname + '.h>\n'
 
         if len(self.self_importing_classnames) > 0:
             imports += "\n"
@@ -130,6 +136,16 @@ class Header:
 
         ifndef = "#ifndef " + self.objc_class.name.upper() + "_H\n"
         ifndef += "#define " + self.objc_class.name.upper() + "_H\n"
+
+        foward_decs = ""
+        if len(self.objc_class.fdec_classes) > 0:
+            foward_decs += "@class "
+            foward_decs += ', '.join(self.objc_class.fdec_classes)
+            foward_decs += ";\n"
+        if len(self.objc_class.fdec_prots) > 0:
+            foward_decs += "@protocol "
+            foward_decs += ', '.join(self.objc_class.fdec_prots)
+            foward_decs += ";\n"
 
         head = "@interface " + self.objc_class.name + ' : '
 
@@ -171,7 +187,7 @@ class Header:
         foot = "@end"
 
         endif = "#endif"
-        return prefix + ifndef + '\n\n' + imports + '\n\n' + head + ivars + '\n\n' + props + '\n\n' + meths + '\n\n' + foot + '\n\n' + endif
+        return prefix + ifndef + '\n\n' + foward_decs + '\n\n' + imports + '\n\n' + head + ivars + '\n\n' + props + '\n\n' + meths + '\n\n' + foot + '\n\n' + endif
 
     def _process_self_imports(self):
         self_import_classes = []
