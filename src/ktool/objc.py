@@ -48,7 +48,7 @@ class ObjCLibrary:
                     sect = self.library.segments[seg].sections[sec]
 
         if not sect:
-            raise ValueError("No Catlist Found")
+            return []
 
         cats = []  # meow
         count = sect.size // 0x8
@@ -66,7 +66,7 @@ class ObjCLibrary:
                     sect = self.library.segments[seg].sections[sec]
         # sect: Section = self.library.segments['__DATA_CONST'].sections['__objc_classlist']
         if not sect:
-            raise ValueError("No Classlist Found")
+            return []
         classes = []
         cnt = sect.size // 0x8
         for i in range(0, cnt):
