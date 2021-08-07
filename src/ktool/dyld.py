@@ -203,6 +203,7 @@ class SymbolType(Enum):
     METACLASS = 1
     IVAR = 2
     FUNC = 3
+    UNK = 4
 
 
 
@@ -219,6 +220,8 @@ class Symbol:
                 self.type = SymbolType.METACLASS
             elif self.fullname.startswith('_OBJC_IVAR_$'):
                 self.type = SymbolType.IVAR
+            else:
+                self.type = SymbolType.UNK
             self.name = self.fullname.split('$')[1]
         else:
             self.name = self.fullname

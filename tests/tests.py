@@ -25,7 +25,7 @@ class SymTabTestCase(unittest.TestCase):
 class KDumpTestCase(unittest.TestCase):
     def test_kdump(self):
 
-        fd = open('bins/SpringBoardHome', 'rb')
+        fd = open('bins/Search', 'rb')
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         objc_lib = ObjCLibrary(library)
@@ -60,11 +60,12 @@ class FileLoadTestCase(unittest.TestCase):
 
 class ObjCLoadTestCase(unittest.TestCase):
     def test_objc_load(self):
-        fd = open('bins/PreferencesUI', 'rb')
+        fd = open('bins/SpringBoardHome', 'rb')
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         objc_lib = ObjCLibrary(library)
         self.assertGreater(len(objc_lib.classlist), 1)
+        self.assertGreater(len(objc_lib.catlist), 1)
         self.assertGreater(len(objc_lib.classlist[0].methods), 4)
         fd.close()
 

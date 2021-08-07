@@ -1,11 +1,9 @@
 from collections import namedtuple
 from enum import Enum
 
+from ktool.dyld import SymbolType
 from ktool.macho import Section
-from ktool.structs import objc2_class, objc2_class_t, objc2_class_ro_t, objc2_meth, objc2_meth_t, \
-    objc2_meth_list_entry_t, objc2_meth_list_t, objc2_prop_list_t, objc2_prop, objc2_prop_t, objc2_prot_list, \
-    objc2_prot_list_t, objc2_prot, objc2_prot_t, objc2_ivar_list, objc2_ivar_list_t, objc2_ivar, objc2_ivar_t, \
-    sizeof, struct
+from ktool.structs import *
 
 type_encodings = {
     "c": "char",
@@ -29,6 +27,68 @@ type_encodings = {
     ":": "SEL",
     "?": "unk",
 }
+
+
+class ObjCLibrary:
+
+    def __init__(self, library, safe=False):
+        self.library = library
+        self.safe = safe
+        self.tp = TypeProcessor()
+        self.name = library.name
+
+        self.classlist = self._generate_classlist(None)
+        self.catlist = self._generate_catlist()
+
+    def _generate_catlist(self):
+        sect = None
+        for seg in self.library.segments:
+            for sec in self.library.segments[seg].sections:
+                if sec == "__objc_catlist":
+                    sect = self.library.segments[seg].sections[sec]
+
+        if not sect:
+            raise ValueError("No Catlist Found")
+
+        cats = []  # meow
+        count = sect.size // 0x8
+        for offset in range(0, count):
+            cats.append(Category(self, sect.vm_address + offset * 0x8))
+
+        return cats
+
+
+    def _generate_classlist(self, classlimit):
+        sect = None
+        for seg in self.library.segments:
+            for sec in self.library.segments[seg].sections:
+                if sec == "__objc_classlist":
+                    sect = self.library.segments[seg].sections[sec]
+        # sect: Section = self.library.segments['__DATA_CONST'].sections['__objc_classlist']
+        if not sect:
+            raise ValueError("No Classlist Found")
+        classes = []
+        cnt = sect.size // 0x8
+        for i in range(0, cnt):
+            if classlimit is None:
+                classes.append(Class(self, sect.vm_address + i * 0x8))
+            else:
+                oc = Class(self, sect.vm_address + i * 0x8)
+                if classlimit == oc.name:
+                    classes.append(oc)
+        return classes
+
+    def get_bytes(self, offset: int, length: int, vm=False, sectname=None):
+        return self.library.get_bytes(offset, length, vm, sectname)
+
+    def load_struct(self, addr: int, struct_type: struct, vm=True, sectname=None, endian="little"):
+        return self.library.load_struct(addr, struct_type, vm, sectname, endian)
+
+    def get_str_at(self, addr: int, count: int, vm=True, sectname=None):
+        return self.library.get_str_at(addr, count, vm, sectname)
+
+    def get_cstr_at(self, addr: int, limit: int = 0, vm=True, sectname=None):
+        return self.library.get_cstr_at(addr, limit, vm, sectname)
 
 
 class Struct:
@@ -193,9 +253,8 @@ class Ivar:
 
 
 class Method:
-    def __init__(self, library, objc_class, method: objc2_meth, vmaddr: int):
-        self.objc_class = objc_class
-
+    def __init__(self, library, meta, method: objc2_meth, vmaddr: int):
+        self.meta = meta
         try:
             self.sel = library.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
             typestr = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
@@ -232,7 +291,7 @@ class Method:
             return ptraddon + type.value.name
 
     def _build_method_signature(self):
-        dash = "+" if self.objc_class.meta else "-"
+        dash = "+" if self.meta else "-"
         ret = "(" + self.return_string + ")"
 
         if len(self.arguments) == 0:
@@ -250,49 +309,6 @@ class Method:
         sig = ''.join(segs)
 
         return dash + ret + sig
-
-
-class ObjCLibrary:
-
-    def __init__(self, library, safe=False):
-        self.library = library
-        self.safe = safe
-        self.tp = TypeProcessor()
-        self.name = library.name
-
-        self.classlist = self._generate_classlist(None)
-
-    def _generate_classlist(self, classlimit):
-        sect = None
-        for seg in self.library.segments:
-            for sec in self.library.segments[seg].sections:
-                if sec == "__objc_classlist":
-                    sect = self.library.segments[seg].sections[sec]
-        # sect: Section = self.library.segments['__DATA_CONST'].sections['__objc_classlist']
-        if not sect:
-            raise ValueError("No Classlist Found")
-        classes = []
-        cnt = sect.size // 0x8
-        for i in range(0, cnt):
-            if classlimit is None:
-                classes.append(Class(self, sect.vm_address + i * 0x8))
-            else:
-                oc = Class(self, sect.vm_address + i * 0x8)
-                if classlimit == oc.name:
-                    classes.append(oc)
-        return classes
-
-    def get_bytes(self, offset: int, length: int, vm=False, sectname=None):
-        return self.library.get_bytes(offset, length, vm, sectname)
-
-    def load_struct(self, addr: int, struct_type: struct, vm=True, sectname=None, endian="little"):
-        return self.library.load_struct(addr, struct_type, vm, sectname, endian)
-
-    def get_str_at(self, addr: int, count: int, vm=True, sectname=None):
-        return self.library.get_str_at(addr, count, vm, sectname)
-
-    def get_cstr_at(self, addr: int, limit: int = 0, vm=True, sectname=None):
-        return self.library.get_cstr_at(addr, limit, vm, sectname)
 
 
 class LinkedClass:
@@ -372,7 +388,8 @@ class Class:
                 if action_file_location == struct_location + 0x8:
                     try:
                         self.superclass = symbol.name[1:]
-                        self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[int(symbol.ordinal) - 1].install_name))
+                        self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[
+                            int(symbol.ordinal) - 1].install_name))
                     except IndexError:
                         continue
                     break
@@ -415,7 +432,7 @@ class Class:
             else:
                 meth = self.library.load_struct(ea, objc2_meth_t, vm=False)
             try:
-                methods.append(Method(self.library, self, meth, vm_ea))
+                methods.append(Method(self.library, self.meta, meth, vm_ea))
             except Exception as ex:
                 pass
             if uses_relative_methods:
@@ -443,7 +460,7 @@ class Class:
         for i in range(1, proplist_head.count + 1):
             prop = self.library.load_struct(ea, objc2_prop_t, vm=False)
             try:
-                properties.append(Property(self.library, self, prop, vm_ea))
+                properties.append(Property(self.library, prop, vm_ea))
             except ValueError as ex:
                 # continue
                 pass
@@ -493,7 +510,7 @@ property_attr = namedtuple("property_attr", ["type", "attributes", "ivar", "is_i
 
 
 class Property:
-    def __init__(self, library, objc_class, property: objc2_prop, vmaddr: int):
+    def __init__(self, library, property: objc2_prop, vmaddr: int):
         self.library = library
         self.property = property
 
@@ -561,6 +578,88 @@ class Property:
 
         return property_attr(ptype, property_attributes, ivar, is_id, type_str)
 
+
+class Category:
+    def __init__(self, library, ptr):
+        self.library = library
+        self.ptr = ptr
+        loc = self.library.get_bytes(ptr, 8, vm=True)
+
+        self.struct: objc2_category = self.library.load_struct(loc, objc2_category_t, vm=True)
+        self.name = self.library.get_cstr_at(self.struct.name, vm=True)
+        for sym in self.library.library.symbol_table.table:
+            if hasattr(sym, 'addr'):
+                if sym.addr == self.struct.s_class and sym.type == SymbolType.CLASS:
+                    self.classname = sym.name[1:]
+
+        instmeths = self._process_methods(self.struct.inst_meths)
+        classmeths = self._process_methods(self.struct.class_meths, True)
+
+        self.methods = instmeths + classmeths
+        self.properties = self._process_props(self.struct.props)
+        self.protocols = []
+
+    def _process_methods(self, loc, meta=False):
+        methods = []
+
+        if loc == 0:
+            return methods  # Useless Subclass
+
+        vm_ea = loc
+        methlist_head = self.library.load_struct(loc, objc2_meth_list_t)
+        ea = methlist_head.off
+
+        # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
+        RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG = 0x40000000
+        RELATIVE_METHOD_FLAG = 0x80000000
+        METHOD_LIST_FLAGS_MASK = 0xFFFF0000
+
+        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK != 0
+
+        ea += 8
+        vm_ea += 8
+        for i in range(1, methlist_head.count + 1):
+            if uses_relative_methods:
+                meth = self.library.load_struct(ea, objc2_meth_list_entry_t, vm=False)
+            else:
+                meth = self.library.load_struct(ea, objc2_meth_t, vm=False)
+            try:
+                methods.append(Method(self.library, meta, meth, vm_ea))
+            except Exception as ex:
+                pass
+            if uses_relative_methods:
+                ea += sizeof(objc2_meth_list_entry_t)
+                vm_ea += sizeof(objc2_meth_list_entry_t)
+            else:
+                ea += sizeof(objc2_meth_t)
+                vm_ea += sizeof(objc2_meth_t)
+
+        return methods
+
+    def _process_props(self, location):
+        properties = []
+
+        if location == 0:
+            return properties
+
+        vm_ea = location
+        proplist_head = self.library.load_struct(location, objc2_prop_list_t)
+
+        ea = proplist_head.off
+        ea += 8
+        vm_ea += 8
+
+        for i in range(1, proplist_head.count + 1):
+            prop = self.library.load_struct(ea, objc2_prop_t, vm=False)
+            try:
+                properties.append(Property(self.library, prop, vm_ea))
+            except ValueError as ex:
+                # continue
+                pass
+            ea += sizeof(objc2_prop_t)
+            vm_ea += sizeof(objc2_prop_t)
+
+        return properties
 
 class Protocol:
     def __init__(self, library, objc_class, protocol: objc2_prot, vmaddr: int):

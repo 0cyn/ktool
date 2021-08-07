@@ -1,7 +1,7 @@
 from ktool.dyld import SymbolType
-from ktool.objc import Class, ObjCLibrary
+from ktool.objc import Class, ObjCLibrary, Category
 
-_KTOOL_VERSION = "0.2.5"
+_KTOOL_VERSION = "0.3.0"
 
 
 class TBDGenerator:
@@ -57,6 +57,9 @@ class HeaderGenerator:
         for objc_class in library.classlist:
             self.headers[objc_class.name + '.h'] = Header(library, objc_class)
 
+        for objc_cat in library.catlist:
+            self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(library, objc_cat)
+
         self.umbrella = UmbrellaHeader(self.headers)
         self.headers[self.library.name + '.h'] = self.umbrella
         self.headers[self.library.name + '-Structs.h'] = StructHeader(library)
@@ -83,6 +86,66 @@ class StructHeader:
 
     def __str__(self):
         return self.text
+
+
+class CategoryHeader:
+    def __init__(self, library, category: Category):
+        self.library = library
+        self.category = category
+
+        self.properties = category.properties
+        self.methods = category.methods
+        self.protocols = category.protocols
+
+        self.text = self._generate_text()
+
+    def __str__(self):
+        return self.text
+
+    def _generate_text(self):
+
+        prefix = "// Headers generated with ktool v" + _KTOOL_VERSION + "\n"
+        prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
+        prefix += f'// Platform: {self.library.library.platform.name} | '
+        prefix += f'Minimum OS: {self.library.library.minos.x}.{self.library.library.minos.y}.{self.library.library.minos.z} | '
+        prefix += f'SDK: {self.library.library.sdk_version.x}.{self.library.library.sdk_version.y}.{self.library.library.sdk_version.z}\n\n'
+
+        imports = ""
+
+        ifndef = "#IFNDEF " + self.category.classname.upper() + "_" + self.category.name.upper() + "_" + "H"
+
+        head = "@interface "
+
+        head += self.category.classname + " (" + self.category.name + ")"
+
+        # Protocol Implementing Declaration
+        if len(self.category.protocols) > 0:
+            head += " <"
+            for prot in self.category.protocols:
+                head += str(prot) + ', '
+            head = head[:-2]
+            head += '>'
+
+        # Ivar Declaration
+
+        props = ""
+        for prop in self.properties:
+            props += str(prop) + ';'
+            if prop.ivarname != "":
+                props += ' // ivar: ' + prop.ivarname + '\n'
+            else:
+                props += '\n'
+
+        meths = ""
+        for i in self.methods:
+            meths += str(i) + ';\n'
+
+        foot = "@end"
+
+        endif = "#endif"
+        return prefix + ifndef + '\n\n' + '\n\n' + imports + '\n\n' + head +  '\n\n' + props + '\n\n' + meths + '\n\n' + foot + '\n\n' + endif
+
+
 
 
 class Header:

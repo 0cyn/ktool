@@ -117,3 +117,6 @@ objc2_ivar_list_t = struct(objc2_ivar_list, [4, 4])
 
 objc2_ivar = namedtuple("objc2_ivar", ["off", "offs", "name", "type", "align", "size"])
 objc2_ivar_t = struct(objc2_ivar, [8, 8, 8, 4, 4])
+
+objc2_category = namedtuple("objc2_category", ["off", "name", "s_class", "inst_meths", "class_meths", "prots", "props"])
+objc2_category_t = struct(objc2_category, [8, 8, 8, 8, 8, 8])
