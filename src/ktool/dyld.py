@@ -268,13 +268,16 @@ class BindingTable:
         self.library = library
         self.import_stack = self._load_binding_info()
         self.actions = self._create_action_list()
+        self.lookup_table = {}
         self.symbol_table = self._load_symbol_table()
 
     def _load_symbol_table(self):
         table = []
         for act in self.actions:
             if act.item:
-                table.append(Symbol(self.library, fullname=act.item, ordinal=act.libname, addr=act.vmaddr))
+                sym = Symbol(self.library, fullname=act.item, ordinal=act.libname, addr=act.vmaddr)
+                table.append(sym)
+                self.lookup_table[act.vmaddr] = sym
         return table
 
     def _create_action_list(self):

@@ -380,19 +380,10 @@ class Class:
             # Linked Superclass
             struct_size = sizeof(objc2_class_t)
             struct_location = objc2_class_item.off
-            for symbol in self.library.library.binding_table.symbol_table:
-                try:
-                    action_file_location = self.library.library.vm.get_file_address(symbol.addr)
-                except ValueError:
-                    continue
-                if action_file_location == struct_location + 0x8:
-                    try:
-                        self.superclass = symbol.name[1:]
-                        self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[
-                            int(symbol.ordinal) - 1].install_name))
-                    except IndexError:
-                        continue
-                    break
+            symbol = self.library.library.binding_table.lookup_table[objc2_class_location+8]
+            self.superclass = symbol.name[1:]
+            self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[
+                int(symbol.ordinal) - 1].install_name))
         if objc2_class_item.isa != 0 and objc2_class_item.isa <= 0xFFFFFFFFFF and not self.meta:
             try:
                 metaclass_item: objc2_class = self.library.load_struct(objc2_class_item.isa, objc2_class_t)
@@ -588,10 +579,8 @@ class Category:
         self.struct: objc2_category = self.library.load_struct(loc, objc2_category_t, vm=True)
         self.name = self.library.get_cstr_at(self.struct.name, vm=True)
         self.classname = ""
-        for sym in self.library.library.binding_table.symbol_table:
-            if hasattr(sym, 'addr'):
-                if sym.addr == loc+8 and sym.type == SymbolType.CLASS:
-                    self.classname = sym.name[1:]
+        sym = self.library.library.binding_table.lookup_table[loc+8]
+        self.classname = sym.name[1:]
 
         if self.classname == "":
             print(self.name)
