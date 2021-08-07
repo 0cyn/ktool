@@ -587,10 +587,17 @@ class Category:
 
         self.struct: objc2_category = self.library.load_struct(loc, objc2_category_t, vm=True)
         self.name = self.library.get_cstr_at(self.struct.name, vm=True)
-        for sym in self.library.library.symbol_table.table:
+        self.classname = ""
+        for sym in self.library.library.binding_table.symbol_table:
             if hasattr(sym, 'addr'):
-                if sym.addr == self.struct.s_class and sym.type == SymbolType.CLASS:
+                if sym.addr == loc+8 and sym.type == SymbolType.CLASS:
                     self.classname = sym.name[1:]
+
+        if self.classname == "":
+            print(self.name)
+            print(hex(self.struct.off))
+            print(self.struct)
+            raise ValueError("Category for no class")
 
         instmeths = self._process_methods(self.struct.inst_meths)
         classmeths = self._process_methods(self.struct.class_meths, True)
@@ -661,9 +668,14 @@ class Category:
 
         return properties
 
+
 class Protocol:
-    def __init__(self, library, objc_class, protocol: objc2_prot, vmaddr: int):
+    def __init__(self, library, protocol: objc2_prot, vmaddr: int):
         self.name = library.get_cstr_at(protocol.name, 0, vm=True)
+
+
 
     def __str__(self):
         return self.name
+
+

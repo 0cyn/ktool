@@ -39,6 +39,11 @@ def main():
     parser_dump.add_argument('filename')
     parser_dump.set_defaults(func=dump, do_headers=False, do_tbd=False, slice_index=0)
 
+    parser_list = subparsers.add_parser('list', help='Print various lists')
+    parser_list.add_argument('--symbols', dest='get_syms', action='store_true', help='Dump symbol list')
+    parser_list.add_argument('filename')
+    parser_list.set_defaults(func=list, get_syms=False)
+
     args = parser.parse_args()
 
     if args.bench:
@@ -73,6 +78,18 @@ ktool info [--slice n] --binding [filename] - Print binding actions for a file""
     print(string)
 
 
+def list(args):
+    with open(args.filename, 'rb') as fd:
+        machofile = MachOFile(fd)
+        library = Dyld.load(machofile.slices[0])
+        print(f'\n{args.filename} '.ljust(60, '-') + '\n')
+        if args.get_syms:
+            for sym in library.symbol_table.table:
+                print(f'Address: {sym.addr} | Name: {sym.fullname}')
+
+
+
+
 def file(args):
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
@@ -88,6 +105,7 @@ def file(args):
                 f'{hex(slice.offset).ljust(15, " ")} | {slice.type.name.ljust(15, " ")} | {slice.subtype.name.ljust(15, " ")}')
     else:
         print('Thin MachO Binary')
+    fd.close()
 
 
 def info(args):

@@ -25,7 +25,7 @@ class SymTabTestCase(unittest.TestCase):
 class KDumpTestCase(unittest.TestCase):
     def test_kdump(self):
 
-        fd = open('bins/Search', 'rb')
+        fd = open('bins/SpringBoardHome', 'rb')
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         objc_lib = ObjCLibrary(library)
