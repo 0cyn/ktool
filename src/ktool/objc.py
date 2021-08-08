@@ -259,9 +259,13 @@ class Method:
             self.sel = library.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
             typestr = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
         except ValueError as ex:
-            selref = library.get_bytes(method.selector + vmaddr, 8, vm=True)
-            self.sel = library.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
-            typestr = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+            try:
+                selref = library.get_bytes(method.selector + vmaddr, 8, vm=True)
+                self.sel = library.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
+                typestr = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+            except ValueError as ex:
+                self.sel = library.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
+                typestr = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
         except Exception as ex:
             raise ex
 

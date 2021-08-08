@@ -296,6 +296,7 @@ class Slice:
         addr = addr + self.offset
         ret = ""
         ea: int = addr
+        # TODO: Find a faster way to do this
         try:
             while True:
                 if limit != 0:
