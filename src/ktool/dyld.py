@@ -9,15 +9,28 @@ from ktool.macho import _VirtualMemoryMap, Segment
 
 
 class Dyld:
+    """
+    This is a static class containing several methods for, essentially, recreating the functionality of Dyld for our
+    own purposes.
+
+    It isnt meant to be a faithful recreation of dyld so to speak, it just does things dyld also does, kinda.
+
+    """
 
     @staticmethod
     def load(macho_slice):
+        """
+        Take a slice of a macho file and process it using the dyld functions
+
+        :param macho_slice: Slice to load. If your library is not fat, that'll be MachOFile.slices[0]
+        :return: Processed Library object
+        """
         library = Library(macho_slice)
-        Dyld.parse_load_commands(library)
+        Dyld._parse_load_commands(library)
         return library
 
     @staticmethod
-    def parse_load_commands(library):
+    def _parse_load_commands(library):
         for cmd in library.macho_header.load_commands:
             # my structLoad function *ALWAYS* saves the offset on-disk to the .off field, regardless of the struct
             #   loaded.
@@ -101,26 +114,69 @@ class Library:
         self.symbol_table = None
 
     def get_bytes(self, offset: int, length: int, vm=False, section_name=None):
+        """
+        Get a sequence of bytes (as an int) from a location
+
+        :param offset: Offset within the library
+        :param length: Amount of bytes to get
+        :param vm: Is `offset` a VM address
+        :param section_name: Section Name if vm==True (improves translation time slightly)
+        :return: `length` Bytes at `offset`
+        """
         if vm:
             offset = self.vm.get_file_address(offset, section_name)
         return self.slice.get_at(offset, length)
 
     def load_struct(self, address: int, struct_type: struct, vm=False, section_name=None, endian="little"):
+        """
+        Load a struct (struct_type_t) from a location and return the processed object
+
+        :param address: Address to load struct from
+        :param struct_type: type of struct (e.g. dyld_header_t)
+        :param vm:  Is `address` a VM address?
+        :param section_name: if `vm==True`, the section name (slightly improves translation speed)
+        :param endian: Endianness of bytes to read.
+        :return: Loaded struct
+        """
         if vm:
             address = self.vm.get_file_address(address, section_name)
         return self.slice.load_struct(address, struct_type, endian)
 
     def get_str_at(self, address: int, count: int, vm=False, section_name=None):
+        """
+        Get string with set length from location (to be used essentially only for loading segment names)
+
+        :param address: Address of string start
+        :param count: Length of string
+        :param vm: Is `address` a VM address?
+        :param section_name: if `vm==True`, the section name (unused here, really)
+        :return: The loaded string.
+        """
         if vm:
             address = self.vm.get_file_address(address, section_name)
         return self.slice.get_str_at(address, count)
 
     def get_cstr_at(self, address: int, limit: int = 0, vm=False, section_name=None):
+        """
+        Load a C style string from a location, stopping once a null byte is encountered.
+
+        :param address: Address to load string from
+        :param limit: Limit of the length of bytes, 0 = unlimited
+        :param vm: Is `address` a VM address?
+        :param section_name: if `vm==True`, the section name (vastly improves VM lookup time)
+        :return: The loaded C string
+        """
         if vm:
             address = self.vm.get_file_address(address, section_name)
         return self.slice.get_cstr_at(address, limit)
 
     def decode_uleb128(self, readHead: int):
+        """
+        Decode a uleb128 integer from a location
+
+        :param readHead: Start location
+        :return: (end location, value)
+        """
         return self.slice.decode_uleb128(readHead)
 
 
@@ -206,8 +262,23 @@ class SymbolType(Enum):
     UNK = 4
 
 
-
 class Symbol:
+    """
+    This class can represent several types of symbols.
+
+    It can represent an external or internal symbol declaration and is used for both across the library
+
+    .external is a BOOL that can be used to check whether it's an external or internal declaration
+
+    .fullname contains the full name of the symbol (e.g. _OBJC_CLASS_$_MyDumbClassnameHere)
+
+    .name contains the (somewhat) processed name of the symbol (e.g. _MyDumbClassnameHere for an @interface MyDumbClassnameHere)
+
+    .type contains a SymbolType if it was able to figure one out
+
+    .addr contains the address of the symbol in the image
+
+    """
     def __init__(self, lib, cmd=None, entry=None, fullname=None, ordinal=None, addr=None):
         if fullname:
             self.fullname = fullname
@@ -237,11 +308,22 @@ class Symbol:
 
 
 class SymbolTable:
+    """
+    This class represents the symbol table declared in the MachO File
+
+    .table contains the symbol table
+
+    .ext contains exported symbols, i think?
+
+    This class is incomplete
+
+    """
     def __init__(self, library, cmd: symtab_command):
         self.library = library
         self.cmd = cmd
         self.ext = []
         self.table = self._load_symbol_table()
+        # TODO: Lookup table?
 
     def _load_symbol_table(self):
         symbol_table = []
@@ -264,11 +346,33 @@ record = namedtuple("record",
 
 
 class BindingTable:
+    """
+    The binding table contains a ton of information related to the binding info in the library
+
+    .lookup_table Contains a map of address -> Symbol declarations which should be used for processing off-image
+        symbol decorations
+
+    .symbol_table Contains a full list of symbols declared in the binding info. Avoid iterating through this for speed
+        purposes.
+
+    Unprocessed:
+
+    .actions contains a list of, you guessed it, actions.
+
+    .import_stack contains a fairly raw unprocessed list of binding info commands
+
+    """
     def __init__(self, library):
+        """
+        Pass a library to be processed
+
+        :param library: Library to be processed
+        """
         self.library = library
         self.import_stack = self._load_binding_info()
         self.actions = self._create_action_list()
         self.lookup_table = {}
+        self.link_table = {}
         self.symbol_table = self._load_symbol_table()
 
     def _load_symbol_table(self):
@@ -294,6 +398,9 @@ class BindingTable:
         return actions
 
     def _load_binding_info(self):
+        # You are better off looking at original dyld source or several writeups scattered across the interwebs
+        # This code is hardly readable and i'm somewhat scared to touch it, it seems to work.
+        # TODO: Did i just not do the sleb action Processing? I have a function for it now?
         lib = self.library
         ea = lib.info.bind_off
         import_stack = []

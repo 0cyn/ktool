@@ -5,7 +5,8 @@ import os
 import pprint
 
 from ktool.dyld import Dyld
-from ktool.generator import HeaderGenerator, TBDGenerator
+from ktool.generator import TBDGenerator
+from ktool.headers import HeaderGenerator
 from ktool.macho import MachOFileType, MachOFile
 from ktool.objc import ObjCLibrary
 from ktool.util import TapiYAMLWriter
@@ -40,9 +41,11 @@ def main():
     parser_dump.set_defaults(func=dump, do_headers=False, do_tbd=False, slice_index=0)
 
     parser_list = subparsers.add_parser('list', help='Print various lists')
-    parser_list.add_argument('--symbols', dest='get_syms', action='store_true', help='Dump symbol list')
+    parser_list.add_argument('--symbols', dest='get_syms', action='store_true', help='Print symbol list')
+    parser_list.add_argument('--classes', dest='get_classes', action='store_true', help='Print class list')
+    parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('filename')
-    parser_list.set_defaults(func=list, get_syms=False)
+    parser_list.set_defaults(func=list, get_syms=False, get_classes=False, get_linked=False)
 
     args = parser.parse_args()
 
@@ -53,7 +56,7 @@ def main():
         profile = cProfile.Profile()
         profile.runcall(args.func, args)
         ps = pstats.Stats(profile)
-        ps.sort_stats('time', 'calls')
+        ps.sort_stats('time', 'cumtime')
         ps.print_stats(10)
     else:
         args.func(args)
@@ -68,6 +71,11 @@ ktool dump --tbd [filename] - Dump .tbd for a framework
 
 ktool file:
 ktool file [filename] - Prints (very) basic info about a file (e.g. "Thin MachO Binary")
+
+ktool list:
+ktool list --symbols [filename] - Print the symbol table for the file
+ktool list --classes [filename] - Print the list of classes
+ktool list --linked [filename] - Print a list of linked libraries
 
 ktool info:
 usage: ktool info [-h] [--slice SLICE_INDEX] [--vm] [--cmds] [--binding] filename
@@ -86,6 +94,13 @@ def list(args):
         if args.get_syms:
             for sym in library.symbol_table.table:
                 print(f'Address: {sym.addr} | Name: {sym.fullname}')
+        if args.get_classes:
+            objc_lib = ObjCLibrary(library)
+            for obj_class in objc_lib.classlist:
+                print(f'{obj_class.name}')
+        if args.get_linked:
+            for exlib in library.linked:
+                print(exlib.install_name)
 
 
 

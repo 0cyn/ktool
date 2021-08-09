@@ -1,17 +1,34 @@
 from ktool.dyld import SymbolType
 from ktool.objc import Class, ObjCLibrary, Category
 
-_KTOOL_VERSION = "0.3.4"
+_KTOOL_VERSION = "0.3.5"
 
 
 class TBDGenerator:
     def __init__(self, library, general=True, objclib=None):
+        """
+        The TBD Generator is a generator that creates TAPI formatted text based stubs for libraries.
+
+        It is currently fairly incomplete, although its output should still be perfectly functional in an SDK.
+
+        After processing, its .dict attribute can be dumped by a TAPI YAML serializer (located in ktool.util) to
+            produce a functional .tbd
+
+        :param library: dyld.Library object
+        :param general: Should the generator create a .tbd for usage in SDKs?
+        :param objclib: Pass an objc library to the genrator. If none is passed it will generate its own
+        """
         self.library = library
         self.objclib = objclib
         self.general = general
         self.dict = self._generate_dict()
 
     def _generate_dict(self):
+        """
+        This function simply parses through the library and creates the tbd dict
+
+        :return: The text-based-stub dictionary representation
+        """
         tbd = {}
         if self.general:
             tbd['archs'] = ['armv7', 'armv7s', 'arm64', 'arm64e']
@@ -51,11 +68,35 @@ class TBDGenerator:
 
 class HeaderGenerator:
     def __init__(self, library):
+        """
+        This generator takes an objc library as an argument and generates the headers for it
+
+        It generates a header for each Class and Category
+
+        It also generates an Umbrella header which just imports all headers in the Framework
+        It also generates a [name]-Structs header which contains all struct definitions found.
+
+        :param library: ObjCLibrary to generate headers for
+        """
         self.library = library
         self.headers = {}
 
         for objc_class in library.classlist:
             self.headers[objc_class.name + '.h'] = Header(library, objc_class)
+
+        structnamemap = []
+        unresolved = []
+        for header in self.headers:
+            structs = []
+            for struct in self.headers[header].structs:
+                if struct.name not in structs:
+                    structs.append(struct.name)
+            for struct in structs:
+                if struct not in structnamemap:
+                    structnamemap.append(struct)
+                else:
+                    if struct not in unresolved:
+                        unresolved.append(struct)
 
         for objc_cat in library.catlist:
             self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(library, objc_cat)
@@ -67,6 +108,11 @@ class HeaderGenerator:
 
 class UmbrellaHeader:
     def __init__(self, header_list: dict):
+        """
+        Generates a header that solely imports other headers
+
+        :param header_list: Dict of headers to be imported
+        """
         self.text = "\n\n"
         for header in header_list.keys():
             self.text += "#include \"" + header + "\"\n"
@@ -77,6 +123,11 @@ class UmbrellaHeader:
 
 class StructHeader:
     def __init__(self, library):
+        """
+        Scans through structs cached in the ObjCLib's type processor and writes them to a header
+
+        :param library: Library containing structs
+        """
         text = ""
 
         for struct in library.tp.structs.values():
@@ -90,6 +141,14 @@ class StructHeader:
 
 class CategoryHeader:
     def __init__(self, library, category: Category):
+        """
+        This represents a header for an ObjC Category (sometimes refered to as extending, i think?)
+
+        Generating one of these is fairly straightforward compared to a regular class header due to simpler definitions
+
+        :param library: ObjC Library to process
+        :param category: Category object to represent
+        """
         self.library = library
         self.category = category
 
@@ -146,10 +205,16 @@ class CategoryHeader:
         return prefix + ifndef + '\n\n' + '\n\n' + imports + '\n\n' + head +  '\n\n' + props + '\n\n' + meths + '\n\n' + foot + '\n\n' + endif
 
 
-
-
 class Header:
     def __init__(self, library, objcclass: Class):
+        """
+        This class represents a Header for an ObjC Class
+
+        Calling str() on this header object will return the Header's objc-syntax formatted dump
+
+        :param library: ObjCLibrary object
+        :param objcclass: Objective C Class object
+        """
         self.library = library
         self.objc_class = objcclass
         self.classlist = library.classlist
@@ -254,18 +319,22 @@ class Header:
 
     def _process_self_imports(self):
         self_import_classes = []
+        selfimpclassobj = []
         for property in self.properties:
             for objc_class in self.classlist:
                 if objc_class.name == property.type:
                     if objc_class.name not in self_import_classes:
                         self_import_classes.append(objc_class.name)
+                        selfimpclassobj.append(objc_class)
                         break
         for property in self.ivars:
             for objc_class in self.classlist:
                 if objc_class.name == property.type:
                     if objc_class.name not in self_import_classes:
                         self_import_classes.append(objc_class.name)
+                        selfimpclassobj.append(objc_class)
                         break
+
         return self_import_classes
 
     def _process_properties(self):

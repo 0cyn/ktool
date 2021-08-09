@@ -60,7 +60,7 @@ class FileLoadTestCase(unittest.TestCase):
 
 class ObjCLoadTestCase(unittest.TestCase):
     def test_objc_load(self):
-        fd = open('bins/SpringBoardHome', 'rb')
+        fd = open('bins/SpringBoard', 'rb')
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         objc_lib = ObjCLibrary(library)

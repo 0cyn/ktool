@@ -1,3 +1,4 @@
+import concurrent.futures
 from collections import namedtuple
 from enum import Enum
 
@@ -20,7 +21,7 @@ type_encodings = {
     "d": "CGFloat",
     "b": "BOOL",
     "@": "id",
-    "B": "bool",
+    "B": "BOOL",
     "v": "void",
     "*": "char *",
     "#": "Class",
@@ -345,6 +346,7 @@ class Class:
         self.linked_classes = []
         self.fdec_classes = []
         self.fdec_prots = []
+        self.struct_list = []
         # Classes imported in this class from the same mach-o
         if not objc2class:
             self.objc2_class: objc2_class = self._load_objc2_class(ptr)
@@ -431,7 +433,12 @@ class Class:
             else:
                 meth = self.library.load_struct(ea, objc2_meth_t, vm=False)
             try:
-                methods.append(Method(self.library, self.meta, meth, vm_ea))
+                method = Method(self.library, self.meta, meth, vm_ea)
+                methods.append(method)
+                for type in method.types:
+                    if type.type == EncodedType.STRUCT:
+                        self.struct_list.append(type.value)
+
             except Exception as ex:
                 pass
             if uses_relative_methods:
@@ -459,7 +466,11 @@ class Class:
         for i in range(1, proplist_head.count + 1):
             prop = self.library.load_struct(ea, objc2_prop_t, vm=False)
             try:
-                properties.append(Property(self.library, prop, vm_ea))
+                property = Property(self.library, prop, vm_ea)
+                properties.append(property)
+                if hasattr(property, 'attr'):
+                    if property.attr.type.type == EncodedType.STRUCT:
+                        self.struct_list.append(property.attr.type.value)
             except ValueError as ex:
                 # continue
                 pass
@@ -493,7 +504,8 @@ class Class:
             ivar_loc = ea + sizeof(objc2_ivar_t) * (i - 1)
             ivar = self.library.load_struct(ivar_loc, objc2_ivar_t, vm=False)
             try:
-                ivars.append(Ivar(self.library, self, ivar, ivar_loc))
+                ivar_object = Ivar(self.library, self, ivar, ivar_loc)
+                ivars.append(ivar_object)
             except Exception as ex:
                 continue
         return ivars
@@ -669,8 +681,6 @@ class Category:
 class Protocol:
     def __init__(self, library, protocol: objc2_prot, vmaddr: int):
         self.name = library.get_cstr_at(protocol.name, 0, vm=True)
-
-
 
     def __str__(self):
         return self.name
