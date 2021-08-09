@@ -235,6 +235,8 @@ class Ivar:
 
     def __str__(self):
         ret = ""
+        if self.type.startswith('<'):
+            ret += "id"
         ret += self.type + ' '
         if self.is_id:
             ret += '*'
