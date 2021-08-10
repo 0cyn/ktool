@@ -547,6 +547,8 @@ class Property:
         if len(self.attributes) > 0:
             ret += '(' + ', '.join(self.attributes) + ') '
 
+        if self.type.startswith('<'):
+            ret += "id"
         ret += self.type + ' '
 
         if self.is_id:
