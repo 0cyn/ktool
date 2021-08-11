@@ -26,7 +26,7 @@ class SymTabTestCase(unittest.TestCase):
 class KDumpTestCase(unittest.TestCase):
     def test_kdump(self):
 
-        fd = open('bins/ktrace.dyldex', 'rb')
+        fd = open('bins/Coherence.dyldex', 'rb')
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         objc_lib = ObjCLibrary(library)

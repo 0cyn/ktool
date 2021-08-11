@@ -190,6 +190,7 @@ class TypeProcessor:
                     pc = 0
             return types
         except:
+            # TODO: Fix type recognition issues to best of abilities and then remove this assertion
             raise AssertionError(type)
 
     @staticmethod
@@ -608,14 +609,11 @@ class Category:
         self.struct: objc2_category = self.library.load_struct(loc, objc2_category_t, vm=True)
         self.name = self.library.get_cstr_at(self.struct.name, vm=True)
         self.classname = ""
-        sym = self.library.library.binding_table.lookup_table[loc+8]
-        self.classname = sym.name[1:]
-
-        if self.classname == "":
-            print(self.name)
-            print(hex(self.struct.off))
-            print(self.struct)
-            raise ValueError("Category for no class")
+        try:
+            sym = self.library.library.binding_table.lookup_table[loc+8]
+            self.classname = sym.name[1:]
+        except:
+            pass
 
         instmeths = self._process_methods(self.struct.inst_meths)
         classmeths = self._process_methods(self.struct.class_meths, True)

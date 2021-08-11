@@ -51,7 +51,8 @@ class HeaderGenerator:
         for objc_class in objc_library.classlist:
             self.headers[objc_class.name + '.h'] = Header(self.type_resolver, objc_class)
         for objc_cat in objc_library.catlist:
-            self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(objc_cat)
+            if objc_cat.classname != "":
+                self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(objc_cat)
 
         self.headers[self.library.name + '.h'] = UmbrellaHeader(self.headers)
         self.headers[self.library.name + '-Structs.h'] = StructHeader(objc_library)
