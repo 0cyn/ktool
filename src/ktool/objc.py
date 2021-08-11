@@ -41,6 +41,7 @@ class ObjCLibrary:
 
         self.classlist = self._generate_classlist(None)
         self.catlist = self._generate_catlist()
+        self.protolist = self._generate_protlist()
 
     def _generate_catlist(self):
         sect = None
@@ -79,6 +80,35 @@ class ObjCLibrary:
                 if classlimit == oc.name:
                     classes.append(oc)
         return classes
+
+    # objc2_prot_list = namedtuple("objc2_prot_list", ["off", "cnt"])
+    # objc2_prot_list_t = struct(objc2_prot_list, [8])
+
+    def _generate_protlist(self):
+
+        sect = None
+        for seg in self.library.segments:
+            for sec in self.library.segments[seg].sections:
+                if sec == "__objc_protolist":
+                    sect = self.library.segments[seg].sections[sec]
+        # sect: Section = self.library.segments['__DATA_CONST'].sections['__objc_classlist']
+        if not sect:
+            return []
+
+        protos = []
+
+        cnt = sect.size // 0x8
+        for i in range(0, cnt):
+            ptr = sect.vm_address + i * 0x8
+            loc = self.library.get_bytes(ptr, 0x8, vm=True)
+            proto = self.library.load_struct(loc, objc2_prot_t, vm=True)
+            try:
+                protos.append(Protocol(self.library, proto, loc))
+            except:
+                pass
+
+        return protos
+
 
     def get_bytes(self, offset: int, length: int, vm=False, sectname=None):
         return self.library.get_bytes(offset, length, vm, sectname)
@@ -683,6 +713,9 @@ class Category:
             vm_ea += sizeof(objc2_prop_t)
 
         return properties
+#
+# objc2_prot = namedtuple("objc2_prot", ["off", "isa", "name", "prots", "inst_meths", "class_meths", "opt_inst_meths", "opt_class_meths", "inst_props", "cb", "flags"])
+# objc2_prot_t = struct(objc2_prot, [8, 8, 8, 8, 8, 8, 8, 8, 4, 4])
 
 
 class Protocol:

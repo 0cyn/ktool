@@ -43,9 +43,10 @@ def main():
     parser_list = subparsers.add_parser('list', help='Print various lists')
     parser_list.add_argument('--symbols', dest='get_syms', action='store_true', help='Print symbol list')
     parser_list.add_argument('--classes', dest='get_classes', action='store_true', help='Print class list')
+    parser_list.add_argument('--protocols', dest='get_protos', action='store_true', help='Print Protocol list')
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('filename')
-    parser_list.set_defaults(func=list, get_syms=False, get_classes=False, get_linked=False)
+    parser_list.set_defaults(func=list, get_syms=False, get_classes=False, get_protos=False, get_linked=False)
 
     args = parser.parse_args()
 
@@ -98,6 +99,10 @@ def list(args):
             objc_lib = ObjCLibrary(library)
             for obj_class in objc_lib.classlist:
                 print(f'{obj_class.name}')
+        if args.get_protos:
+            objc_lib = ObjCLibrary(library)
+            for objc_proto in objc_lib.protolist:
+                print(f'{objc_proto.name}')
         if args.get_linked:
             for exlib in library.linked:
                 print(exlib.install_name)
