@@ -139,8 +139,11 @@ def info(args):
         print('\nBinding Info Actions '.ljust(60, '-') + '\n')
         # print(library.linked)
         for sym in library.binding_table.symbol_table:
-            print(
-                f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+            try:
+                print(
+                    f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+            except:
+                print(f'{int(sym.ordinal)} symbol ordinal broken')
 
     if not filt:
         print(f'Name: {library.name}')

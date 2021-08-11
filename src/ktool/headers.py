@@ -3,7 +3,7 @@ from ktool.objc import ObjCLibrary
 
 
 class HeaderUtils:
-    KTOOL_VERSION = "0.4.0"
+    KTOOL_VERSION = "0.4.1"
 
     @staticmethod
     def header_head(library):
@@ -50,6 +50,8 @@ class HeaderGenerator:
 
         for objc_class in objc_library.classlist:
             self.headers[objc_class.name + '.h'] = Header(self.type_resolver, objc_class)
+        for objc_cat in objc_library.catlist:
+            self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(objc_cat)
 
         self.headers[self.library.name + '.h'] = UmbrellaHeader(self.headers)
         self.headers[self.library.name + '-Structs.h'] = StructHeader(objc_library)
@@ -206,6 +208,34 @@ class Header:
                         self.imported_classes[tp] = rt
 
 
+class CategoryHeader:
+    def __init__(self, objc_category):
+
+        self.category = objc_category
+
+        self.properties = objc_category.properties
+        self.methods = objc_category.methods
+        self.protocols = objc_category.protocols
+
+        self.interface = CategoryInterface(objc_category)
+
+        self.text = self._generate_text()
+
+    def __str__(self):
+        return self.text
+
+    def _generate_text(self):
+        text = []
+        text.append(HeaderUtils.header_head(self.category.library.library))
+
+        text.append("")
+
+        text.append(str(self.interface))
+        text.append("")
+        text.append("")
+
+        return "\n".join(text)
+
 
 class Interface:
     def __init__(self, objc_class):
@@ -316,6 +346,47 @@ class StructDef:
 class CategoryInterface:
     def __init__(self, objc_category):
         self.category = objc_category
+
+        self.properties = self.category.properties
+        self.methods = self.category.methods
+        self.protocols = self.category.protocols
+
+        self.text = self._generate_text()
+
+    def __str__(self):
+        return self.text
+
+    def _generate_text(self):
+
+        head = "@interface "
+
+        head += self.category.classname + " (" + self.category.name + ")"
+
+        # Protocol Implementing Declaration
+        if len(self.category.protocols) > 0:
+            head += " <"
+            for prot in self.category.protocols:
+                head += str(prot) + ', '
+            head = head[:-2]
+            head += '>\n'
+
+        # Ivar Declaration
+
+        props = "\n\n"
+        for prop in self.properties:
+            props += str(prop) + ';'
+            if prop.ivarname != "":
+                props += ' // ivar: ' + prop.ivarname + '\n'
+            else:
+                props += '\n'
+
+        meths = "\n\n"
+        for i in self.methods:
+            meths += str(i) + ';\n'
+
+        foot = "@end\n"
+
+        return head + props + meths + foot
 
 
 class UmbrellaHeader:
