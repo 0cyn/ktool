@@ -10,12 +10,6 @@ from ktool.util import TapiYAMLWriter
 
 
 class SymTabTestCase(unittest.TestCase):
-    def test_pfui(self):
-        with open('bins/PreferencesUI', 'rb') as file:
-            machofile = MachOFile(file)
-            library = Dyld.load(machofile.slices[0])
-            self.assertEqual(len(library.symbol_table.table), 1279)
-
     def test_bin(self):
         with open('bins/testbin1', 'rb') as file:
             machofile = MachOFile(file)
@@ -23,15 +17,7 @@ class SymTabTestCase(unittest.TestCase):
             self.assertEqual(len(library.symbol_table.table), 23)
 
 
-class KDumpTestCase(unittest.TestCase):
-    def test_kdump(self):
-
-        fd = open('bins/Coherence.dyldex', 'rb')
-        machofile = MachOFile(fd)
-        library = Dyld.load(machofile.slices[0])
-        objc_lib = ObjCLibrary(library)
-        fd.close()
-
+class TBDTestCase(unittest.TestCase):
     def test_tapi_dump(self):
         with open('bins/PreferencesUI.dyldex', 'rb') as file:
             machofile = MachOFile(file)
@@ -53,16 +39,34 @@ class FileLoadTestCase(unittest.TestCase):
             self.assertEqual(macho_file.type, ktool.macho.MachOFileType.THIN)
 
 
-class ObjCLoadTestCase(unittest.TestCase):
-    def test_objc_load(self):
-        fd = open('bins/SpringBoardHome', 'rb')
-        machofile = MachOFile(fd)
-        library = Dyld.load(machofile.slices[0])
-        objc_lib = ObjCLibrary(library)
-        self.assertGreater(len(objc_lib.classlist), 1)
-        self.assertGreater(len(objc_lib.catlist), 1)
-        self.assertGreater(len(objc_lib.classlist[0].methods), 4)
-        fd.close()
+class FrameworksTestCase(unittest.TestCase):
+
+    def test_coherence(self):
+        with open('bins/Coherence.dyldex', 'rb') as fd:
+            ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
+
+    def test_ktrace(self):
+        with open('bins/ktrace.dyldex', 'rb') as fd:
+            ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
+
+    def test_pfui(self):
+        with open('bins/PreferencesUI', 'rb') as fd:
+            ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
+
+    def test_pfui2(self):
+        with open('bins/PreferencesUI.dyldex', 'rb') as fd:
+            ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
+
+    def test_search(self):
+        with open('bins/Search', 'rb') as fd:
+            ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
+
+    def test_sbh(self):
+        with open('bins/SpringBoardHome', 'rb') as fd:
+            objc_lib = ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
+            self.assertGreater(len(objc_lib.classlist), 1)
+            self.assertGreater(len(objc_lib.catlist), 1)
+            self.assertGreater(len(objc_lib.classlist[0].methods), 4)
 
 
 if __name__ == '__main__':
