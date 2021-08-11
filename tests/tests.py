@@ -2,7 +2,8 @@ import unittest
 
 import ktool.macho
 from ktool.dyld import Dyld
-from ktool.generator import Header, TBDGenerator
+from ktool.generator import TBDGenerator
+from ktool.headers import HeaderGenerator
 from ktool.macho import MachOFile
 from ktool.objc import ObjCLibrary
 from ktool.util import TapiYAMLWriter
@@ -25,16 +26,10 @@ class SymTabTestCase(unittest.TestCase):
 class KDumpTestCase(unittest.TestCase):
     def test_kdump(self):
 
-        fd = open('bins/PreferencesUI.dyldex', 'rb')
+        fd = open('bins/ktrace.dyldex', 'rb')
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         objc_lib = ObjCLibrary(library)
-        objc_class = objc_lib.classlist[0]
-        header = Header(objc_lib, objc_class)
-        #print(header)
-        #for sym in library.symbol_table.ext:
-        #    print(sym.name)
-        #print(library.allowed_clients)
         fd.close()
 
     def test_tapi_dump(self):
@@ -60,7 +55,7 @@ class FileLoadTestCase(unittest.TestCase):
 
 class ObjCLoadTestCase(unittest.TestCase):
     def test_objc_load(self):
-        fd = open('bins/SpringBoard', 'rb')
+        fd = open('bins/SpringBoardHome', 'rb')
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         objc_lib = ObjCLibrary(library)

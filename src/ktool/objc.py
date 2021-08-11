@@ -16,6 +16,7 @@ type_encodings = {
     "I": "unsigned int",
     "S": "unsigned short",
     "L": "unsigned long",
+    "A": "uint8_t",
     "Q": "NSUInteger",
     "f": "float",
     "d": "CGFloat",
@@ -98,6 +99,10 @@ class Struct:
 
         # Remove the outer {}, then get everything to the left of the equal sign
         self.name = type_str[1:-1].split('=')[0]
+
+        if '=' not in type_str:
+            self.fields = []
+            return
 
         # Remove the outer {},
         # get everything after the first = sign,
