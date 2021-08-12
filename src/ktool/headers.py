@@ -3,7 +3,7 @@ from ktool.objc import ObjCLibrary
 
 
 class HeaderUtils:
-    KTOOL_VERSION = "0.4.1"
+    KTOOL_VERSION = "0.5.0"
 
     @staticmethod
     def header_head(library):
@@ -53,10 +53,11 @@ class HeaderGenerator:
         for objc_cat in objc_library.catlist:
             if objc_cat.classname != "":
                 self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(objc_cat)
+        for objc_proto in objc_library.protolist:
+            self.headers[objc_proto.name + '-Protocol.h'] = ProtocolHeader(objc_proto)
 
         self.headers[self.library.name + '.h'] = UmbrellaHeader(self.headers)
         self.headers[self.library.name + '-Structs.h'] = StructHeader(objc_library)
-
 
 
 class StructHeader:
@@ -238,6 +239,29 @@ class CategoryHeader:
         return "\n".join(text)
 
 
+class ProtocolHeader:
+    def __init__(self, objc_protocol):
+        self.protocol = objc_protocol
+
+        self.interface = ProtocolInterface(objc_protocol)
+
+        self.text = self._generate_text()
+
+    def __str__(self):
+        return self.text
+
+    def _generate_text(self):
+        text = []
+        text.append(HeaderUtils.header_head(self.protocol.library.library))
+
+        text.append("")
+
+        text.append(str(self.interface))
+        text.append("")
+        text.append("")
+
+        return "\n".join(text)
+
 class Interface:
     def __init__(self, objc_class):
         self.objc_class = objc_class
@@ -388,6 +412,44 @@ class CategoryInterface:
         foot = "@end\n"
 
         return head + props + meths + foot
+
+
+class ProtocolInterface:
+    def __init__(self, protocol):
+        self.protocol = protocol
+
+        self.text = self._generate_text()
+
+    def __str__(self):
+        return self.text
+
+    def _generate_text(self):
+        text = ["@protocol " + self.protocol.name, ""]
+
+        for prop in self.protocol.properties:
+            pro = ""
+            pro += str(prop) + ';'
+            if prop.ivarname != "":
+                pro += ' // ivar: ' + prop.ivarname + ''
+            else:
+                pro += ''
+            text.append(pro)
+
+        text.append("")
+
+        for meth in self.protocol.methods:
+            text.append(str(meth) + ';')
+
+        text.append("")
+
+        if len(self.protocol.opt_methods) > 0:
+            text.append("@optional")
+            for meth in self.protocol.opt_methods:
+                text.append(str(meth) + ';')
+
+        text.append("@end")
+
+        return "\n".join(text)
 
 
 class UmbrellaHeader:

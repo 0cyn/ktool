@@ -60,7 +60,6 @@ class ObjCLibrary:
 
         return cats
 
-
     def _generate_classlist(self, classlimit):
         sect = None
         for seg in self.library.segments:
@@ -103,12 +102,11 @@ class ObjCLibrary:
             loc = self.library.get_bytes(ptr, 0x8, vm=True)
             proto = self.library.load_struct(loc, objc2_prot_t, vm=True)
             try:
-                protos.append(Protocol(self.library, proto, loc))
+                protos.append(Protocol(self, proto, loc))
             except:
                 pass
 
         return protos
-
 
     def get_bytes(self, offset: int, length: int, vm=False, sectname=None):
         return self.library.get_bytes(offset, length, vm, sectname)
@@ -424,7 +422,7 @@ class Class:
             # Linked Superclass
             struct_size = sizeof(objc2_class_t)
             struct_location = objc2_class_item.off
-            symbol = self.library.library.binding_table.lookup_table[objc2_class_location+8]
+            symbol = self.library.library.binding_table.lookup_table[objc2_class_location + 8]
             self.superclass = symbol.name[1:]
             try:
                 self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[
@@ -552,6 +550,7 @@ class Class:
 attr_encodings = {
     "&": "retain",
     "N": "nonatomic",
+    "W": "__weak",
     "R": "readonly",
     "C": "copy"
 }
@@ -640,7 +639,7 @@ class Category:
         self.name = self.library.get_cstr_at(self.struct.name, vm=True)
         self.classname = ""
         try:
-            sym = self.library.library.binding_table.lookup_table[loc+8]
+            sym = self.library.library.binding_table.lookup_table[loc + 8]
             self.classname = sym.name[1:]
         except:
             pass
@@ -713,16 +712,86 @@ class Category:
             vm_ea += sizeof(objc2_prop_t)
 
         return properties
-#
-# objc2_prot = namedtuple("objc2_prot", ["off", "isa", "name", "prots", "inst_meths", "class_meths", "opt_inst_meths", "opt_class_meths", "inst_props", "cb", "flags"])
-# objc2_prot_t = struct(objc2_prot, [8, 8, 8, 8, 8, 8, 8, 8, 4, 4])
 
+
+# objc2_prot = namedtuple("objc2_prot", ["off", "isa", "name", "prots", "inst_meths", "class_meths",
+# "opt_inst_meths", "opt_class_meths", "inst_props", "cb", "flags"])
+# objc2_prot_t = struct(objc2_prot, [8, 8, 8, 8, 8, 8, 8, 8, 4, 4])
 
 class Protocol:
     def __init__(self, library, protocol: objc2_prot, vmaddr: int):
+        self.library = library
         self.name = library.get_cstr_at(protocol.name, 0, vm=True)
+
+        self.methods = self._process_methods(protocol.inst_meths)
+        self.methods += self._process_methods(protocol.class_meths, True)
+
+        self.opt_methods = self._process_methods(protocol.opt_inst_meths)
+        self.opt_methods += self._process_methods(protocol.opt_class_meths, True)
+
+        self.properties = self._process_props(protocol.inst_props)
+
+    def _process_methods(self, loc, meta=False):
+        methods = []
+
+        if loc == 0:
+            return methods  # Useless Subclass
+
+        vm_ea = loc
+        methlist_head = self.library.load_struct(loc, objc2_meth_list_t)
+        ea = methlist_head.off
+
+        # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
+        RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG = 0x40000000
+        RELATIVE_METHOD_FLAG = 0x80000000
+        METHOD_LIST_FLAGS_MASK = 0xFFFF0000
+
+        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK != 0
+
+        ea += 8
+        vm_ea += 8
+        for i in range(1, methlist_head.count + 1):
+            if uses_relative_methods:
+                meth = self.library.load_struct(ea, objc2_meth_list_entry_t, vm=False)
+            else:
+                meth = self.library.load_struct(ea, objc2_meth_t, vm=False)
+            try:
+                methods.append(Method(self.library, meta, meth, vm_ea))
+            except Exception as ex:
+                pass
+            if uses_relative_methods:
+                ea += sizeof(objc2_meth_list_entry_t)
+                vm_ea += sizeof(objc2_meth_list_entry_t)
+            else:
+                ea += sizeof(objc2_meth_t)
+                vm_ea += sizeof(objc2_meth_t)
+
+        return methods
+
+    def _process_props(self, location):
+        properties = []
+
+        if location == 0:
+            return properties
+
+        vm_ea = location
+        proplist_head = self.library.load_struct(location, objc2_prop_list_t)
+
+        ea = proplist_head.off
+        ea += 8
+        vm_ea += 8
+
+        for i in range(1, proplist_head.count + 1):
+            prop = self.library.load_struct(ea, objc2_prop_t, vm=False)
+            try:
+                properties.append(Property(self.library, prop, vm_ea))
+            except ValueError as ex:
+                # continue
+                pass
+            ea += sizeof(objc2_prop_t)
+            vm_ea += sizeof(objc2_prop_t)
+
+        return properties
 
     def __str__(self):
         return self.name
-
-
