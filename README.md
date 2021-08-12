@@ -29,6 +29,7 @@ ktool list --symbols [filename] - Print the symbol table for the file
 ktool list --classes [filename] - Print the list of classes
 ktool list --protocols [filename] - Print the list of protocols
 ktool list --linked [filename] - Print a list of linked libraries
+ktool list --protocols [filename] - Print the list of protocols
 
 ktool info:
 usage: ktool info [-h] [--slice SLICE_INDEX] [--vm] [--cmds] [--binding] filename
