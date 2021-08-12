@@ -5,11 +5,22 @@ import os
 import pprint
 
 from ktool.dyld import Dyld
-from ktool.generator import TBDGenerator
+from ktool.generator import TBDGenerator, FatMachOGenerator
 from ktool.headers import HeaderGenerator
 from ktool.macho import MachOFileType, MachOFile
 from ktool.objc import ObjCLibrary
 from ktool.util import TapiYAMLWriter
+from enum import Enum
+
+
+class KToolError(Enum):
+    ArgumentError = 1
+
+
+def exit_with_error(error: KToolError, msg):
+    print(f'Encountered an Error ({error.name})')
+    print(f'{msg}')
+    exit(error.value)
 
 
 def main():
@@ -21,6 +32,13 @@ def main():
     parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
     parser_file.add_argument('filename')
     parser_file.set_defaults(func=file)
+
+    parser_lipo = subparsers.add_parser('lipo', help='Extract/Combine slices')
+    parser_lipo.add_argument('--extract', dest='extract', type=str, help='Extract a slice (--extract arm64)')
+    parser_lipo.add_argument('--out', dest='out', help="Output File")
+    parser_lipo.add_argument('--create', dest='combine', action='store_true', help="Combine files to create a fat mach-o library")
+    parser_lipo.add_argument('filename', nargs='+')
+    parser_lipo.set_defaults(func=lipo, out="", combine=False)
 
     parser_info = subparsers.add_parser('info', help='Print Info about a MachO Library')
     parser_info.add_argument('--slice', dest='slice_index', type=int,
@@ -73,6 +91,10 @@ ktool dump --tbd [filename] - Dump .tbd for a framework
 ktool file:
 ktool file [filename] - Prints (very) basic info about a file (e.g. "Thin MachO Binary")
 
+ktool lipo:
+ktool lipo --extract [slicename] [filename] - Extract a slice from a fat binary
+ktool lipo --create [--out filename] [filenames] - Create a fat MachO Binary from multiple thin binaries
+
 ktool list:
 ktool list --symbols [filename] - Print the symbol table for the file
 ktool list --classes [filename] - Print the list of classes
@@ -86,6 +108,45 @@ ktool info [--slice n] --vm [filename] - Print VM -> Slice -> File address mappi
 ktool info [--slice n] --cmds [filename] - Print list of load commands for a file 
 ktool info [--slice n] --binding [filename] - Print binding actions for a file"""
     print(string)
+
+
+def lipo(args):
+    if args.combine:
+        output = args.out
+        if output == "":
+            output = args.filename[0] + '.fat'
+        slices = []
+        for filename in args.filename:
+            # Slice() might hold a ref preventing it from being closed? but i'm just going to let it close on exit()
+            fd = open(filename, 'rb')
+            macho_file = MachOFile(fd)
+            if macho_file.type != MachOFileType.THIN:
+                exit_with_error(KToolError.ArgumentError, "Fat mach-o passed to --create")
+            slices.append(macho_file.slices[0])
+
+        fat_generator = FatMachOGenerator(slices)
+
+        with open(output, 'wb') as fd:
+            fd.write(fat_generator.fat_head)
+            for arch in fat_generator.fat_archs:
+                fd.seek(arch.offset)
+                fd.write(arch.slice.full_bytes_for_slice())
+
+    elif args.extract != "":
+        with open(args.filename[0], 'rb') as fd:
+            macho_file = MachOFile(fd)
+            output = args.out
+            if output == "":
+                output = args.filename[0] + '.' + args.extract.lower()
+            for slice in macho_file.slices:
+                if slice.type.name.lower() == args.extract:
+                    with open(output, 'wb') as out:
+                        out.write(slice.full_bytes_for_slice())
+                    return
+            exit_with_error(KToolError.ArgumentError,
+                            f'Architecture {args.extract} wasn\'t found (found: {[slice.type.name.lower() for slice in macho_file.slices]})')
+
+
 
 
 def list(args):
@@ -107,8 +168,6 @@ def list(args):
         if args.get_linked:
             for exlib in library.linked:
                 print(exlib.install_name)
-
-
 
 
 def file(args):
@@ -171,7 +230,8 @@ def dump(args):
         objc_lib = ObjCLibrary(library)
 
         if args.outdir is None:
-            raise AssertionError("Missing --out flag (--out <directory>), specifies directory to place headers")
+            exit_with_error(KToolError.ArgumentError, "Missing --out flag (--out <directory>), specifies directory to place headers")
+
         generator = HeaderGenerator(objc_lib)
         for header_name, header in generator.headers.items():
             if args.outdir == "kdbg":  # something i can put into IDE args that wont accidentally get used by a user
@@ -197,4 +257,5 @@ def dump(args):
 
 
 if __name__ == "__main__":
+
     main()

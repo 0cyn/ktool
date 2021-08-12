@@ -1,4 +1,5 @@
 import mmap
+import os
 from collections import namedtuple
 from enum import Enum
 from typing import Tuple
@@ -13,6 +14,7 @@ class MachOFileType(Enum):
 
 class MachOFile:
     def __init__(self, file):
+        self.file_object = file
         self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ)
         self.slices = []
         self.magic = self._get_at(0, 4)
@@ -269,6 +271,15 @@ class Slice:
         else:
             self.offset = offset
 
+    def full_bytes_for_slice(self):
+        if self.offset == 0:
+            f = self.macho_file.file_object
+            old_file_position = f.tell()
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            return self.macho_file.file[0:size]
+        return self.macho_file.file[self.offset:+self.offset + self.arch_struct.size]
+
     def load_struct(self, addr: int, struct_type: struct, endian="little"):
         field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?
         fields = [addr]
@@ -342,7 +353,7 @@ class Slice:
     def _load_type(self):
         cputype = self.arch_struct.cputype
 
-        if cputype & 0xF0000000 != 0:
+        if cputype & 0xF000000 != 0:
             if cputype & 0xF == 0x7:
                 return CPUType.X86_64
             elif cputype & 0xF == 0xC:

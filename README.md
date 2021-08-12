@@ -20,9 +20,14 @@ ktool dump --tbd [filename] - Dump .tbd for a framework
 ktool file:
 ktool file [filename] - Prints (very) basic info about a file (e.g. "Thin MachO Binary")
 
+ktool lipo:
+ktool lipo --extract [slicename] [filename] - Extract a slice from a fat binary
+ktool lipo --create [--out filename] [filenames] - Create a fat MachO Binary from multiple thin binaries
+
 ktool list:
 ktool list --symbols [filename] - Print the symbol table for the file
 ktool list --classes [filename] - Print the list of classes
+ktool list --protocols [filename] - Print the list of protocols
 ktool list --linked [filename] - Print a list of linked libraries
 
 ktool info:
