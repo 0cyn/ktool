@@ -2,6 +2,7 @@
 Static Mach-O binary metadata analysis tool / information dumper
 
 ![tests](https://github.com/kritantadev/ktool/actions/workflows/tests.yml/badge.svg)
+![version](https://pypip.in/v/k2l/badge.svg)
 
 ### Installation
 
