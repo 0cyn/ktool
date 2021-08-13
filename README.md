@@ -6,19 +6,11 @@ Static Mach-O binary metadata analysis tool / information dumper
 ### Installation
 
 ```shell
+# Installtion
 pip3 install k2l
-```
 
-##### Updating
-
-```shell
+# Updating
 pip3 install --upgrade k2l
-```
-
-##### Updating to the latest commit on github
-
-```shell
-pip3 install --force-reinstall git+git://github.com/kritantadev/ktool.git
 ```
 
 ### Commands
