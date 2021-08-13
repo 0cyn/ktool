@@ -1,5 +1,11 @@
 import sys
 import unittest
+import os.path
+
+# We need to be in the right directory so we can find the bins
+scriptdir = os.path.dirname(os.path.realpath(__file__))
+
+sys.path.extend([f'{scriptdir}/../src'])
 
 import ktool.macho
 from ktool.dyld import Dyld
@@ -8,11 +14,7 @@ from ktool.headers import HeaderGenerator
 from ktool.macho import MachOFile
 from ktool.objc import ObjCLibrary
 from ktool.util import TapiYAMLWriter
-import os.path
 
-scriptdir = os.path.dirname(os.path.realpath(__file__))
-
-sys.path.extend([f'{scriptdir}/../src'])
 
 class SymTabTestCase(unittest.TestCase):
     def test_bin(self):
