@@ -1,3 +1,4 @@
+import sys
 import unittest
 
 import ktool.macho
@@ -10,6 +11,8 @@ from ktool.util import TapiYAMLWriter
 import os.path
 
 scriptdir = os.path.dirname(os.path.realpath(__file__))
+
+sys.path.extend([f'{scriptdir}/../src'])
 
 class SymTabTestCase(unittest.TestCase):
     def test_bin(self):
