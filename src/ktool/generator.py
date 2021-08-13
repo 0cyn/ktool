@@ -71,6 +71,9 @@ fat_arch_for_slice = namedtuple("fat_arch_for_slice", ["slice", "cputype", "cpus
 
 
 class FatMachOGenerator:
+    """
+
+    """
     def __init__(self, slices):
         self.slices = slices
         self.fat_archs = []
