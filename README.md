@@ -17,7 +17,12 @@ pip3 install --upgrade k2l
 
 https://ktool.readthedocs.io/en/latest/
 
-### Commands
+### ktool commands
+
+
+ktool includes both a library, and a script which uses that library to perform various tasks. 
+
+It'll add the command `ktool` to the python scripts directory (`pyenv exec ktool` if using pyenv)
 
 ```shell
 usage: ktool [command] <flags> [filename]
