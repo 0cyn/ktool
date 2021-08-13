@@ -1,17 +1,6 @@
 ktool package
 =============
 
-Submodules
-----------
-
-ktool.dyld module
------------------
-
-.. automodule:: ktool.dyld
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 ktool.generator module
 ----------------------
 

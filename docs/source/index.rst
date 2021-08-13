@@ -10,13 +10,5 @@ Welcome to ktool's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   dyld
    ktool
-
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
