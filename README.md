@@ -2,6 +2,7 @@
 Static Mach-O binary metadata analysis tool / information dumper
 
 [![tests](https://github.com/kritantadev/ktool/actions/workflows/tests.yml/badge.svg)](https://github.com/kritantadev/ktool/actions/workflows/tests.yml)
+[![docs](https://readthedocs.org/projects/ktool/badge/?version=latest)](https://ktool.rtfd.io)
 [![version](https://pypip.in/v/k2l/badge.svg)](https://pypi.org/project/k2l/)
 
 ### Installation
@@ -16,7 +17,7 @@ pip3 install --upgrade k2l
 
 ### Documentation
 
-https://ktool.readthedocs.io/en/latest/
+https://ktool.rtfd.io
 
 ### ktool commands
 
