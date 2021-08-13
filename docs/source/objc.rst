@@ -1,7 +1,7 @@
-ktool.dyld
+ktool.objc
 -----------------
 
-.. automodule:: ktool.dyld
+.. automodule:: ktool.objc
    :members:
    :undoc-members:
    :show-inheritance:
