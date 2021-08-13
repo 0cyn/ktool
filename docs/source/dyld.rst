@@ -3,5 +3,3 @@ ktool.dyld
 
 .. automodule:: ktool.dyld
    :members:
-   :undoc-members:
-   :show-inheritance:
