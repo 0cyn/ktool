@@ -7,11 +7,13 @@ from ktool.headers import HeaderGenerator
 from ktool.macho import MachOFile
 from ktool.objc import ObjCLibrary
 from ktool.util import TapiYAMLWriter
+import os.path
 
+scriptdir = os.path.dirname(os.path.realpath(__file__))
 
 class SymTabTestCase(unittest.TestCase):
     def test_bin(self):
-        with open('bins/testbin1', 'rb') as file:
+        with open(scriptdir + '/bins/testbin1', 'rb') as file:
             machofile = MachOFile(file)
             library = Dyld.load(machofile.slices[0])
             self.assertEqual(len(library.symbol_table.table), 23)
@@ -19,7 +21,7 @@ class SymTabTestCase(unittest.TestCase):
 
 class TBDTestCase(unittest.TestCase):
     def test_tapi_dump(self):
-        with open('bins/PreferencesUI.dyldex', 'rb') as file:
+        with open(scriptdir + '/bins/PreferencesUI.dyldex', 'rb') as file:
             machofile = MachOFile(file)
             library = Dyld.load(machofile.slices[0])
             tbd_dict = TBDGenerator(library).dict
@@ -28,13 +30,13 @@ class TBDTestCase(unittest.TestCase):
 
 class FileLoadTestCase(unittest.TestCase):
     def test_fat_load(self):
-        with open('bins/testbin1_fat', 'rb') as file:
+        with open(scriptdir + '/bins/testbin1_fat', 'rb') as file:
             macho_file = ktool.macho.MachOFile(file)
             self.assertEqual(macho_file.type, ktool.macho.MachOFileType.FAT)
             self.assertEqual(len(macho_file.slices), 2)
 
     def test_thin_load(self):
-        with open('bins/testbin1', 'rb') as file:
+        with open(scriptdir + '/bins/testbin1', 'rb') as file:
             macho_file = ktool.macho.MachOFile(file)
             self.assertEqual(macho_file.type, ktool.macho.MachOFileType.THIN)
 
@@ -42,27 +44,27 @@ class FileLoadTestCase(unittest.TestCase):
 class FrameworksTestCase(unittest.TestCase):
 
     def test_coherence(self):
-        with open('bins/Coherence.dyldex', 'rb') as fd:
+        with open(scriptdir + '/bins/Coherence.dyldex', 'rb') as fd:
             ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
 
     def test_ktrace(self):
-        with open('bins/ktrace.dyldex', 'rb') as fd:
+        with open(scriptdir + '/bins/ktrace.dyldex', 'rb') as fd:
             ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
 
     def test_pfui(self):
-        with open('bins/PreferencesUI', 'rb') as fd:
+        with open(scriptdir + '/bins/PreferencesUI', 'rb') as fd:
             ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
 
     def test_pfui2(self):
-        with open('bins/PreferencesUI.dyldex', 'rb') as fd:
+        with open(scriptdir + '/bins/PreferencesUI.dyldex', 'rb') as fd:
             ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
 
     def test_search(self):
-        with open('bins/Search', 'rb') as fd:
+        with open(scriptdir + '/bins/Search', 'rb') as fd:
             ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
 
     def test_sbh(self):
-        with open('bins/SpringBoardHome', 'rb') as fd:
+        with open(scriptdir + '/bins/SpringBoardHome', 'rb') as fd:
             objc_lib = ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
             self.assertGreater(len(objc_lib.classlist), 1)
             self.assertGreater(len(objc_lib.catlist), 1)
