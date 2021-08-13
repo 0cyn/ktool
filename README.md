@@ -55,8 +55,6 @@ ktool info [--slice n] --binding [filename] - Print binding actions for a file
 
 ```
 
-Will document other features soon, more are on the way.
-
 ---
 
 written in python for the sake of platform independence when operating on static binaries and libraries
