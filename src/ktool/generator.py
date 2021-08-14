@@ -15,8 +15,10 @@ class TBDGenerator:
         After processing, its .dict attribute can be dumped by a TAPI YAML serializer (located in ktool.util) to
             produce a functional .tbd
 
-        :param library: dyld.Library object
+        :param library: Library being processed
+        :type library: Library
         :param general: Should the generator create a .tbd for usage in SDKs?
+        :type general: boolp
         :param objclib: Pass an objc library to the genrator. If none is passed it will generate its own
         """
         self.library = library

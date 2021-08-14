@@ -12,6 +12,10 @@ def sizeof(t: struct):
 
 
 fat_header = namedtuple("fat_header", ["off", "magic", "nfat_archs"])
+fat_header.__doc__ = """
+:ivar magic: 0xCA FE BA BE
+:ivar nfat_archs: Number of slices in the fat binary
+"""
 fat_header_t = struct(fat_header, [4, 4])
 
 fat_arch = namedtuple("fat_arch", ["off", "cputype", "cpusubtype", "offset", "size", "align"])

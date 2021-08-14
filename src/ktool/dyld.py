@@ -23,7 +23,9 @@ class Dyld:
         Take a slice of a macho file and process it using the dyld functions
 
         :param macho_slice: Slice to load. If your library is not fat, that'll be MachOFile.slices[0]
+        :type macho_slice: Slice
         :return: Processed Library object
+        :rtype: Library
         """
         library = Library(macho_slice)
         Dyld._parse_load_commands(library)
@@ -32,10 +34,6 @@ class Dyld:
     @staticmethod
     def _parse_load_commands(library):
         for cmd in library.macho_header.load_commands:
-            # my structLoad function *ALWAYS* saves the offset on-disk to the .off field, regardless of the struct
-            #   loaded.
-            ea = cmd.off
-
             if isinstance(cmd, segment_command_64):
                 segment = Segment(library, cmd)
                 library.vm.add_segment(segment)
@@ -66,7 +64,6 @@ class Dyld:
                                                  z=library.get_bytes(cmd.off + 16, 1))
 
             if isinstance(cmd, dylib_command):
-                ea += sizeof(dylib_command_t)
                 if cmd.cmd == 0xD:  # local
                     library.dylib = ExternalDylib(library, cmd)
                 else:
@@ -91,6 +88,12 @@ class Library:
     """
 
     def __init__(self, macho_slice):
+        """
+        Create a MachO Library
+
+        :param macho_slice: MachO Slice being processed
+        :type macho_slice: MachO Slice
+        """
         self.macho_header = LibraryHeader(macho_slice)
         self.slice = macho_slice
 
@@ -222,6 +225,11 @@ class LibraryHeader:
     """
 
     def __init__(self, macho_slice):
+        """
+
+        :param macho_slice: MachO Slice object being loaded
+        :type macho_slice: Slice
+        """
         offset = 0
         self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header_t)
         self.load_commands = []
@@ -349,17 +357,13 @@ class BindingTable:
     """
     The binding table contains a ton of information related to the binding info in the library
 
-    .lookup_table Contains a map of address -> Symbol declarations which should be used for processing off-image
-        symbol decorations
+    .lookup_table - Contains a map of address -> Symbol declarations which should be used for processing off-image symbol decorations
 
-    .symbol_table Contains a full list of symbols declared in the binding info. Avoid iterating through this for speed
-        purposes.
+    .symbol_table - Contains a full list of symbols declared in the binding info. Avoid iterating through this for speed purposes.
 
-    Unprocessed:
+    .actions - contains a list of, you guessed it, actions.
 
-    .actions contains a list of, you guessed it, actions.
-
-    .import_stack contains a fairly raw unprocessed list of binding info commands
+    .import_stack - contains a fairly raw unprocessed list of binding info commands
 
     """
     def __init__(self, library):
@@ -367,6 +371,7 @@ class BindingTable:
         Pass a library to be processed
 
         :param library: Library to be processed
+        :type library: Library
         """
         self.library = library
         self.import_stack = self._load_binding_info()
