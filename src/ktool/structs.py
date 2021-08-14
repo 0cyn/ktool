@@ -1,4 +1,5 @@
 from collections import namedtuple
+from typing import NamedTuple
 
 struct = namedtuple("struct", ["struct", "sizes"])
 
@@ -11,65 +12,255 @@ def sizeof(t: struct):
     return sum(t.sizes)
 
 
-fat_header = namedtuple("fat_header", ["off", "magic", "nfat_archs"])
-fat_header.__doc__ = """
-:ivar magic: 0xCA FE BA BE
-:ivar nfat_archs: Number of slices in the fat binary
-"""
+class fat_header(NamedTuple):
+    """
+    First 8 bytes of a fat mach-o file
+
+    :ivar off: File offset that the struct was loaded from
+    :ivar magic: 0xCAFEBABE
+    :ivar nfat_archs: Number of fat archs
+    """
+    off: int
+    magic: int
+    nfat_archs: int
+
+
 fat_header_t = struct(fat_header, [4, 4])
 
-fat_arch = namedtuple("fat_arch", ["off", "cputype", "cpusubtype", "offset", "size", "align"])
+
+class fat_arch(NamedTuple):
+    off: int
+    cputype: int
+    cpusubtype: int
+    offset: int
+    size: int
+    align: int
+
+
 fat_arch_t = struct(fat_arch, [4, 4, 4, 4, 4])
 
-dyld_header = namedtuple("dyld_header", ["off", "header", "cpu", "cput", "filetype", "loadcnt", "loadsze", "flags", "void"])
+
+class dyld_header(NamedTuple):
+    off: int
+    header: int
+    cputype: int
+    cpu_subtype: int
+    filetype: int
+    loadcnt: int
+    loadsize: int
+    flags: int
+    void: int
+
+
 dyld_header_t = struct(dyld_header, [4, 4, 4, 4, 4, 4, 4, 4])
 
-dylib = namedtuple("dylib", ["off", "name", "timestamp", "current_version", "compatibility_version"])
-dylib_t = struct(dylib, [4,4,4,4])
 
-unk_command = namedtuple("unk_command", ["off", "cmd", "cmdsize"])
+class dylib(NamedTuple):
+    off: int
+    name: int
+    timestamp: int
+    current_version: int
+    compatibility_version: int
+
+
+dylib_t = struct(dylib, [4, 4, 4, 4])
+
+
+class unk_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+
+
 unk_command_t = struct(unk_command, [4, 4])
 
-dylib_command = namedtuple("dylib_command", ["off", "cmd", "cmdsize", "dylib"])
+
+class dylib_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    dylib: int
+
+
 dylib_command_t = struct(dylib_command, [4, 4, 16])
 
-dylinker_command = namedtuple("dylinker_command", ["off", "cmd", "cmdsize", "name"])
+
+class dylinker_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    name: int
+
+
 dylinker_command_t = struct(dylinker_command, [4, 4, 4])
 
-entry_point_command = namedtuple("entry_point_command", ["off", "cmd", "cmdsize", "entryoff", "stacksize"])
+
+class entry_point_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    entryoff: int
+    stacksize: int
+
+
 entry_point_command_t = struct(entry_point_command, [4, 4, 8, 8])
 
-rpath_command = namedtuple("rpath_command", ["off", "cmd", "cmdsize", "path"])
+
+class rpath_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    path: int
+
+
 rpath_command_t = struct(rpath_command, [4, 4, 4])
 
-dyld_info_command = namedtuple("dyld_info_command", ["off", "cmd", "cmdsize", "rebase_off", "rebase_size", "bind_off", "bind_size", "weak_bind_off", "weak_bind_size", "lazy_bind_off", "lazy_bind_size", "export_off", "export_size"])
+
+class dyld_info_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    rebase_off: int
+    rebase_size: int
+    bind_off: int
+    bind_size: int
+    weak_bind_off: int
+    weak_bind_size: int
+    lazy_bind_off: int
+    lazy_bind_size: int
+    export_off: int
+    export_size: int
+
+
 dyld_info_command_t = struct(dyld_info_command, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])
 
-symtab_command = namedtuple("symtab_command", ["off", "cmd", "cmdsize", "symoff", "nsyms", "stroff", "strsize"])
+
+class symtab_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    symoff: int
+    nsyms: int
+    stroff: int
+    strsize: int
+
+
 symtab_command_t = struct(symtab_command, [4, 4, 4, 4, 4, 4])
 
-dysymtab_command = namedtuple("dysymtab_command", ["off", "cmd", "cmdsize", "ilocalsym", "nlocalsym", "iextdefsym", "nextdefsym", "tocoff", "ntoc", "modtaboff", "nmodtab", "extrefsymoff", "nextrefsyms", "inderectsymoff", "nindirectsyms", "extreloff", "nextrel", "locreloff", "nlocrel"])
-dysymtab_command_t = struct(dysymtab_command, [4,4,4,4, 4,4,4,4 ,4,4,4,4 ,4,4,4,4,4,4])
 
-uuid_command = namedtuple("uuid_command", ["off", "cmd", "cmdsize", "uuid"])
+class dysymtab_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    ilocalsym: int
+    nlocalsym: int
+    iextdefsym: int
+    nextdefsym: int
+    tocoff: int
+    ntoc: int
+    modtaboff: int
+    nmodtab: int
+    extrefsymoff: int
+    nextrefsyms: int
+    indirectsymoff: int
+    nindirectsyms: int
+    extreloff: int
+    nextrel: int
+    locreloff: int
+    nlocrel: int
+
+
+dysymtab_command_t = struct(dysymtab_command, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])
+
+
+class uuid_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    uuid: int
+
+
 uuid_command_t = struct(uuid_command, [4, 4, 16])
 
-build_version_command = namedtuple("build_version_command", ["off", "cmd", "cmdsize", "platform", "minos", "sdk", "ntools"])
-build_version_command_t = struct(build_version_command, [4,4,4,4,4,4])
 
-source_version_command = namedtuple("source_version_command", ["off", "cmd", "cmdsize", "version"])
+class build_version_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    platform: int
+    minos: int
+    sdk: int
+    ntools: int
+
+
+build_version_command_t = struct(build_version_command, [4, 4, 4, 4, 4, 4])
+
+
+class source_version_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    version: int
+
+
 source_version_command_t = struct(source_version_command, [4, 4, 8])
 
-sub_client_command = namedtuple("sub_client_command", ["off", "cmd", "cmdsize", "offset"])
+
+class sub_client_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    offset: int
+
+
 sub_client_command_t = struct(sub_client_command, [4, 4, 4])
 
-linkedit_data_command = namedtuple("linkedit_data_command", ["off", "cmd", "cmdsize", "dataoff", "datasize"])
+
+class linkedit_data_command(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    dataoff: int
+    datasize: int
+
+
 linkedit_data_command_t = struct(linkedit_data_command, [4, 4, 4, 4])
 
-segment_command_64 = namedtuple("segment_command_64", ["off", "cmd", "cmdsize", "segname", "vmaddr", "vmsize", "fileoff", "filesize", "maxprot", "initprot", "nsects", "flags"])
+
+class segment_command_64(NamedTuple):
+    off: int
+    cmd: int
+    cmdsize: int
+    segname: int
+    vmaddr: int
+    vmsize: int
+    fileoff: int
+    filesize: int
+    maxprot: int
+    initprot: int
+    nsects: int
+    flags: int
+
+
 segment_command_64_t = struct(segment_command_64, [4, 4, 16, 8, 8, 8, 8, 4, 4, 4, 4])
 
-section_64 = namedtuple("section_64", ["off", "sectname", "segname", "addr", "size", "offset", "align", "reloff", "nreloc", "flags", "void1", "void2", "void3"])
+
+class section_64(NamedTuple):
+    off: int
+    sectname: int
+    segname: int
+    addr: int
+    size: int
+    offset: int
+    align: int
+    reloff: int
+    nreloc: int
+    flags: int
+    void1: int
+    void2: int
+    void3: int
+
+
 section_64_t = struct(section_64, [16, 16, 8, 8, 4, 4, 4, 4, 4, 4, 4, 4])
 
 LOAD_COMMAND_TYPEMAP = {
@@ -91,36 +282,127 @@ LOAD_COMMAND_TYPEMAP = {
     0x80000028: entry_point_command_t,
     0x8000001C: rpath_command_t,
 }
-objc2_class = namedtuple("objc2_class", ["off", "isa", "superclass", "cache", "vtable", "info"])
+
+class objc2_class(NamedTuple):
+    off: int
+    isa: int
+    superclass: int
+    cache: int
+    vtable: int
+    info: int
+
+
 objc2_class_t = struct(objc2_class, [8, 8, 8, 8, 8])
 
-objc2_class_ro = namedtuple("objc2_class_ro", ["off", "flags", "ivar_base_start", "ivar_base_size", "reserved", "ivar_lyt", "name", "base_meths", "base_prots", "ivars", "weak_ivar_lyt", "base_props"])
+class objc2_class_ro(NamedTuple):
+    off: int
+    flags: int
+    ivar_base_start: int
+    ivar_base_size: int
+    reserved: int
+    ivar_lyt: int
+    name: int
+    base_meths: int
+    base_prots: int
+    ivars: int
+    weak_ivar_lyt: int
+    base_props: int
+
+
 objc2_class_ro_t = struct(objc2_class_ro, [4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8])
 
-objc2_meth = namedtuple("objc2_meth", ["off", "selector", "types", "imp"])
+
+class objc2_meth(NamedTuple):
+    off: int
+    selector: int
+    types: int
+    imp: int
+
+
 objc2_meth_t = struct(objc2_meth, [8, 8, 8])
 objc2_meth_list_entry_t = struct(objc2_meth, [4, 4, 4])
 
-objc2_meth_list = namedtuple("objc2_meth_list", ["off", "entrysize", "count"])
+
+class objc2_meth_list(NamedTuple):
+    off: int
+    entrysize: int
+    count: int
+
+
 objc2_meth_list_t = struct(objc2_meth_list, [4, 4])
 
-objc2_prop_list = namedtuple("objc2_prop_list", ["off", "entrysize", "count"])
+
+class objc2_prop_list(NamedTuple):
+    off: int
+    entrysize: int
+    count: int
+
+
 objc2_prop_list_t = struct(objc2_prop_list, [4, 4])
 
-objc2_prop = namedtuple("objc2_prop", ["off", "name", "attr"])
+
+class objc2_prop(NamedTuple):
+    off: int
+    name: int
+    attr: int
+
+
 objc2_prop_t = struct(objc2_prop, [8, 8])
 
-objc2_prot_list = namedtuple("objc2_prot_list", ["off", "cnt"])
+
+class objc2_prot_list(NamedTuple):
+    off: int
+    cnt: int
+
+
 objc2_prot_list_t = struct(objc2_prot_list, [8])
 
-objc2_prot = namedtuple("objc2_prot", ["off", "isa", "name", "prots", "inst_meths", "class_meths", "opt_inst_meths", "opt_class_meths", "inst_props", "cb", "flags"])
+
+class objc2_prot(NamedTuple):
+    off: int
+    isa: int
+    name: int
+    prots: int
+    inst_meths: int
+    class_meths: int
+    opt_inst_meths: int
+    opt_class_meths: int
+    inst_props: int
+    cb: int
+    flags: int
+
+
 objc2_prot_t = struct(objc2_prot, [8, 8, 8, 8, 8, 8, 8, 8, 4, 4])
 
-objc2_ivar_list = namedtuple("objc2_ivar_list", ["off", "entrysize", "cnt"])
+
+class objc2_ivar_list(NamedTuple):
+    off: int
+    entrysize: int
+    cnt: int
+
 objc2_ivar_list_t = struct(objc2_ivar_list, [4, 4])
 
-objc2_ivar = namedtuple("objc2_ivar", ["off", "offs", "name", "type", "align", "size"])
+
+class objc2_ivar(NamedTuple):
+    off: int
+    offs: int
+    name: int
+    type: int
+    align: int
+    size: int
+
+
 objc2_ivar_t = struct(objc2_ivar, [8, 8, 8, 4, 4])
 
-objc2_category = namedtuple("objc2_category", ["off", "name", "s_class", "inst_meths", "class_meths", "prots", "props"])
+
+class objc2_category(NamedTuple):
+    off: int
+    name: int
+    s_class: int
+    inst_meths: int
+    class_meths: int
+    prots: int
+    props: int
+
+
 objc2_category_t = struct(objc2_category, [8, 8, 8, 8, 8, 8])
