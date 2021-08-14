@@ -22,7 +22,6 @@ class fat_header(NamedTuple):
     .nfat_archs - Number of slices within the file
 
     """
-    #: int: Offset struct was loaded from
     off: int
     magic: int
     nfat_archs: int
