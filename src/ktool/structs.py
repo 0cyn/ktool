@@ -16,11 +16,13 @@ class fat_header(NamedTuple):
     """
     First 8 bytes of a fat mach-o file
 
-    :ivar off: File offset that the struct was loaded from
-    :ivar magic: 0xCAFEBABE
+    :attr off: File offset that the struct was loaded from
+    :var magic: 0xCAFEBABE
     :ivar nfat_archs: Number of fat archs
     """
     off: int
+    "File offset the struct was loaded from"
+    #: 0xCAFEBABE
     magic: int
     nfat_archs: int
 
