@@ -13,16 +13,17 @@ def sizeof(t: struct):
 
 
 class fat_header(NamedTuple):
-    """
-    First 8 bytes of a fat mach-o file
+    """First 8 bytes of a fat mach-o file
 
-    :attr off: File offset that the struct was loaded from
-    :var magic: 0xCAFEBABE
-    :ivar nfat_archs: Number of fat archs
+    .off - Offset struct was loaded from
+
+    .magic - 0xCAFEBABE
+
+    .nfat_archs - Number of slices within the file
+
     """
+    #: int: Offset struct was loaded from
     off: int
-    "File offset the struct was loaded from"
-    #: 0xCAFEBABE
     magic: int
     nfat_archs: int
 
