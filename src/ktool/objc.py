@@ -177,7 +177,7 @@ class Struct:
         ret = "typedef struct " + self.name + " {\n"
         for i, field in enumerate(self.fields):
             field_name = f'field{str(i)}'
-            
+
             if len(self.field_names) > 0:
                 field_name = self.field_names[i]
 
