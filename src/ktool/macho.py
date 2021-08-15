@@ -47,9 +47,10 @@ class MachOFile:
 
         if len(fields) != len(field_names):
             raise ValueError(
-                f'Field-Fieldname count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size '
+                f'Field count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size '
                 f'Array.')
 
+        # noinspection PyProtectedMember
         return struct_type.struct._make(fields)
 
     # noinspection PyTypeChecker
@@ -124,9 +125,9 @@ vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr", "name"])
 
 class _VirtualMemoryMap:
     """
-    Virtual Memory is the location "in memory" where the library/bin, etc will be accessed when ran
-    This is not where it actually sits in memory at runtime; it will be slid, but the program doesnt know and doesnt care
-    The slid address doesnt matter to us either, we only care about the addresses the rest of the file cares about
+    Virtual Memory is the location "in memory" where the library/bin, etc will be accessed when ran This is not where
+    it actually sits in memory at runtime; it will be slid, but the program doesnt know and doesnt care The slid
+    address doesnt matter to us either, we only care about the addresses the rest of the file cares about
 
     There are two address sets used in mach-o files: vm, and file. (commonly; vmoff and fileoff)
     For example, when reading raw data of an executable binary:
@@ -163,8 +164,11 @@ class _VirtualMemoryMap:
             #       then we just re-add the 0x manually.
 
             # this gives us a nice list with visually clear columns and rows
-            ret += f'{key.ljust(16)}  ||  Start: 0x{hex(obj.vmaddr)[2:].zfill(9)}  |  End: 0x{hex(obj.vmend)[2:].zfill(9)}  |  Size: 0x{hex(obj.size)[2:].zfill(9)}  |  Slice ' \
-                   f'Offset:  0x{hex(obj.fileaddr)[2:].zfill(9)}  ||  File Offset: 0x{hex(obj.fileaddr + self.slice.offset)[2:].zfill(9)}\n '
+            ret += f'{key.ljust(16)}  ||  Start: 0x{hex(obj.vmaddr)[2:].zfill(9)}  |  ' \
+                   f'End: 0x{hex(obj.vmend)[2:].zfill(9)}  |  ' \
+                   f'Size: 0x{hex(obj.size)[2:].zfill(9)}  |  Slice ' \
+                   f'Offset:  0x{hex(obj.fileaddr)[2:].zfill(9)}  ||' \
+                   f'  File Offset: 0x{hex(obj.fileaddr + self.slice.offset)[2:].zfill(9)}\n '
         return ret
 
     def get_vm_start(self):
@@ -189,33 +193,34 @@ class _VirtualMemoryMap:
 
             # noinspection PyChainedComparisons
             if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                faddr = o.fileaddr + vm_address - o.vmaddr
-                self.cache[vm_address] = faddr
-                return faddr
+                file_addr = o.fileaddr + vm_address - o.vmaddr
+                self.cache[vm_address] = file_addr
+                return file_addr
             else:
+                # noinspection PyBroadException
                 try:
                     o = self.map['__EXTRA_OBJC']
                     # noinspection PyChainedComparisons
                     if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                        faddr = o.fileaddr + vm_address - o.vmaddr
-                        self.cache[vm_address] = faddr
-                        return faddr
-                except:
+                        file_addr = o.fileaddr + vm_address - o.vmaddr
+                        self.cache[vm_address] = file_addr
+                        return file_addr
+                except Exception:
                     for o in self.map.values():
                         # noinspection PyChainedComparisons
                         if vm_address >= o.vmaddr and o.vmend >= vm_address:
                             # self.stats[o.name] += 1
-                            faddr = o.fileaddr + vm_address - o.vmaddr
-                            self.cache[vm_address] = faddr
-                            return faddr
+                            file_addr = o.fileaddr + vm_address - o.vmaddr
+                            self.cache[vm_address] = file_addr
+                            return file_addr
 
         for o in self.map.values():
             # noinspection PyChainedComparisons
             if vm_address >= o.vmaddr and o.vmend >= vm_address:
                 # self.stats[o.name] += 1
-                faddr = o.fileaddr + vm_address - o.vmaddr
-                self.cache[vm_address] = faddr
-                return faddr
+                file_addr = o.fileaddr + vm_address - o.vmaddr
+                self.cache[vm_address] = file_addr
+                return file_addr
 
         raise ValueError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
 
@@ -228,7 +233,8 @@ class _VirtualMemoryMap:
         else:
             for section in segment.sections.values():
                 name = section.name if section.name not in self.map.keys() else section.name + '2'
-                sect_obj = vm_obj(section.vm_address, section.vm_address + section.size, section.size, section.file_address, name)
+                sect_obj = vm_obj(section.vm_address, section.vm_address + section.size, section.size,
+                                  section.file_address, name)
                 self.map[name] = sect_obj
                 self.sorted_map = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
                 self.stats[name] = 0
@@ -254,6 +260,7 @@ class Slice:
     """
 
     """
+
     def __init__(self, macho_file, arch_struct, offset=0):
         """
 
@@ -273,10 +280,13 @@ class Slice:
 
     def full_bytes_for_slice(self):
         if self.offset == 0:
+
             f = self.macho_file.file_object
             old_file_position = f.tell()
             f.seek(0, os.SEEK_END)
             size = f.tell()
+            f.seek(old_file_position)
+
             return self.macho_file.file[0:size]
         return self.macho_file.file[self.offset:+self.offset + self.arch_struct.size]
 
@@ -292,7 +302,9 @@ class Slice:
 
         if len(fields) != len(field_names):
             raise ValueError(
-                f'Field-Fieldname count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size Array.')
+                f'Field count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size Array.')
+
+        # noinspection PyProtectedMember
         return struct_type.struct._make(fields)
 
     def get_at(self, addr, count, endian="little"):
@@ -326,7 +338,7 @@ class Slice:
                 else:
                     ret = ret + char
                     ea += 1
-        except UnicodeError as ex:
+        except UnicodeError:
             raise UnicodeError(f'Bad string; addr={hex(addr)} limit={limit} ea={hex(ea)} ret={ret}')
 
         return ret
@@ -348,40 +360,40 @@ class Slice:
             if (byte & 0x80) == 0:
                 break
 
-        return (value, readHead)
+        return value, readHead
 
     def _load_type(self):
-        cputype = self.arch_struct.cputype
+        cpu_type = self.arch_struct.cputype
 
-        if cputype & 0xF000000 != 0:
-            if cputype & 0xF == 0x7:
+        if cpu_type & 0xF000000 != 0:
+            if cpu_type & 0xF == 0x7:
                 return CPUType.X86_64
-            elif cputype & 0xF == 0xC:
+            elif cpu_type & 0xF == 0xC:
                 return CPUType.ARM64
         else:
-            if cputype & 0xF == 0x7:
+            if cpu_type & 0xF == 0x7:
                 return CPUType.X86
-            elif cputype & 0xF == 0xC:
+            elif cpu_type & 0xF == 0xC:
                 return CPUType.ARM
 
         raise ValueError(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct})')
 
     def _load_subtype(self):
-        cpusubtype = self.arch_struct.cpusubtype
+        cpu_subtype = self.arch_struct.cpusubtype
 
-        if cpusubtype == 3:
+        if cpu_subtype == 3:
             return CPUSubType.X86_64_ALL
-        elif cpusubtype == 8:
+        elif cpu_subtype == 8:
             return CPUSubType.X86_64_H
-        elif cpusubtype == 9:
+        elif cpu_subtype == 9:
             return CPUSubType.ARMV7
-        elif cpusubtype == 11:
+        elif cpu_subtype == 11:
             return CPUSubType.ARMV7S
-        elif cpusubtype == 0:
+        elif cpu_subtype == 0:
             return CPUSubType.ARM64_ALL
-        elif cpusubtype == 1:
+        elif cpu_subtype == 1:
             return CPUSubType.ARM64_V8
-        elif cpusubtype == 2:
+        elif cpu_subtype == 2:
             return CPUSubType.ARM64_V8
 
-        raise ValueError(f'Unknown CPU SubType ({hex(cpusubtype)})')
+        raise ValueError(f'Unknown CPU SubType ({hex(cpu_subtype)})')

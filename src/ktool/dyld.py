@@ -2,10 +2,10 @@ import logging
 from collections import namedtuple
 from enum import IntEnum, Enum
 
-import ktool.structs
 from ktool.structs import symtab_entry_t, dyld_header, dyld_header_t, unk_command_t, dylib_command, dylib_command_t, \
     dyld_info_command, symtab_command, uuid_command, build_version_command, segment_command_64, LOAD_COMMAND_TYPEMAP, \
     sizeof, struct, sub_client_command
+
 from ktool.macho import _VirtualMemoryMap, Segment
 
 
@@ -14,7 +14,7 @@ class Dyld:
     This is a static class containing several methods for, essentially, recreating the functionality of Dyld for our
     own purposes.
 
-    It isnt meant to be a faithful recreation of dyld so to speak, it just does things dyld also does, kinda.
+    It isn't meant to be a faithful recreation of dyld so to speak, it just does things dyld also does, kinda.
 
     """
 
@@ -72,7 +72,10 @@ class Dyld:
                 library.sdk_version = os_version(x=library.get_bytes(cmd.off + 18, 2),
                                                  y=library.get_bytes(cmd.off + 17, 1),
                                                  z=library.get_bytes(cmd.off + 16, 1))
-                logging.debug(f'Loaded platform {library.platform.name} | Minimum OS {library.minos.x}.{library.minos.y}.{library.minos.z} | SDK Version {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')
+                logging.debug(f'Loaded platform {library.platform.name} | '
+                              f'Minimum OS {library.minos.x}.{library.minos.y}'
+                              f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
+                              f'.{library.sdk_version.y}.{library.sdk_version.z}')
 
             if isinstance(cmd, dylib_command):
                 if cmd.cmd == 0xD:  # local
@@ -226,22 +229,22 @@ class LibraryHeader:
         """
 
         # Start address of the load commands.
-        ea = self.dyld_header.off + 0x20
+        read_address = self.dyld_header.off + 0x20
 
         # Loop through the dyld_header by load command count
         # possibly this could be modified to check for other load commands
         #       as a rare obfuscation technique involves fucking with these to screw with RE tools.
 
         for i in range(1, self.dyld_header.loadcnt):
-            cmd = macho_slice.get_at(ea, 4)
+            cmd = macho_slice.get_at(read_address, 4)
             try:
-                load_cmd = macho_slice.load_struct(ea, LOAD_COMMAND_TYPEMAP[cmd])
+                load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_TYPEMAP[cmd])
             except KeyError:
-                unk_lc = macho_slice.load_struct(ea, unk_command_t)
+                unk_lc = macho_slice.load_struct(read_address, unk_command_t)
                 load_cmd = unk_lc
 
             self.load_commands.append(load_cmd)
-            ea += load_cmd.cmdsize
+            read_address += load_cmd.cmdsize
 
 
 class ExternalDylib:
@@ -251,8 +254,8 @@ class ExternalDylib:
         self.local = cmd.cmd == 0xD
 
     def _get_name(self, cmd):
-        ea = cmd.off + sizeof(dylib_command_t)
-        return self.source_library.get_cstr_at(ea)
+        read_address = cmd.off + sizeof(dylib_command_t)
+        return self.source_library.get_cstr_at(read_address)
 
 
 os_version = namedtuple("os_version", ["x", "y", "z"])
@@ -295,7 +298,8 @@ class Symbol:
 
     .fullname contains the full name of the symbol (e.g. _OBJC_CLASS_$_MyDumbClassnameHere)
 
-    .name contains the (somewhat) processed name of the symbol (e.g. _MyDumbClassnameHere for an @interface MyDumbClassnameHere)
+    .name contains the (somewhat) processed name of the symbol (e.g. _MyDumbClassnameHere for an @interface
+    MyDumbClassnameHere)
 
     .type contains a SymbolType if it was able to figure one out
 
@@ -346,18 +350,17 @@ class SymbolTable:
         self.cmd = cmd
         self.ext = []
         self.table = self._load_symbol_table()
-        # TODO: Lookup table?
 
     def _load_symbol_table(self):
         symbol_table = []
-        ea = self.cmd.symoff
+        read_address = self.cmd.symoff
         for i in range(0, self.cmd.nsyms):
-            symbol_table.append(self.library.load_struct(ea + sizeof(symtab_entry_t) * i, symtab_entry_t))
+            symbol_table.append(self.library.load_struct(read_address + sizeof(symtab_entry_t) * i, symtab_entry_t))
 
         table = []
         for sym in symbol_table:
             symbol = Symbol(self.library, self.cmd, sym)
-            logging.debug(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
+            # logging.debug(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
             table.append(symbol)
             if sym.type == 0xf:
                 self.ext.append(symbol)
@@ -373,9 +376,11 @@ class BindingTable:
     """
     The binding table contains a ton of information related to the binding info in the library
 
-    .lookup_table - Contains a map of address -> Symbol declarations which should be used for processing off-image symbol decorations
+    .lookup_table - Contains a map of address -> Symbol declarations which should be used for processing off-image
+    symbol decorations
 
-    .symbol_table - Contains a full list of symbols declared in the binding info. Avoid iterating through this for speed purposes.
+    .symbol_table - Contains a full list of symbols declared in the binding info. Avoid iterating through this for
+    speed purposes.
 
     .actions - contains a list of, you guessed it, actions.
 
@@ -401,7 +406,7 @@ class BindingTable:
         for act in self.actions:
             if act.item:
                 sym = Symbol(self.library, fullname=act.item, ordinal=act.libname, addr=act.vmaddr)
-                logging.debug(f'Binding info: Loaded symbol:{act.item} ordinal:{act.libname} addr:{act.vmaddr}')
+                # logging.debug(f'Binding info: Loaded symbol:{act.item} ordinal:{act.libname} addr:{act.vmaddr}')
                 table.append(sym)
                 self.lookup_table[act.vmaddr] = sym
         return table
@@ -414,22 +419,18 @@ class BindingTable:
             try:
                 lib = self.library.linked[bind_command.lib_ordinal - 1].install_name
             except IndexError:
-                logging.debug(f'Binding Info: {bind_command.lib_ordinal} Ordinal wasn\'t found, Something is wrong')
+                # logging.debug(f'Binding Info: {bind_command.lib_ordinal} Ordinal wasn't found, Something is wrong')
                 lib = str(bind_command.lib_ordinal)
             item = bind_command.name
             actions.append(action(vm_address & 0xFFFFFFFFF, lib, item))
         return actions
 
     def _load_binding_info(self):
-        # You are better off looking at original dyld source or several writeups scattered across the interwebs
-        # This code is hardly readable and i'm somewhat scared to touch it, it seems to work.
-        # TODO: Did i just not do the sleb action Processing? I have a function for it now?
         lib = self.library
-        ea = lib.info.bind_off
+        read_address = lib.info.bind_off
         import_stack = []
         while True:
-            # print(hex(ea))
-            if ea - lib.info.bind_size >= lib.info.bind_off:
+            if read_address - lib.info.bind_size >= lib.info.bind_off:
                 break
             seg_index = 0x0
             seg_offset = 0x0
@@ -442,65 +443,64 @@ class BindingTable:
             while True:
                 # There are 0xc opcodes total
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
-                op = self.library.get_bytes(ea, 1) & 0xF0
-                value = self.library.get_bytes(ea, 1) & 0x0F
-                ea += 1
-                if op == OPCODE.BIND_OPCODE_DONE:
+                binding_opcode = self.library.get_bytes(read_address, 1) & 0xF0
+                value = self.library.get_bytes(read_address, 1) & 0x0F
+                read_address += 1
+                if binding_opcode == BINDING_OPCODE.DONE:
                     import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     break
-                elif op == OPCODE.BIND_OPCODE_SET_DYLIB_ORDINAL_IMM:
+                elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_IMM:
                     lib_ordinal = value
-                elif op == OPCODE.BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB:
-                    lib_ordinal, bump = self.library.decode_uleb128(ea)
-                    ea = bump
-                elif op == OPCODE.BIND_OPCODE_SET_DYLIB_SPECIAL_IMM:
+
+                elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_ULEB:
+                    lib_ordinal, read_address = self.library.decode_uleb128(read_address)
+
+                elif binding_opcode == BINDING_OPCODE.SET_DYLIB_SPECIAL_IMM:
                     special_dylib = 0x1
                     lib_ordinal = value
-                elif op == OPCODE.BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM:
+
+                elif binding_opcode == BINDING_OPCODE.SET_SYMBOL_TRAILING_FLAGS_IMM:
                     flags = value
-                    name = self.library.get_cstr_at(ea)
-                    ea += len(name)
-                    ea += 1
-                elif op == OPCODE.BIND_OPCODE_SET_TYPE_IMM:
+                    name = self.library.get_cstr_at(read_address)
+                    read_address += len(name) + 1
+
+                elif binding_opcode == BINDING_OPCODE.SET_TYPE_IMM:
                     btype = value
-                elif op == OPCODE.BIND_OPCODE_SET_ADDEND_SLEB:
-                    o, bump = self.library.decode_uleb128(ea)
-                    addend = o
-                    ea = bump
-                elif op == OPCODE.BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB:
+
+                elif binding_opcode == BINDING_OPCODE.SET_ADDEND_SLEB:
+                    addend, read_address = self.library.decode_uleb128(read_address)
+
+                elif binding_opcode == BINDING_OPCODE.SET_SEGMENT_AND_OFFSET_ULEB:
                     seg_index = value
-                    number, head = self.library.decode_uleb128(ea)
-                    seg_offset = number
-                    ea = head
-                elif op == OPCODE.BIND_OPCODE_ADD_ADDR_ULEB:
-                    o, bump = self.library.decode_uleb128(ea)
+                    seg_offset, read_address = self.library.decode_uleb128(read_address)
+
+                elif binding_opcode == BINDING_OPCODE.ADD_ADDR_ULEB:
+                    o, read_address = self.library.decode_uleb128(read_address)
                     seg_offset += o
-                    ea = bump
-                elif op == OPCODE.BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB:
+
+                elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_ULEB:
                     import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset += 8
-                    o, bump = self.library.decode_uleb128(ea)
+                    o, read_address = self.library.decode_uleb128(read_address)
                     seg_offset += o
-                    ea = bump
 
-                elif op == OPCODE.BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED:
+                elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_IMM_SCALED:
                     import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset = seg_offset + (value * 8) + 8
-                elif op == OPCODE.BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
-                    t, bump = self.library.decode_uleb128(ea)
-                    count = t
-                    ea = bump
-                    s, bump = self.library.decode_uleb128(ea)
-                    skip = s
-                    ea = bump
+
+                elif binding_opcode == BINDING_OPCODE.DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
+                    count, read_address = self.library.decode_uleb128(read_address)
+                    skip, read_address = self.library.decode_uleb128(read_address)
+
                     for i in range(0, count):
                         import_stack.append(
                             record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                         seg_offset += skip + 8
-                elif op == OPCODE.BIND_OPCODE_DO_BIND:
+
+                elif binding_opcode == BINDING_OPCODE.DO_BIND:
                     import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset += 8
@@ -510,17 +510,29 @@ class BindingTable:
         return import_stack
 
 
-class OPCODE(IntEnum):
-    BIND_OPCODE_DONE = 0x0
-    BIND_OPCODE_SET_DYLIB_ORDINAL_IMM = 0x10
-    BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB = 0x20
-    BIND_OPCODE_SET_DYLIB_SPECIAL_IMM = 0x30
-    BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM = 0x40
-    BIND_OPCODE_SET_TYPE_IMM = 0x50
-    BIND_OPCODE_SET_ADDEND_SLEB = 0x60
-    BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB = 0x70
-    BIND_OPCODE_ADD_ADDR_ULEB = 0x80
-    BIND_OPCODE_DO_BIND = 0x90
-    BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB = 0xa0
-    BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED = 0xb0
-    BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB = 0xc0
+class REBASE_OPCODE(IntEnum):
+    DONE = 0x0
+    SET_TYPE_IMM = 0x10
+    SET_SEGMENT_AND_OFFSET_ULEB = 0x20
+    ADD_ADDR_ULEB = 0x30
+    ADD_ADDR_IMM_SCALED = 0x40
+    DO_REBASE_IMM_TIMES = 0x50
+    DO_REBASE_ULEB_TIMES = 0x60
+    DO_REBASE_ADD_ADDR_ULEB = 0x70
+    DO_REBASE_ULEB_TIMES_SKIPPING_ULEB = 0x80
+
+
+class BINDING_OPCODE(IntEnum):
+    DONE = 0x0
+    SET_DYLIB_ORDINAL_IMM = 0x10
+    SET_DYLIB_ORDINAL_ULEB = 0x20
+    SET_DYLIB_SPECIAL_IMM = 0x30
+    SET_SYMBOL_TRAILING_FLAGS_IMM = 0x40
+    SET_TYPE_IMM = 0x50
+    SET_ADDEND_SLEB = 0x60
+    SET_SEGMENT_AND_OFFSET_ULEB = 0x70
+    ADD_ADDR_ULEB = 0x80
+    DO_BIND = 0x90
+    DO_BIND_ADD_ADDR_ULEB = 0xa0
+    DO_BIND_ADD_ADDR_IMM_SCALED = 0xb0
+    DO_BIND_ULEB_TIMES_SKIPPING_ULEB = 0xc0

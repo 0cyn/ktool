@@ -1,9 +1,6 @@
-import concurrent.futures
-from collections import namedtuple
+import logging
 from enum import Enum
 
-from ktool.dyld import SymbolType
-from ktool.macho import Section
 from ktool.structs import *
 
 type_encodings = {
@@ -39,11 +36,11 @@ class ObjCLibrary:
         self.tp = TypeProcessor()
         self.name = library.name
 
-        self.classlist = self._generate_classlist(None)
-        self.catlist = self._generate_catlist()
-        self.protolist = self._generate_protlist()
+        self.classlist = self._generate_class_list(None)
+        self.catlist = self._generate_category_list()
+        self.protolist = self._generate_protocol_list()
 
-    def _generate_catlist(self):
+    def _generate_category_list(self):
         sect = None
         for seg in self.library.segments:
             for sec in self.library.segments[seg].sections:
@@ -60,7 +57,7 @@ class ObjCLibrary:
 
         return cats
 
-    def _generate_classlist(self, classlimit):
+    def _generate_class_list(self, classlimit):
         sect = None
         for seg in self.library.segments:
             for sec in self.library.segments[seg].sections:
@@ -80,10 +77,7 @@ class ObjCLibrary:
                     classes.append(oc)
         return classes
 
-    # objc2_prot_list = namedtuple("objc2_prot_list", ["off", "cnt"])
-    # objc2_prot_list_t = struct(objc2_prot_list, [8])
-
-    def _generate_protlist(self):
+    def _generate_protocol_list(self):
 
         sect = None
         for seg in self.library.segments:
@@ -103,8 +97,8 @@ class ObjCLibrary:
             proto = self.library.load_struct(loc, objc2_prot_t, vm=True)
             try:
                 protos.append(Protocol(self, proto, loc))
-            except:
-                pass
+            except Exception as ex:
+                logging.error("Failed to load a protocol with " + str(ex))
 
         return protos
 
@@ -132,20 +126,67 @@ class Struct:
             self.fields = []
             return
 
+        self.field_names = []
+
+        process_string = type_str[1:-1].split('=', 1)[1]
+
+        if process_string.startswith('"'): #  Named struct
+            output_string = ""
+
+            in_field = False
+            in_substruct_depth = 0
+
+            field = ""
+
+            for character in process_string:
+                if character == '{':
+                    in_substruct_depth += 1
+                    output_string += character
+                    continue
+
+                elif character == '}':
+                    in_substruct_depth -= 1
+                    output_string += character
+                    continue
+
+                if in_substruct_depth == 0:
+                    if character == '"':
+                        if in_field:
+                            self.field_names.append(field)
+                            in_field = False
+                            field = ""
+                        else:
+                            in_field = True
+                    else:
+                        if in_field:
+                            field += character
+                        else:
+                            output_string += character
+                else:
+                    output_string += character
+
+            process_string = output_string
+
         # Remove the outer {},
         # get everything after the first = sign,
         # Process that via the processor
         # Save the resulting list to self.fields
-        self.fields = processor.process(type_str[1:-1].split('=', 1)[1])
+        self.fields = processor.process(process_string)
 
     def __str__(self):
         ret = "typedef struct " + self.name + " {\n"
         for i, field in enumerate(self.fields):
+            field_name = f'field{str(i)}'
+            
+            if len(self.field_names) > 0:
+                field_name = self.field_names[i]
+
             if isinstance(field.value, Struct):
                 field = field.value.name
             else:
                 field = field.value
-            ret += "    " + field + ' field' + str(i) + ';\n'
+
+            ret += "    " + field + ' ' + field_name + ';\n'
         ret += '} ' + self.name + ';'
         if len(self.fields) == 0:
             ret += " // Empty Struct"
@@ -198,13 +239,18 @@ class TypeProcessor:
     def __init__(self):
         self.structs = {}
 
-    def save_struct(self, struct: Struct):
-        if struct.name not in self.structs.keys():
-            self.structs[struct.name] = struct
+    def save_struct(self, struct_to_save: Struct):
+        if struct_to_save.name not in self.structs.keys():
+            self.structs[struct_to_save.name] = struct_to_save
+        else:
+            if len(self.structs[struct_to_save.name].fields) == 0:
+                self.structs[struct_to_save.name] = struct_to_save
+            if len(struct_to_save.field_names) > 0 and len(self.structs[struct_to_save.name].field_names) == 0:
+                self.structs[struct_to_save.name] = struct_to_save
 
-    def process(self, type: str):
+    def process(self, type_to_process: str):
         try:
-            tokens = self.tokenize(type)
+            tokens = self.tokenize(type_to_process)
             types = []
             pc = 0
             for i, token in enumerate(tokens):
@@ -218,22 +264,21 @@ class TypeProcessor:
                     pc = 0
             return types
         except:
-            # TODO: Fix type recognition issues to best of abilities and then remove this assertion
-            raise AssertionError(type)
+            pass
 
     @staticmethod
-    def tokenize(type: str):
+    def tokenize(type_to_tokenize: str):
         # ^Idd^{structZero=dd{structName={innerStructName=dd}}{structName2=dd}}
 
         # This took way too long to write
         # Apologies for lack of readability, it splits up the string into a list
         # Makes every character a token, except root structs
         #   which it compiles into a full string with the contents and tacks onto said list
-        toks = []
+        tokens = []
         b = False
         bc = 0
         bu = ""
-        for c in type:
+        for c in type_to_tokenize:
             if b:
                 bu += c
                 if c == "{":
@@ -241,23 +286,23 @@ class TypeProcessor:
                 elif c == "}":
                     bc -= 1
                     if bc == 0:
-                        toks.append(bu)
+                        tokens.append(bu)
                         b = False
                         bu = ""
             elif c in type_encodings or c == "^":
-                toks.append(c)
+                tokens.append(c)
             elif c == "{":
                 bu += "{"
                 b = True
                 bc += 1
             elif c == '"':
                 try:
-                    toks = [type.split('@', 1)[1]]
-                except:
-                    # Named fields ;_;
+                    tokens = [type_to_tokenize.split('@', 1)[1]]
+                except Exception as ex:
+                    logging.warning(f'Failed to process type {type_to_tokenize} with {ex}')
                     return []
                 break
-        return toks
+        return tokens
 
 
 class Ivar:
@@ -282,11 +327,11 @@ class Ivar:
         if type.type == EncodedType.NORMAL:
             return str(type)
         elif type.type == EncodedType.STRUCT:
-            ptraddon = ""
+            ptr_addition = ""
             for i in range(0, type.pointer_count):
-                ptraddon += '*'
-            return ptraddon + type.value.name
-        return (str(type))
+                ptr_addition += '*'
+            return ptr_addition + type.value.name
+        return str(type)
 
 
 class Method:
@@ -294,20 +339,20 @@ class Method:
         self.meta = meta
         try:
             self.sel = library.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
-            typestr = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
+            type_string = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
         except ValueError as ex:
             try:
                 selref = library.get_bytes(method.selector + vmaddr, 8, vm=True)
                 self.sel = library.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
-                typestr = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+                type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
             except ValueError as ex:
                 self.sel = library.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
-                typestr = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+                type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
         except Exception as ex:
             raise ex
 
-        self.typestr = typestr
-        self.types = library.tp.process(typestr)
+        self.type_string = type_string
+        self.types = library.tp.process(type_string)
         if len(self.types) == 0:
             raise ValueError("Empty Typestr")
 
@@ -326,10 +371,10 @@ class Method:
         if type.type == EncodedType.NORMAL:
             return str(type)
         elif type.type == EncodedType.STRUCT:
-            ptraddon = ""
+            ptr_addition = ""
             for i in range(0, type.pointer_count):
-                ptraddon += '*'
-            return ptraddon + type.value.name
+                ptr_addition += '*'
+            return ptr_addition + type.value.name
 
     def _build_method_signature(self):
         dash = "+" if self.meta else "-"
@@ -338,16 +383,16 @@ class Method:
         if len(self.arguments) == 0:
             return dash + ret + self.sel
 
-        segs = []
+        segments = []
         for i, item in enumerate(self.sel.split(':')):
             if item == "":
                 continue
             try:
-                segs.append(item + ':' + '(' + self.arguments[i + 2] + ')' + 'arg' + str(i) + ' ')
+                segments.append(item + ':' + '(' + self.arguments[i + 2] + ')' + 'arg' + str(i) + ' ')
             except IndexError:
-                segs.append(item)
+                segments.append(item)
 
-        sig = ''.join(segs)
+        sig = ''.join(segments)
 
         return dash + ret + sig
 
@@ -507,8 +552,9 @@ class Class:
                 if hasattr(property, 'attr'):
                     if property.attr.type.type == EncodedType.STRUCT:
                         self.struct_list.append(property.attr.type.value)
-            except ValueError as ex:
+            except Exception as ex:
                 # continue
+                logging.warning(f'Failed to load property with {str(ex)}')
                 pass
             ea += sizeof(objc2_prop_t)
             vm_ea += sizeof(objc2_prop_t)

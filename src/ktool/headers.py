@@ -36,7 +36,7 @@ class TypeResolver:
                     if '.dylib' in nam:
                         return None
                     return nam
-                except:
+                except Exception as ex:
                     pass
         return None
 
@@ -99,12 +99,8 @@ class Header:
         return self.text
 
     def _generate_text(self):
-        text = []
-        text.append(HeaderUtils.header_head(self.type_resolver.library.library))
-        text.append("#ifndef " + self.objc_class.name.upper()+"_H")
-        text.append("#define " + self.objc_class.name.upper()+"_H")
-
-        text.append("")
+        text = [HeaderUtils.header_head(self.type_resolver.library.library),
+                "#ifndef " + self.objc_class.name.upper() + "_H", "#define " + self.objc_class.name.upper() + "_H", ""]
 
         if len(self.forward_declaration_classes) > 0:
             text.append("@class " + ", ".join(self.forward_declaration_classes) + ";")
@@ -140,7 +136,6 @@ class Header:
         text.append("#endif")
 
         return "\n".join(text)
-
 
     def _get_import_section(self):
         if self.interface.objc_class.superclass != "":
@@ -212,7 +207,6 @@ class Header:
 
 class CategoryHeader:
     def __init__(self, objc_category):
-
         self.category = objc_category
 
         self.properties = objc_category.properties
@@ -261,6 +255,7 @@ class ProtocolHeader:
         text.append("")
 
         return "\n".join(text)
+
 
 class Interface:
     def __init__(self, objc_class):

@@ -1,12 +1,12 @@
 from ktool.dyld import SymbolType, Dyld
-from ktool.macho import Slice, CPUType
+from ktool.macho import Slice
 from ktool.objc import ObjCLibrary
 import os
 from collections import namedtuple
 
 
 class TBDGenerator:
-    def __init__(self, library, general=True, objclib=None):
+    def __init__(self, library, general=True, objc_lib=None):
         """
         The TBD Generator is a generator that creates TAPI formatted text based stubs for libraries.
 
@@ -18,11 +18,11 @@ class TBDGenerator:
         :param library: Library being processed
         :type library: Library
         :param general: Should the generator create a .tbd for usage in SDKs?
-        :type general: boolp
-        :param objclib: Pass an objc library to the genrator. If none is passed it will generate its own
+        :type general: bool
+        :param objc_lib: Pass an objc library to the generator. If none is passed it will generate its own
         """
         self.library = library
-        self.objclib = objclib
+        self.objc_lib = objc_lib
         self.general = general
         self.dict = self._generate_dict()
 
@@ -40,28 +40,27 @@ class TBDGenerator:
             tbd['current-version'] = 1
             tbd['compatibility-version'] = 1
 
-            exports = []
             export_dict = {'archs': ['armv7', 'armv7s', 'arm64', 'arm64e']}
 
             if len(self.library.allowed_clients) > 0:
                 export_dict['allowed-clients'] = self.library.allowed_clients
 
-            syms = []
+            symbols = []
             classes = []
             ivars = []
 
             for item in self.library.symbol_table.ext:
                 if item.type == SymbolType.FUNC:
-                    syms.append(item.name)
-            if self.objclib:
-                objc_library = self.objclib
+                    symbols.append(item.name)
+            if self.objc_lib:
+                objc_library = self.objc_lib
             else:
                 objc_library = ObjCLibrary(self.library)
             for objc_class in objc_library.classlist:
                 classes.append('_' + objc_class.name)
                 for ivar in objc_class.ivars:
                     ivars.append('_' + objc_class.name + '.' + ivar.name)
-            export_dict['symbols'] = syms
+            export_dict['symbols'] = symbols
             export_dict['objc-classes'] = classes
             export_dict['objc-ivars'] = ivars
 
@@ -81,25 +80,34 @@ class FatMachOGenerator:
         self.fat_archs = []
         pfa = None
         for fat_slice in slices:
-            fat_arch = self._fat_arch_for_slice(fat_slice, pfa)
-            pfa = fat_arch
-            self.fat_archs.append(fat_arch)
+            fat_arch_item = self._fat_arch_for_slice(fat_slice, pfa)
+            pfa = fat_arch_item
+            self.fat_archs.append(fat_arch_item)
 
         fat_head = bytearray()
         fat_head.extend(b'\xCA\xFE\xBA\xBE')
 
         fat_head.extend(len(self.fat_archs).to_bytes(0x4, 'big'))
 
-        for fat_arch in self.fat_archs:
-            fat_head.extend(fat_arch.cputype.to_bytes(0x4, 'big'))
-            fat_head.extend(fat_arch.cpusubtype.to_bytes(0x4, 'big'))
-            fat_head.extend(fat_arch.offset.to_bytes(0x4, 'big'))
-            fat_head.extend(fat_arch.size.to_bytes(0x4, 'big'))
-            fat_head.extend(fat_arch.align.to_bytes(0x4, 'big'))
+        for fat_arch_item in self.fat_archs:
+            fat_head.extend(fat_arch_item.cputype.to_bytes(0x4, 'big'))
+            fat_head.extend(fat_arch_item.cpusubtype.to_bytes(0x4, 'big'))
+            fat_head.extend(fat_arch_item.offset.to_bytes(0x4, 'big'))
+            fat_head.extend(fat_arch_item.size.to_bytes(0x4, 'big'))
+            fat_head.extend(fat_arch_item.align.to_bytes(0x4, 'big'))
 
         self.fat_head = fat_head
 
-    def _fat_arch_for_slice(self, fat_slice: Slice, previous_fat_arch):
+    @staticmethod
+    def _fat_arch_for_slice(fat_slice: Slice, previous_fat_arch):
+        """
+        :param fat_slice: Fat slice
+        :type fat_slice: Slice
+        :param previous_fat_arch: Previous item returned by this func, or None if first.
+        :type previous_fat_arch: fat_arch_for_slice
+        :return: fat_arch_for_slice item.
+        :rtype: fat_arch_for_slice
+        """
         lib = Dyld.load(fat_slice)
         cputype = lib.macho_header.dyld_header.cpu
         cpu_subtype = lib.macho_header.dyld_header.cput
