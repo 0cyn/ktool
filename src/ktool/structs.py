@@ -271,6 +271,7 @@ LOAD_COMMAND_TYPEMAP = {
     0x26: linkedit_data_command_t,
     0x29: linkedit_data_command_t,
     0x32: build_version_command_t,
+    0x80000018: dylib_command_t,
     0x80000022: dyld_info_command_t,
     0x80000028: entry_point_command_t,
     0x8000001C: rpath_command_t,

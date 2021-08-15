@@ -1,8 +1,5 @@
-structs
+Structs
 ---------------------
-
-ktool uses non-standard conventions for struct loading. They've been chosen for clarity and reduced overhead.
-
 
 ..
    I wrote a generator to make creating these struct field definition tables easier

@@ -1,3 +1,4 @@
+import logging
 import sys
 import unittest
 import os.path
@@ -15,6 +16,7 @@ from ktool.macho import MachOFile
 from ktool.objc import ObjCLibrary
 from ktool.util import TapiYAMLWriter
 
+logging.root.setLevel(logging.DEBUG)
 
 class SymTabTestCase(unittest.TestCase):
     def test_bin(self):

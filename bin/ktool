@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import logging
 import os
 import pprint
 
@@ -17,6 +18,9 @@ class KToolError(Enum):
     ArgumentError = 1
 
 
+DEBUG_LEVELS = [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG]
+
+
 def exit_with_error(error: KToolError, msg):
     print(f'Encountered an Error ({error.name})')
     print(f'{msg}')
@@ -24,9 +28,11 @@ def exit_with_error(error: KToolError, msg):
 
 
 def main():
+
     parser = argparse.ArgumentParser(description="ktool")
     parser.add_argument('--bench', dest='bench', action='store_true')
-    parser.set_defaults(func=help_prompt, bench=False)
+    parser.add_argument('-v', dest='logging_level', type=int)
+    parser.set_defaults(func=help_prompt, bench=False, logging_level=0)
     subparsers = parser.add_subparsers(help='sub-command help')
 
     parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
@@ -67,6 +73,8 @@ def main():
     parser_list.set_defaults(func=list, get_syms=False, get_classes=False, get_protos=False, get_linked=False)
 
     args = parser.parse_args()
+
+    logging.root.setLevel(DEBUG_LEVELS[args.logging_level])
 
     if args.bench:
         import cProfile
@@ -208,7 +216,7 @@ def info(args):
                 print(
                     f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
             except:
-                print(f'{int(sym.ordinal)} symbol ordinal broken')
+                pass # print(f'{int(sym.ordinal)} symbol ordinal broken')
 
     if not filt:
         print(f'Name: {library.name}')

@@ -1,3 +1,4 @@
+import logging
 from collections import namedtuple
 from enum import IntEnum, Enum
 
@@ -27,7 +28,10 @@ class Dyld:
         :return: Processed Library object
         :rtype: Library
         """
+        logging.info("Loading Library")
         library = Library(macho_slice)
+
+        logging.info("Processing Load Commands")
         Dyld._parse_load_commands(library)
         return library
 
@@ -35,15 +39,22 @@ class Dyld:
     def _parse_load_commands(library):
         for cmd in library.macho_header.load_commands:
             if isinstance(cmd, segment_command_64):
+                logging.debug("Loading segment_command_64")
                 segment = Segment(library, cmd)
+
+                logging.debug(f'Loaded Segment {segment.name}')
                 library.vm.add_segment(segment)
                 library.segments[segment.name] = segment
 
+                logging.debug(f'Added {segment.name} to VM Map')
+
             if isinstance(cmd, dyld_info_command):
                 library.info = cmd
+                logging.info("Loading Binding Info")
                 library.binding_table = BindingTable(library)
 
             if isinstance(cmd, symtab_command):
+                logging.info("Loading Symbol Table")
                 library.symbol_table = SymbolTable(library, cmd)
 
             if isinstance(cmd, uuid_command):
@@ -52,8 +63,7 @@ class Dyld:
             if isinstance(cmd, sub_client_command):
                 string = library.get_cstr_at(cmd.off + cmd.offset)
                 library.allowed_clients.append(string)
-
-            # https://www.rubydoc.info/gems/ruby-macho/0.1.8/MachO/SourceVersionCommand
+                logging.debug(f'Loaded Subclient "{string}"')
 
             if isinstance(cmd, build_version_command):
                 library.platform = PlatformType(cmd.platform)
@@ -62,12 +72,16 @@ class Dyld:
                 library.sdk_version = os_version(x=library.get_bytes(cmd.off + 18, 2),
                                                  y=library.get_bytes(cmd.off + 17, 1),
                                                  z=library.get_bytes(cmd.off + 16, 1))
+                logging.debug(f'Loaded platform {library.platform.name} | Minimum OS {library.minos.x}.{library.minos.y}.{library.minos.z} | SDK Version {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')
 
             if isinstance(cmd, dylib_command):
                 if cmd.cmd == 0xD:  # local
                     library.dylib = ExternalDylib(library, cmd)
+                    logging.debug(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
                 else:
-                    library.linked.append(ExternalDylib(library, cmd))
+                    external_dylib = ExternalDylib(library, cmd)
+                    library.linked.append(external_dylib)
+                    logging.debug(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
         if library.dylib is not None:
             library.name = library.dylib.install_name.split('/')[-1]
@@ -100,6 +114,7 @@ class Library:
         self.linked = []
         self.segments = {}
 
+        logging.debug("Initializing VM Map")
         self.vm = _VirtualMemoryMap(macho_slice)
 
         self.info = None
@@ -183,6 +198,52 @@ class Library:
         return self.slice.decode_uleb128(readHead)
 
 
+class LibraryHeader:
+    """
+    This class represents the Mach-O Header
+    It contains the basic header info along with all load commands within it.
+
+    It doesn't handle complex abstraction logic, it simply loads in the load commands as their raw structs
+    """
+
+    def __init__(self, macho_slice):
+        """
+
+        :param macho_slice: MachO Slice object being loaded
+        :type macho_slice: Slice
+        """
+        offset = 0
+        self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header_t)
+        self.load_commands = []
+        self._process_load_commands(macho_slice)
+
+    def _process_load_commands(self, macho_slice):
+        """
+        This function takes the raw slice and parses through its load commands
+
+        :param macho_slice: MachO Library Slice
+        :return:
+        """
+
+        # Start address of the load commands.
+        ea = self.dyld_header.off + 0x20
+
+        # Loop through the dyld_header by load command count
+        # possibly this could be modified to check for other load commands
+        #       as a rare obfuscation technique involves fucking with these to screw with RE tools.
+
+        for i in range(1, self.dyld_header.loadcnt):
+            cmd = macho_slice.get_at(ea, 4)
+            try:
+                load_cmd = macho_slice.load_struct(ea, LOAD_COMMAND_TYPEMAP[cmd])
+            except KeyError:
+                unk_lc = macho_slice.load_struct(ea, unk_command_t)
+                load_cmd = unk_lc
+
+            self.load_commands.append(load_cmd)
+            ea += load_cmd.cmdsize
+
+
 class ExternalDylib:
     def __init__(self, source_library, cmd):
         self.source_library = source_library
@@ -214,52 +275,6 @@ class ToolType(Enum):
     CLANG = 1
     SWIFT = 2
     LD = 3
-
-
-class LibraryHeader:
-    """
-    This class represents the Mach-O Header
-    It contains the basic header info along with all load commands within it.
-
-    It doesn't handle complex abstraction logic, it simply loads in the load commands as their raw structs
-    """
-
-    def __init__(self, macho_slice):
-        """
-
-        :param macho_slice: MachO Slice object being loaded
-        :type macho_slice: Slice
-        """
-        offset = 0
-        self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header_t)
-        self.load_commands = []
-        self._process_load_commands(macho_slice)
-
-    def _process_load_commands(self, macho_slice):
-        """
-        This function takes the raw slice and parses through its load commands
-
-        :param macho_slice: MachO Library Slice 
-        :return:
-        """
-
-        # Start address of the load commands.
-        ea = self.dyld_header.off + 0x20
-
-        # Loop through the dyld_header by load command count
-        # possibly this could be modified to check for other load commands
-        #       as a rare obfuscation technique involves fucking with these to screw with RE tools.
-
-        for i in range(1, self.dyld_header.loadcnt):
-            cmd = macho_slice.get_at(ea, 4)
-            try:
-                load_cmd = macho_slice.load_struct(ea, LOAD_COMMAND_TYPEMAP[cmd])
-            except KeyError:
-                unk_lc = macho_slice.load_struct(ea, unk_command_t)
-                load_cmd = unk_lc
-
-            self.load_commands.append(load_cmd)
-            ea += load_cmd.cmdsize
 
 
 class SymbolType(Enum):
@@ -342,6 +357,7 @@ class SymbolTable:
         table = []
         for sym in symbol_table:
             symbol = Symbol(self.library, self.cmd, sym)
+            logging.debug(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
             table.append(symbol)
             if sym.type == 0xf:
                 self.ext.append(symbol)
@@ -385,6 +401,7 @@ class BindingTable:
         for act in self.actions:
             if act.item:
                 sym = Symbol(self.library, fullname=act.item, ordinal=act.libname, addr=act.vmaddr)
+                logging.debug(f'Binding info: Loaded symbol:{act.item} ordinal:{act.libname} addr:{act.vmaddr}')
                 table.append(sym)
                 self.lookup_table[act.vmaddr] = sym
         return table
@@ -397,6 +414,7 @@ class BindingTable:
             try:
                 lib = self.library.linked[bind_command.lib_ordinal - 1].install_name
             except IndexError:
+                logging.debug(f'Binding Info: {bind_command.lib_ordinal} Ordinal wasn\'t found, Something is wrong')
                 lib = str(bind_command.lib_ordinal)
             item = bind_command.name
             actions.append(action(vm_address & 0xFFFFFFFFF, lib, item))
@@ -420,7 +438,7 @@ class BindingTable:
             flags = 0x0
             name = ""
             addend = 0x0
-            special_dylib = 0x1
+            special_dylib = 0x0
             while True:
                 # There are 0xc opcodes total
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
@@ -447,7 +465,9 @@ class BindingTable:
                 elif op == OPCODE.BIND_OPCODE_SET_TYPE_IMM:
                     btype = value
                 elif op == OPCODE.BIND_OPCODE_SET_ADDEND_SLEB:
-                    ea += 1
+                    o, bump = self.library.decode_uleb128(ea)
+                    addend = o
+                    ea = bump
                 elif op == OPCODE.BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB:
                     seg_index = value
                     number, head = self.library.decode_uleb128(ea)
@@ -488,7 +508,6 @@ class BindingTable:
                     assert 0 == 1
 
         return import_stack
-
 
 
 class OPCODE(IntEnum):
