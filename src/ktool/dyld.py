@@ -1,4 +1,4 @@
-import logging
+from .util import log
 from collections import namedtuple
 from enum import IntEnum, Enum
 
@@ -28,10 +28,10 @@ class Dyld:
         :return: Processed Library object
         :rtype: Library
         """
-        logging.info("Loading Library")
+        log.info("Loading Library")
         library = Library(macho_slice)
 
-        logging.info("Processing Load Commands")
+        log.info("Processing Load Commands")
         Dyld._parse_load_commands(library)
         return library
 
@@ -39,22 +39,22 @@ class Dyld:
     def _parse_load_commands(library):
         for cmd in library.macho_header.load_commands:
             if isinstance(cmd, segment_command_64):
-                logging.debug("Loading segment_command_64")
+                log.debug("Loading segment_command_64")
                 segment = Segment(library, cmd)
 
-                logging.debug(f'Loaded Segment {segment.name}')
+                log.debug(f'Loaded Segment {segment.name}')
                 library.vm.add_segment(segment)
                 library.segments[segment.name] = segment
 
-                logging.debug(f'Added {segment.name} to VM Map')
+                log.debug(f'Added {segment.name} to VM Map')
 
             if isinstance(cmd, dyld_info_command):
                 library.info = cmd
-                logging.info("Loading Binding Info")
+                log.info("Loading Binding Info")
                 library.binding_table = BindingTable(library)
 
             if isinstance(cmd, symtab_command):
-                logging.info("Loading Symbol Table")
+                log.info("Loading Symbol Table")
                 library.symbol_table = SymbolTable(library, cmd)
 
             if isinstance(cmd, uuid_command):
@@ -63,7 +63,7 @@ class Dyld:
             if isinstance(cmd, sub_client_command):
                 string = library.get_cstr_at(cmd.off + cmd.offset)
                 library.allowed_clients.append(string)
-                logging.debug(f'Loaded Subclient "{string}"')
+                log.debug(f'Loaded Subclient "{string}"')
 
             if isinstance(cmd, build_version_command):
                 library.platform = PlatformType(cmd.platform)
@@ -72,7 +72,7 @@ class Dyld:
                 library.sdk_version = os_version(x=library.get_bytes(cmd.off + 18, 2),
                                                  y=library.get_bytes(cmd.off + 17, 1),
                                                  z=library.get_bytes(cmd.off + 16, 1))
-                logging.debug(f'Loaded platform {library.platform.name} | '
+                log.debug(f'Loaded platform {library.platform.name} | '
                               f'Minimum OS {library.minos.x}.{library.minos.y}'
                               f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
                               f'.{library.sdk_version.y}.{library.sdk_version.z}')
@@ -80,11 +80,11 @@ class Dyld:
             if isinstance(cmd, dylib_command):
                 if cmd.cmd == 0xD:  # local
                     library.dylib = ExternalDylib(library, cmd)
-                    logging.debug(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
+                    log.debug(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
                 else:
                     external_dylib = ExternalDylib(library, cmd)
                     library.linked.append(external_dylib)
-                    logging.debug(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
+                    log.debug(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
         if library.dylib is not None:
             library.name = library.dylib.install_name.split('/')[-1]
@@ -117,7 +117,7 @@ class Library:
         self.linked = []
         self.segments = {}
 
-        logging.debug("Initializing VM Map")
+        log.debug("Initializing VM Map")
         self.vm = _VirtualMemoryMap(macho_slice)
 
         self.info = None
@@ -360,7 +360,7 @@ class SymbolTable:
         table = []
         for sym in symbol_table:
             symbol = Symbol(self.library, self.cmd, sym)
-            # logging.debug(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
+            # log.debug(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
             table.append(symbol)
             if sym.type == 0xf:
                 self.ext.append(symbol)
@@ -406,7 +406,7 @@ class BindingTable:
         for act in self.actions:
             if act.item:
                 sym = Symbol(self.library, fullname=act.item, ordinal=act.libname, addr=act.vmaddr)
-                # logging.debug(f'Binding info: Loaded symbol:{act.item} ordinal:{act.libname} addr:{act.vmaddr}')
+                # log.debug(f'Binding info: Loaded symbol:{act.item} ordinal:{act.libname} addr:{act.vmaddr}')
                 table.append(sym)
                 self.lookup_table[act.vmaddr] = sym
         return table
@@ -419,7 +419,7 @@ class BindingTable:
             try:
                 lib = self.library.linked[bind_command.lib_ordinal - 1].install_name
             except IndexError:
-                # logging.debug(f'Binding Info: {bind_command.lib_ordinal} Ordinal wasn't found, Something is wrong')
+                # log.debug(f'Binding Info: {bind_command.lib_ordinal} Ordinal wasn't found, Something is wrong')
                 lib = str(bind_command.lib_ordinal)
             item = bind_command.name
             actions.append(action(vm_address & 0xFFFFFFFFF, lib, item))

@@ -14,9 +14,9 @@ from ktool.generator import TBDGenerator
 from ktool.headers import HeaderGenerator
 from ktool.macho import MachOFile
 from ktool.objc import ObjCLibrary
-from ktool.util import TapiYAMLWriter
+from ktool.util import TapiYAMLWriter, log, LogLevel
 
-logging.root.setLevel(logging.DEBUG)
+log.LOG_LEVEL = LogLevel.DEBUG
 
 class SymTabTestCase(unittest.TestCase):
     def test_bin(self):

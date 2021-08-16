@@ -1,4 +1,4 @@
-import logging
+from .util import log
 from enum import Enum
 
 from ktool.structs import *
@@ -98,7 +98,7 @@ class ObjCLibrary:
             try:
                 protos.append(Protocol(self, proto, loc))
             except Exception as ex:
-                logging.error("Failed to load a protocol with " + str(ex))
+                log.error("Failed to load a protocol with " + str(ex))
 
         return protos
 
@@ -299,7 +299,7 @@ class TypeProcessor:
                 try:
                     tokens = [type_to_tokenize.split('@', 1)[1]]
                 except Exception as ex:
-                    logging.warning(f'Failed to process type {type_to_tokenize} with {ex}')
+                    log.warning(f'Failed to process type {type_to_tokenize} with {ex}')
                     return []
                 break
         return tokens
@@ -553,9 +553,7 @@ class Class:
                     if property.attr.type.type == EncodedType.STRUCT:
                         self.struct_list.append(property.attr.type.value)
             except Exception as ex:
-                # continue
-                logging.warning(f'Failed to load property with {str(ex)}')
-                pass
+                log.warning(f'Failed to load property with {str(ex)}')
             ea += sizeof(objc2_prop_t)
             vm_ea += sizeof(objc2_prop_t)
 
@@ -571,9 +569,9 @@ class Class:
             prot_loc = self.library.get_bytes(ea + i * 8, 8, vm=False)
             prot = self.library.load_struct(prot_loc, objc2_prot_t, vm=True)
             try:
-                prots.append(Protocol(self.library, self, prot, prot_loc))
+                prots.append(Protocol(self.library, prot, prot_loc))
             except Exception as ex:
-                continue
+                log.warning(f'Failed to load protocol with {str(ex)}')
         return prots
 
     def _process_ivars(self):
@@ -589,7 +587,7 @@ class Class:
                 ivar_object = Ivar(self.library, self, ivar, ivar_loc)
                 ivars.append(ivar_object)
             except Exception as ex:
-                continue
+                log.warning(f'Failed to load ivar with {str(ex)}')
         return ivars
 
 
@@ -724,7 +722,7 @@ class Category:
             try:
                 methods.append(Method(self.library, meta, meth, vm_ea))
             except Exception as ex:
-                pass
+                log.warning(f'Failed to load method with {str(ex)}')
             if uses_relative_methods:
                 ea += sizeof(objc2_meth_list_entry_t)
                 vm_ea += sizeof(objc2_meth_list_entry_t)
@@ -751,9 +749,8 @@ class Category:
             prop = self.library.load_struct(ea, objc2_prop_t, vm=False)
             try:
                 properties.append(Property(self.library, prop, vm_ea))
-            except ValueError as ex:
-                # continue
-                pass
+            except Exception as ex:
+                log.warning(f'Failed to load property with {str(ex)}')
             ea += sizeof(objc2_prop_t)
             vm_ea += sizeof(objc2_prop_t)
 
@@ -804,7 +801,7 @@ class Protocol:
             try:
                 methods.append(Method(self.library, meta, meth, vm_ea))
             except Exception as ex:
-                pass
+                log.warning(f'Failed to load method with {str(ex)}')
             if uses_relative_methods:
                 ea += sizeof(objc2_meth_list_entry_t)
                 vm_ea += sizeof(objc2_meth_list_entry_t)
@@ -831,9 +828,8 @@ class Protocol:
             prop = self.library.load_struct(ea, objc2_prop_t, vm=False)
             try:
                 properties.append(Property(self.library, prop, vm_ea))
-            except ValueError as ex:
-                # continue
-                pass
+            except Exception as ex:
+                log.warning(f'Failed to load property with {str(ex)}')
             ea += sizeof(objc2_prop_t)
             vm_ea += sizeof(objc2_prop_t)
 

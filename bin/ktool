@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import logging
 import os
 import pprint
 
@@ -10,15 +9,12 @@ from ktool.generator import TBDGenerator, FatMachOGenerator
 from ktool.headers import HeaderGenerator
 from ktool.macho import MachOFileType, MachOFile
 from ktool.objc import ObjCLibrary
-from ktool.util import TapiYAMLWriter
+from ktool.util import TapiYAMLWriter, log, LogLevel
 from enum import Enum
 
 
 class KToolError(Enum):
     ArgumentError = 1
-
-
-DEBUG_LEVELS = [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG]
 
 
 def exit_with_error(error: KToolError, msg):
@@ -73,8 +69,7 @@ def main():
     parser_list.set_defaults(func=list, get_syms=False, get_classes=False, get_protos=False, get_linked=False)
 
     args = parser.parse_args()
-
-    logging.root.setLevel(DEBUG_LEVELS[args.logging_level])
+    log.LOG_LEVEL = LogLevel(args.logging_level)
 
     if args.bench:
         import cProfile
@@ -153,8 +148,6 @@ def lipo(args):
                     return
             exit_with_error(KToolError.ArgumentError,
                             f'Architecture {args.extract} wasn\'t found (found: {[slice.type.name.lower() for slice in macho_file.slices]})')
-
-
 
 
 def list(args):

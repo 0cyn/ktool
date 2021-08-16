@@ -1,3 +1,6 @@
+import inspect
+import os
+from enum import Enum
 
 
 class TapiYAMLWriter:
@@ -45,3 +48,50 @@ class TapiYAMLWriter:
             stack.append(item)
         text += ', '.join(stack) + " ]"
         return text
+
+
+class LogLevel(Enum):
+    ERROR = 0
+    WARN = 1
+    INFO = 2
+    DEBUG = 3
+
+
+class log:
+    """
+    Python's default logging library is absolute garbage
+
+    so we use this.
+    """
+    LOG_LEVEL = LogLevel.ERROR
+
+    @staticmethod
+    def line():
+        return 'ktool.' + os.path.basename(inspect.stack()[2][1]).split('.')[0] + ":" + str(inspect.stack()[2][2]) \
+               + ":" + inspect.stack()[2][3] + '()'
+
+    @staticmethod
+    def debug(msg: str):
+        if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
+            print(f'DEBUG - {log.line()} - {msg}')
+
+    @staticmethod
+    def info(msg: str):
+        if log.LOG_LEVEL.value >= LogLevel.INFO.value:
+            print(f'INFO - {log.line()} - {msg}')
+
+    @staticmethod
+    def warn(msg: str):
+        if log.LOG_LEVEL.value >= LogLevel.WARN.value:
+            print(f'WARN - {log.line()} - {msg}')
+
+    @staticmethod
+    def warning(msg: str):
+        if log.LOG_LEVEL.value >= LogLevel.WARN.value:
+            print(f'WARN - {log.line()} - {msg}')
+
+    @staticmethod
+    def error(msg: str):
+        if log.LOG_LEVEL.value >= LogLevel.ERROR.value:
+            print(f'ERROR - {log.line()} - {msg}')
+
