@@ -52,7 +52,8 @@ class FrameworksTestCase(unittest.TestCase):
 
     def test_coherence(self):
         with open(scriptdir + '/bins/Coherence.dyldex', 'rb') as fd:
-            ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
+            HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))
+
 
     def test_ktrace(self):
         with open(scriptdir + '/bins/ktrace.dyldex', 'rb') as fd:

@@ -175,6 +175,11 @@ class Struct:
 
     def __str__(self):
         ret = "typedef struct " + self.name + " {\n"
+
+        if not self.fields:
+            ret += "} // Error Processing Struct Fields"
+            return ret
+
         for i, field in enumerate(self.fields):
             field_name = f'field{str(i)}'
 
@@ -189,7 +194,7 @@ class Struct:
             ret += "    " + field + ' ' + field_name + ';\n'
         ret += '} ' + self.name + ';'
         if len(self.fields) == 0:
-            ret += " // Empty Struct"
+            ret += " // Error Processing Struct Fields"
         return ret
 
 
