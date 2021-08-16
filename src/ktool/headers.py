@@ -7,12 +7,15 @@ class HeaderUtils:
 
     @staticmethod
     def header_head(library):
-        prefix = "// Headers generated with ktool v" + HeaderUtils.KTOOL_VERSION + "\n"
-        prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
-        prefix += f'// Platform: {library.platform.name} | '
-        prefix += f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z} | '
-        prefix += f'SDK: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}\n\n'
-        return prefix
+        try:
+            prefix = "// Headers generated with ktool v" + HeaderUtils.KTOOL_VERSION + "\n"
+            prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
+            prefix += f'// Platform: {library.platform.name} | '
+            prefix += f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z} | '
+            prefix += f'SDK: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}\n\n'
+            return prefix
+        except AttributeError:
+            return ""
 
 
 class TypeResolver:
@@ -424,10 +427,11 @@ class ProtocolInterface:
         for prop in self.protocol.properties:
             pro = ""
             pro += str(prop) + ';'
-            if prop.ivarname != "":
-                pro += ' // ivar: ' + prop.ivarname + ''
-            else:
-                pro += ''
+            if hasattr(prop, 'ivarname'):
+                if prop.ivarname != "":
+                    pro += ' // ivar: ' + prop.ivarname + ''
+                else:
+                    pro += ''
             text.append(pro)
 
         text.append("")

@@ -70,7 +70,10 @@ class ObjCLibrary:
         cnt = sect.size // 0x8
         for i in range(0, cnt):
             if classlimit is None:
-                classes.append(Class(self, sect.vm_address + i * 0x8))
+                try:
+                    classes.append(Class(self, sect.vm_address + i * 0x8))
+                except Exception as ex:
+                    log.error(f'Failed to load a class! Ex: {str(ex)}')
             else:
                 oc = Class(self, sect.vm_address + i * 0x8)
                 if classlimit == oc.name:
@@ -632,6 +635,8 @@ class Property:
         self.ivarname = self.attr.ivar
 
     def __str__(self):
+        if not hasattr(self, 'attributes'):
+            return f'// Something went wrong loading struct {self.name}'
         ret = "@property "
 
         if len(self.attributes) > 0:
