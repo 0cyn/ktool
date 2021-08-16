@@ -475,13 +475,16 @@ class Class:
             # Linked Superclass
             struct_size = sizeof(objc2_class_t)
             struct_location = objc2_class_item.off
-            symbol = self.library.library.binding_table.lookup_table[objc2_class_location + 8]
+            try:
+                symbol = self.library.library.binding_table.lookup_table[objc2_class_location + 8]
+            except KeyError as ex:
+                self.superclass = "NSObject"
+                return objc2_class_item
             self.superclass = symbol.name[1:]
             try:
                 self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[
                     int(symbol.ordinal) - 1].install_name))
             except IndexError:
-                # sometimes load commands seem to do a fucky wucky
                 pass
         if objc2_class_item.isa != 0 and objc2_class_item.isa <= 0xFFFFFFFFFF and not self.meta:
             try:

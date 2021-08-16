@@ -58,6 +58,14 @@ class FrameworksTestCase(unittest.TestCase):
         with open(scriptdir + '/bins/SafariShared.dyldex', 'rb') as fd:
             HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))
 
+    def test_external_accesory(self):
+        with open(scriptdir + '/bins/ExternalAccessory.dyldex', 'rb') as fd:
+            HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))
+
+    def test_foundation(self):
+        with open(scriptdir + '/bins/Foundation', 'rb') as fd:
+            HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))
+
     def test_ktrace(self):
         with open(scriptdir + '/bins/ktrace.dyldex', 'rb') as fd:
             ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
