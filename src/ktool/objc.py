@@ -184,7 +184,10 @@ class Struct:
             field_name = f'field{str(i)}'
 
             if len(self.field_names) > 0:
-                field_name = self.field_names[i]
+                try:
+                    field_name = self.field_names[i]
+                except IndexError as ex:
+                    log.debug(f'Missing a field in struct {self.name}')
 
             if isinstance(field.value, Struct):
                 field = field.value.name

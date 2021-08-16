@@ -54,6 +54,9 @@ class FrameworksTestCase(unittest.TestCase):
         with open(scriptdir + '/bins/Coherence.dyldex', 'rb') as fd:
             HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))
 
+    def test_safari_shared(self):
+        with open(scriptdir + '/bins/SafariShared.dyldex', 'rb') as fd:
+            HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))
 
     def test_ktrace(self):
         with open(scriptdir + '/bins/ktrace.dyldex', 'rb') as fd:
