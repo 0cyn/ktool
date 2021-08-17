@@ -1,3 +1,4 @@
+from kmacho.macho import LOAD_COMMAND, MH_FILETYPE
 from .util import log
 from collections import namedtuple
 from enum import IntEnum, Enum
@@ -218,6 +219,7 @@ class LibraryHeader:
         """
         offset = 0
         self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header_t)
+        self.filetype = MH_FILETYPE(self.dyld_header.filetype)
         self.load_commands = []
         self._process_load_commands(macho_slice)
 
@@ -239,7 +241,7 @@ class LibraryHeader:
         for i in range(1, self.dyld_header.loadcnt):
             cmd = macho_slice.get_at(read_address, 4)
             try:
-                load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_TYPEMAP[cmd])
+                load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_TYPEMAP[LOAD_COMMAND(cmd)])
             except KeyError:
                 unk_lc = macho_slice.load_struct(read_address, unk_command_t)
                 load_cmd = unk_lc

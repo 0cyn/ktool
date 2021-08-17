@@ -213,6 +213,7 @@ def info(args):
 
     if not filt:
         print(f'Name: {library.name}')
+        print(f'Filetype: {library.macho_header.filetype.name}')
         print(f'UUID: {hex(library.uuid)}')
         print(f'Platform: {library.platform.name}')
         print(f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z}')

@@ -3,6 +3,7 @@ import os
 from collections import namedtuple
 from enum import Enum
 from typing import Tuple
+import readline0
 
 from ktool.structs import fat_header, fat_header_t, fat_arch_t, segment_command_64_t, section_64_t, sizeof, struct
 from ktool.util import log
@@ -317,32 +318,12 @@ class Slice:
         return self.macho_file.file[addr:addr + count].decode().rstrip('\x00')
 
     def get_cstr_at(self, addr: int, limit: int = 0):
+        # TODO: This still has issues sometimes
         addr = addr + self.offset
-        ret = ""
-        ea: int = addr
-        # TODO: Find a faster way to do this
-        try:
-            while True:
-                if limit != 0:
-                    if ea - addr >= limit:
-                        break
-                if ea - addr >= 0x20000:
-                    print(f'Endless String fallback; addr={addr}')
-                    print(ret)
-                    raise ValueError("Endless String Possibly Detected")
-                char = self.macho_file.file[ea:ea + 1].decode()
-                if char == '\x00':
-                    if len(ret) > 0:
-                        break
-                    else:
-                        ea += 1
-                else:
-                    ret = ret + char
-                    ea += 1
-        except UnicodeError:
-            raise UnicodeError(f'Bad string; addr={hex(addr)} limit={limit} ea={hex(ea)} ret={ret}')
-
-        return ret
+        self.macho_file.file.seek(addr)
+        text = self.macho_file.file[addr:self.macho_file.file.find(b"\x00")].decode()
+        self.macho_file.file.seek(0)
+        return text
 
     def decode_uleb128(self, readHead: int) -> Tuple[int, int]:
 
