@@ -25,8 +25,10 @@ class TypeResolver:
     def __init__(self, objc_library: ObjCLibrary):
         self.library = objc_library
         classes = []
+        self.classmap = {}
         for sym in objc_library.library.binding_table.symbol_table:
             if sym.type == SymbolType.CLASS:
+                self.classmap[sym.name[1:]] = sym
                 classes.append(sym)
         self.classes = classes
         self.local_classes = objc_library.classlist
@@ -35,15 +37,14 @@ class TypeResolver:
         for local in self.local_classes:
             if local.name == classname:
                 return ""
-        for oclass in self.classes:
-            if oclass.name[1:] == classname:
-                try:
-                    nam = self.library.library.linked[int(oclass.ordinal) - 1].install_name
-                    if '.dylib' in nam:
-                        return None
-                    return nam
-                except Exception as ex:
-                    pass
+        if classname in self.classmap:
+            try:
+                nam = self.library.library.linked[int(self.classmap[classname].ordinal) - 1].install_name
+                if '.dylib' in nam:
+                    return None
+                return nam
+            except Exception as ex:
+                pass
         return None
 
 
