@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 
-import argparse
 import os
 import pprint
+import argparse
 
-from ktool.dyld import Dyld
-from ktool.generator import TBDGenerator, FatMachOGenerator
-from ktool.headers import HeaderGenerator
-from ktool.macho import MachOFileType, MachOFile
-from ktool.objc import ObjCLibrary
-from ktool.util import TapiYAMLWriter, log, LogLevel
+from ktool import (
+    Dyld,
+    TBDGenerator,
+    FatMachOGenerator,
+    HeaderGenerator,
+    MachOFileType,
+    MachOFile,
+    ObjCLibrary,
+    TapiYAMLWriter,
+    log,
+    LogLevel
+)
+
 from enum import Enum
 
 
