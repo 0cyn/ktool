@@ -18,6 +18,8 @@ Static Mach-O binary metadata analysis tool / information dumper
     <br>
     <code>pip3 install k2l</code>
 </p>
+    
+Development is currently taking place on the [@python3.10 branch](https://github.com/KritantaDev/ktool/tree/python3.10). 
 
 ### Installation
 
