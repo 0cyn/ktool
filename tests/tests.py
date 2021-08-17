@@ -76,7 +76,7 @@ class FrameworksTestCase(unittest.TestCase):
 
     def test_pfui(self):
         with open(scriptdir + '/bins/PreferencesUI', 'rb') as fd:
-            ObjCLibrary(Dyld.load(MachOFile(fd).slices[0]))
+            print(Dyld.load(MachOFile(fd).slices[0]).macho_header.flags)
 
     def test_pfui2(self):
         with open(scriptdir + '/bins/PreferencesUI.dyldex', 'rb') as fd:

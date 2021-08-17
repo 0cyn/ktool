@@ -212,9 +212,10 @@ def info(args):
                 pass # print(f'{int(sym.ordinal)} symbol ordinal broken')
 
     if not filt:
-        print(f'Name: {library.name}')
+        print(f'Install Name: {library.name}')
         print(f'Filetype: {library.macho_header.filetype.name}')
-        print(f'UUID: {hex(library.uuid)}')
+        print(f'Flags: {", ".join([i.name for i in library.macho_header.flags])}')
+        print(f'UUID: {library.uuid.hex().upper()}')
         print(f'Platform: {library.platform.name}')
         print(f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z}')
         print(f'SDK Version: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')

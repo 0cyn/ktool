@@ -1,4 +1,4 @@
-from kmacho.macho import LOAD_COMMAND, MH_FILETYPE
+from kmacho.macho import LOAD_COMMAND, MH_FILETYPE, MH_FLAGS
 from .util import log
 from collections import namedtuple
 from enum import IntEnum, Enum
@@ -60,7 +60,7 @@ class Dyld:
                     library.symbol_table = SymbolTable(library, cmd)
 
                 case uuid_command():
-                    library.uuid = cmd.uuid
+                    library.uuid = cmd.uuid.to_bytes(16, "little")
 
                 case sub_client_command():
                     string = library.get_cstr_at(cmd.off + cmd.offset)
@@ -220,6 +220,10 @@ class LibraryHeader:
         offset = 0
         self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header_t)
         self.filetype = MH_FILETYPE(self.dyld_header.filetype)
+        self.flags = []
+        for flag in MH_FLAGS:
+            if self.dyld_header.flags & flag.value:
+                self.flags.append(flag)
         self.load_commands = []
         self._process_load_commands(macho_slice)
 

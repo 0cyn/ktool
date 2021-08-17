@@ -3,7 +3,7 @@ from ktool.objc import ObjCLibrary
 
 
 class HeaderUtils:
-    KTOOL_VERSION = "0.7.3"
+    KTOOL_VERSION = "0.8.0"
 
     @staticmethod
     def header_head(library):
