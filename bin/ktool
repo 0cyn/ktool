@@ -47,9 +47,8 @@ def main():
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO Library")
     parser_info.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
-    parser_info.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Actions")
     parser_info.add_argument('filename')
-    parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, get_binding=False, slice_index=0)
+    parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, slice_index=0)
 
     parser_dump = subparsers.add_parser('dump', help='Dump items (headers) from binary')
     parser_dump.add_argument('--slice', dest='slice_index', type=int,
@@ -65,8 +64,9 @@ def main():
     parser_list.add_argument('--classes', dest='get_classes', action='store_true', help='Print class list')
     parser_list.add_argument('--protocols', dest='get_protos', action='store_true', help='Print Protocol list')
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
+    parser_list.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Actions")
     parser_list.add_argument('filename')
-    parser_list.set_defaults(func=list, get_syms=False, get_classes=False, get_protos=False, get_linked=False)
+    parser_list.set_defaults(func=list, get_syms=False, get_classes=False, get_protos=False, get_linked=False, get_binding=False)
 
     args = parser.parse_args()
     log.LOG_LEVEL = LogLevel(args.logging_level)
@@ -102,14 +102,14 @@ ktool list:
 ktool list --symbols [filename] - Print the symbol table for the file
 ktool list --classes [filename] - Print the list of classes
 ktool list --protocols [filename] - Print the list of protocols
-ktool list --linked [filename] - Print a list of linked libraries
+ktool list --linked [filename] - Print a list of linked libraries 
+ktool list [--slice n] --binding [filename] - Print binding actions for a file
 
 ktool info:
 usage: ktool info [-h] [--slice SLICE_INDEX] [--vm] [--cmds] [--binding] filename
 ktool info [--slice n] [filename] - Print generic info about a MachO File
 ktool info [--slice n] --vm [filename] - Print VM -> Slice -> File address mapping for a slice of a MachO File
-ktool info [--slice n] --cmds [filename] - Print list of load commands for a file 
-ktool info [--slice n] --binding [filename] - Print binding actions for a file"""
+ktool info [--slice n] --cmds [filename] - Print list of load commands for a file"""
     print(string)
 
 
@@ -158,6 +158,15 @@ def list(args):
         if args.get_syms:
             for sym in library.symbol_table.table:
                 print(f'Address: {sym.addr} | Name: {sym.fullname}')
+        if args.get_binding:
+            filt = True
+            print('\nBinding Info Actions '.ljust(60, '-') + '\n')
+            for sym in library.binding_table.symbol_table:
+                try:
+                    print(
+                        f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                except:
+                    pass
         if args.get_classes:
             objc_lib = ObjCLibrary(library)
             for obj_class in objc_lib.classlist:
@@ -192,7 +201,7 @@ def file(args):
 def info(args):
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
-    library = Dyld.load(machofile.slices[args.slice_index])
+    library = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_binding=False)
     filt = False
     if args.get_vm:
         print(library.vm)
@@ -200,17 +209,6 @@ def info(args):
     if args.get_lcs:
         pprint.pprint(library.macho_header.load_commands)
         filt = True
-    if args.get_binding:
-        filt = True
-        print('\nBinding Info Actions '.ljust(60, '-') + '\n')
-        # print(library.linked)
-        for sym in library.binding_table.symbol_table:
-            try:
-                print(
-                    f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
-            except:
-                pass # print(f'{int(sym.ordinal)} symbol ordinal broken')
-
     if not filt:
         print(f'Install Name: {library.name}')
         print(f'Filetype: {library.macho_header.filetype.name}')

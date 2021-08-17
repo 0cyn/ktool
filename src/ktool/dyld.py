@@ -20,7 +20,7 @@ class Dyld:
     """
 
     @staticmethod
-    def load(macho_slice):
+    def load(macho_slice, load_symtab=True, load_binding=True):
         """
         Take a slice of a macho file and process it using the dyld functions
 
@@ -33,11 +33,11 @@ class Dyld:
         library = Library(macho_slice)
 
         log.info("Processing Load Commands")
-        Dyld._parse_load_commands(library)
+        Dyld._parse_load_commands(library, load_symtab, load_binding)
         return library
 
     @staticmethod
-    def _parse_load_commands(library):
+    def _parse_load_commands(library, load_symtab=True, load_binding=True):
         for cmd in library.macho_header.load_commands:
             match cmd:
                 case segment_command_64():
@@ -52,12 +52,14 @@ class Dyld:
 
                 case dyld_info_command():
                     library.info = cmd
-                    log.info("Loading Binding Info")
-                    library.binding_table = BindingTable(library)
+                    if load_binding:
+                        log.info("Loading Binding Info")
+                        library.binding_table = BindingTable(library)
 
                 case symtab_command():
-                    log.info("Loading Symbol Table")
-                    library.symbol_table = SymbolTable(library, cmd)
+                    if load_symtab:
+                        log.info("Loading Symbol Table")
+                        library.symbol_table = SymbolTable(library, cmd)
 
                 case uuid_command():
                     library.uuid = cmd.uuid.to_bytes(16, "little")
