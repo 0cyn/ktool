@@ -15,7 +15,10 @@ class HeaderUtils:
             prefix += f'SDK: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}\n\n'
             return prefix
         except AttributeError:
-            return ""
+            prefix = "// Headers generated with ktool v" + HeaderUtils.KTOOL_VERSION + "\n"
+            prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
+            prefix += "// Issue loading library metadata\n\n"
+            return prefix
 
 
 class TypeResolver:

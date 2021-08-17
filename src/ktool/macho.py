@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Tuple
 
 from ktool.structs import fat_header, fat_header_t, fat_arch_t, segment_command_64_t, section_64_t, sizeof, struct
+from ktool.util import log
 
 
 class MachOFileType(Enum):
@@ -376,24 +377,27 @@ class Slice:
             elif cpu_type & 0xF == 0xC:
                 return CPUType.ARM
 
-        raise ValueError(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct})')
+        log.error(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct}). File an issue at https://github.com/kritantadev/ktool')
+        return CPUType.ARM
 
     def _load_subtype(self):
         cpu_subtype = self.arch_struct.cpusubtype
 
-        if cpu_subtype == 3:
-            return CPUSubType.X86_64_ALL
-        elif cpu_subtype == 8:
-            return CPUSubType.X86_64_H
-        elif cpu_subtype == 9:
-            return CPUSubType.ARMV7
-        elif cpu_subtype == 11:
-            return CPUSubType.ARMV7S
-        elif cpu_subtype == 0:
-            return CPUSubType.ARM64_ALL
-        elif cpu_subtype == 1:
-            return CPUSubType.ARM64_V8
-        elif cpu_subtype == 2:
-            return CPUSubType.ARM64_V8
-
-        raise ValueError(f'Unknown CPU SubType ({hex(cpu_subtype)})')
+        match cpu_subtype:
+            case 0:
+                return CPUSubType.ARM64_ALL
+            case 1:
+                return CPUSubType.ARM64_V8
+            case 2:
+                return CPUSubType.ARM64_v8
+            case 3:
+                return CPUSubType.X86_64_ALL
+            case 8:
+                return CPUSubType.X86_64_H
+            case 9:
+                return CPUSubType.ARMV7
+            case 11:
+                return CPUSubType.ARMV7S
+            case _:
+                log.error(f'Unknown CPU SubType ({hex(cpu_subtype)}). File an issue at https://github.com/kritantadev/ktool')
+                return CPUSubType.ARM64_ALL

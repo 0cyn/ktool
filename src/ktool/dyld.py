@@ -38,53 +38,54 @@ class Dyld:
     @staticmethod
     def _parse_load_commands(library):
         for cmd in library.macho_header.load_commands:
-            if isinstance(cmd, segment_command_64):
-                log.debug("Loading segment_command_64")
-                segment = Segment(library, cmd)
+            match cmd:
+                case segment_command_64():
+                    log.debug("Loading segment_command_64")
+                    segment = Segment(library, cmd)
 
-                log.debug(f'Loaded Segment {segment.name}')
-                library.vm.add_segment(segment)
-                library.segments[segment.name] = segment
+                    log.debug(f'Loaded Segment {segment.name}')
+                    library.vm.add_segment(segment)
+                    library.segments[segment.name] = segment
 
-                log.debug(f'Added {segment.name} to VM Map')
+                    log.debug(f'Added {segment.name} to VM Map')
 
-            if isinstance(cmd, dyld_info_command):
-                library.info = cmd
-                log.info("Loading Binding Info")
-                library.binding_table = BindingTable(library)
+                case dyld_info_command():
+                    library.info = cmd
+                    log.info("Loading Binding Info")
+                    library.binding_table = BindingTable(library)
 
-            if isinstance(cmd, symtab_command):
-                log.info("Loading Symbol Table")
-                library.symbol_table = SymbolTable(library, cmd)
+                case symtab_command():
+                    log.info("Loading Symbol Table")
+                    library.symbol_table = SymbolTable(library, cmd)
 
-            if isinstance(cmd, uuid_command):
-                library.uuid = cmd.uuid
+                case uuid_command():
+                    library.uuid = cmd.uuid
 
-            if isinstance(cmd, sub_client_command):
-                string = library.get_cstr_at(cmd.off + cmd.offset)
-                library.allowed_clients.append(string)
-                log.debug(f'Loaded Subclient "{string}"')
+                case sub_client_command():
+                    string = library.get_cstr_at(cmd.off + cmd.offset)
+                    library.allowed_clients.append(string)
+                    log.debug(f'Loaded Subclient "{string}"')
 
-            if isinstance(cmd, build_version_command):
-                library.platform = PlatformType(cmd.platform)
-                library.minos = os_version(x=library.get_bytes(cmd.off + 14, 2), y=library.get_bytes(cmd.off + 13, 1),
-                                           z=library.get_bytes(cmd.off + 12, 1))
-                library.sdk_version = os_version(x=library.get_bytes(cmd.off + 18, 2),
-                                                 y=library.get_bytes(cmd.off + 17, 1),
-                                                 z=library.get_bytes(cmd.off + 16, 1))
-                log.debug(f'Loaded platform {library.platform.name} | '
-                              f'Minimum OS {library.minos.x}.{library.minos.y}'
-                              f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
-                              f'.{library.sdk_version.y}.{library.sdk_version.z}')
+                case build_version_command():
+                    library.platform = PlatformType(cmd.platform)
+                    library.minos = os_version(x=library.get_bytes(cmd.off + 14, 2), y=library.get_bytes(cmd.off + 13, 1),
+                                               z=library.get_bytes(cmd.off + 12, 1))
+                    library.sdk_version = os_version(x=library.get_bytes(cmd.off + 18, 2),
+                                                     y=library.get_bytes(cmd.off + 17, 1),
+                                                     z=library.get_bytes(cmd.off + 16, 1))
+                    log.debug(f'Loaded platform {library.platform.name} | '
+                                  f'Minimum OS {library.minos.x}.{library.minos.y}'
+                                  f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
+                                  f'.{library.sdk_version.y}.{library.sdk_version.z}')
 
-            if isinstance(cmd, dylib_command):
-                if cmd.cmd == 0xD:  # local
-                    library.dylib = ExternalDylib(library, cmd)
-                    log.debug(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
-                else:
-                    external_dylib = ExternalDylib(library, cmd)
-                    library.linked.append(external_dylib)
-                    log.debug(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
+                case dylib_command():
+                    if cmd.cmd == 0xD:  # local
+                        library.dylib = ExternalDylib(library, cmd)
+                        log.debug(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
+                    else:
+                        external_dylib = ExternalDylib(library, cmd)
+                        library.linked.append(external_dylib)
+                        log.debug(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
         if library.dylib is not None:
             library.name = library.dylib.install_name.split('/')[-1]
@@ -446,66 +447,67 @@ class BindingTable:
                 binding_opcode = self.library.get_bytes(read_address, 1) & 0xF0
                 value = self.library.get_bytes(read_address, 1) & 0x0F
                 read_address += 1
-                if binding_opcode == BINDING_OPCODE.DONE:
-                    import_stack.append(
-                        record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
-                    break
-                elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_IMM:
-                    lib_ordinal = value
 
-                elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_ULEB:
-                    lib_ordinal, read_address = self.library.decode_uleb128(read_address)
-
-                elif binding_opcode == BINDING_OPCODE.SET_DYLIB_SPECIAL_IMM:
-                    special_dylib = 0x1
-                    lib_ordinal = value
-
-                elif binding_opcode == BINDING_OPCODE.SET_SYMBOL_TRAILING_FLAGS_IMM:
-                    flags = value
-                    name = self.library.get_cstr_at(read_address)
-                    read_address += len(name) + 1
-
-                elif binding_opcode == BINDING_OPCODE.SET_TYPE_IMM:
-                    btype = value
-
-                elif binding_opcode == BINDING_OPCODE.SET_ADDEND_SLEB:
-                    addend, read_address = self.library.decode_uleb128(read_address)
-
-                elif binding_opcode == BINDING_OPCODE.SET_SEGMENT_AND_OFFSET_ULEB:
-                    seg_index = value
-                    seg_offset, read_address = self.library.decode_uleb128(read_address)
-
-                elif binding_opcode == BINDING_OPCODE.ADD_ADDR_ULEB:
-                    o, read_address = self.library.decode_uleb128(read_address)
-                    seg_offset += o
-
-                elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_ULEB:
-                    import_stack.append(
-                        record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
-                    seg_offset += 8
-                    o, read_address = self.library.decode_uleb128(read_address)
-                    seg_offset += o
-
-                elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_IMM_SCALED:
-                    import_stack.append(
-                        record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
-                    seg_offset = seg_offset + (value * 8) + 8
-
-                elif binding_opcode == BINDING_OPCODE.DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
-                    count, read_address = self.library.decode_uleb128(read_address)
-                    skip, read_address = self.library.decode_uleb128(read_address)
-
-                    for i in range(0, count):
+                match binding_opcode:
+                    case BINDING_OPCODE.DONE:
                         import_stack.append(
                             record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
-                        seg_offset += skip + 8
+                        break
 
-                elif binding_opcode == BINDING_OPCODE.DO_BIND:
-                    import_stack.append(
-                        record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
-                    seg_offset += 8
-                else:
-                    assert 0 == 1
+                    case BINDING_OPCODE.SET_DYLIB_ORDINAL_IMM:
+                        lib_ordinal = value
+
+                    case BINDING_OPCODE.SET_DYLIB_ORDINAL_ULEB:
+                        lib_ordinal, read_address = self.library.decode_uleb128(read_address)
+
+                    case BINDING_OPCODE.SET_DYLIB_SPECIAL_IMM:
+                        special_dylib = 0x1
+                        lib_ordinal = value
+
+                    case BINDING_OPCODE.SET_SYMBOL_TRAILING_FLAGS_IMM:
+                        flags = value
+                        name = self.library.get_cstr_at(read_address)
+                        read_address += len(name) + 1
+
+                    case BINDING_OPCODE.SET_TYPE_IMM:
+                        btype = value
+
+                    case BINDING_OPCODE.SET_ADDEND_SLEB:
+                        addend, read_address = self.library.decode_uleb128(read_address)
+
+                    case BINDING_OPCODE.SET_SEGMENT_AND_OFFSET_ULEB:
+                        seg_index = value
+                        seg_offset, read_address = self.library.decode_uleb128(read_address)
+
+                    case BINDING_OPCODE.ADD_ADDR_ULEB:
+                        o, read_address = self.library.decode_uleb128(read_address)
+                        seg_offset += o
+
+                    case BINDING_OPCODE.DO_BIND_ADD_ADDR_ULEB:
+                        import_stack.append(
+                            record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        seg_offset += 8
+                        o, read_address = self.library.decode_uleb128(read_address)
+                        seg_offset += o
+
+                    case BINDING_OPCODE.DO_BIND_ADD_ADDR_IMM_SCALED:
+                        import_stack.append(
+                            record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        seg_offset = seg_offset + (value * 8) + 8
+
+                    case BINDING_OPCODE.DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
+                        count, read_address = self.library.decode_uleb128(read_address)
+                        skip, read_address = self.library.decode_uleb128(read_address)
+
+                        for i in range(0, count):
+                            import_stack.append(
+                                record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                            seg_offset += skip + 8
+
+                    case BINDING_OPCODE.DO_BIND:
+                        import_stack.append(
+                            record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        seg_offset += 8
 
         return import_stack
 

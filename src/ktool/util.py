@@ -94,4 +94,3 @@ class log:
     def error(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.ERROR.value:
             print(f'ERROR - {log.line()} - {msg}')
-
