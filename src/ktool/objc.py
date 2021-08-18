@@ -1,7 +1,7 @@
-from ktool import log
+from .util import log
 from enum import Enum
 
-from ktool.structs import *
+from .structs import *
 
 type_encodings = {
     "c": "char",

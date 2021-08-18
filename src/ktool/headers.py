@@ -1,4 +1,5 @@
-from ktool import SymbolType, ObjCLibrary
+from .dyld import SymbolType
+from .objc import ObjCLibrary
 
 
 class HeaderUtils:

@@ -5,16 +5,17 @@ from enum import Enum
 from typing import Tuple
 from collections import namedtuple
 
-from ktool import (
+from .structs import (
     fat_header,
     fat_header_t,
     fat_arch_t,
     segment_command_64_t,
     section_64_t,
     sizeof,
-    struct,
-    log
+    struct
 )
+
+from .util import log
 
 
 class MachOFileType(Enum):
