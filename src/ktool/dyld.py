@@ -1,13 +1,13 @@
 from kmacho.macho import LOAD_COMMAND, MH_FILETYPE, MH_FLAGS
-from .util import log
+from ktool import log
 from collections import namedtuple
 from enum import IntEnum, Enum
 
-from ktool.structs import symtab_entry_t, dyld_header, dyld_header_t, unk_command_t, dylib_command, dylib_command_t, \
+from ktool import symtab_entry_t, dyld_header, dyld_header_t, unk_command_t, dylib_command, dylib_command_t, \
     dyld_info_command, symtab_command, uuid_command, build_version_command, segment_command_64, LOAD_COMMAND_TYPEMAP, \
     sizeof, struct, sub_client_command
 
-from ktool.macho import _VirtualMemoryMap, Segment
+from ktool import _VirtualMemoryMap, Segment
 
 
 class Dyld:
