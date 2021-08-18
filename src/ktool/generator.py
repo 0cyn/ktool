@@ -1,7 +1,10 @@
-from ktool.dyld import SymbolType, Dyld
-from ktool.macho import Slice
-from ktool.objc import ObjCLibrary
 import os
+from ktool import (
+    Dyld,
+    Slice,
+    SymbolType,
+    ObjCLibrary
+)
 from collections import namedtuple
 
 

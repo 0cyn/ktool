@@ -1,4 +1,4 @@
-from .util import log
+from ktool import log
 from enum import Enum
 
 from ktool.structs import *

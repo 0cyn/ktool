@@ -1,11 +1,20 @@
-import mmap
 import os
-from collections import namedtuple
+import mmap
+
 from enum import Enum
 from typing import Tuple
+from collections import namedtuple
 
-from ktool.structs import fat_header, fat_header_t, fat_arch_t, segment_command_64_t, section_64_t, sizeof, struct
-from ktool.util import log
+from ktool import (
+    fat_header,
+    fat_header_t,
+    fat_arch_t,
+    segment_command_64_t,
+    section_64_t,
+    sizeof,
+    struct,
+    log
+)
 
 
 class MachOFileType(Enum):
