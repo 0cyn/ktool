@@ -379,7 +379,7 @@ class Slice:
             case 1:
                 return CPUSubType.ARM64_V8
             case 2:
-                return CPUSubType.ARM64_v8
+                return CPUSubType.ARM64_V8
             case 3:
                 return CPUSubType.X86_64_ALL
             case 8:

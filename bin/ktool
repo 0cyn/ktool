@@ -184,7 +184,7 @@ def list(args):
                 print(f'{objc_proto.name}')
         if args.get_linked:
             for exlib in library.linked:
-                print(exlib.install_name)
+                print('(Weak) ' if exlib.weak else '' + exlib.install_name)
 
 
 def file(args):
@@ -217,7 +217,7 @@ def info(args):
         pprint.pprint(library.macho_header.load_commands)
         filt = True
     if not filt:
-        print(f'Install Name: {library.name}')
+        print(f'Name: {library.name}')
         print(f'Filetype: {library.macho_header.filetype.name}')
         print(f'Flags: {", ".join([i.name for i in library.macho_header.flags])}')
         print(f'UUID: {library.uuid.hex().upper()}')

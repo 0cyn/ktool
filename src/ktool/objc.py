@@ -626,7 +626,7 @@ class Property:
             self.attr = self.decode_property_attributes(
                 self.library.get_cstr_at(property.attr, 0, True, "__objc_methname"))
         except IndexError:
-            # print(f'issue with property {self.name} in {self.library.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
+            log.warn(f'issue with property {self.name} in {self.library.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
             return
         # property_attr = namedtuple("property_attr", ["type", "attributes", "ivar"])
         self.type = self._renderable_type(self.attr.type)

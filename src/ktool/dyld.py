@@ -119,6 +119,7 @@ class Library:
         self.slice = macho_slice
 
         self.linked = []
+        self.name = ""
         self.segments = {}
 
         log.debug("Initializing VM Map")
@@ -248,6 +249,9 @@ class LibraryHeader:
             cmd = macho_slice.get_at(read_address, 4)
             try:
                 load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_TYPEMAP[LOAD_COMMAND(cmd)])
+            except ValueError:
+                unk_lc = macho_slice.load_struct(read_address, unk_command_t)
+                load_cmd = unk_lc
             except KeyError:
                 unk_lc = macho_slice.load_struct(read_address, unk_command_t)
                 load_cmd = unk_lc
@@ -260,6 +264,7 @@ class ExternalDylib:
     def __init__(self, source_library, cmd):
         self.source_library = source_library
         self.install_name = self._get_name(cmd)
+        self.weak = cmd.cmd == LOAD_COMMAND.LOAD_WEAK_DYLIB.value
         self.local = cmd.cmd == 0xD
 
     def _get_name(self, cmd):

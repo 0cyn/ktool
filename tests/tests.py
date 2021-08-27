@@ -16,7 +16,8 @@ from ktool.macho import MachOFile
 from ktool.objc import ObjCLibrary
 from ktool.util import TapiYAMLWriter, log, LogLevel
 
-log.LOG_LEVEL = LogLevel.DEBUG
+log.LOG_LEVEL = LogLevel.WARN
+
 
 class SymTabTestCase(unittest.TestCase):
     def test_bin(self):
