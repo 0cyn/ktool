@@ -264,7 +264,7 @@ class ExternalDylib:
     def __init__(self, source_library, cmd):
         self.source_library = source_library
         self.install_name = self._get_name(cmd)
-        self.weak = cmd.cmd == LOAD_COMMAND.LOAD_WEAK_DYLIB.value
+        self.weak = cmd.cmd == 0x18 | 0x80000000
         self.local = cmd.cmd == 0xD
 
     def _get_name(self, cmd):
