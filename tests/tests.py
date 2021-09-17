@@ -1,21 +1,24 @@
-import logging
+import os
 import sys
 import unittest
-import os.path
+
+from ktool import (
+    log,
+    Dyld,
+    LogLevel,
+    TBDGenerator,
+    HeaderGenerator,
+    MachOFile,
+    MachOFileType,
+    ObjCLibrary,
+    TapiYAMLWriter,
+)
+
 
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))
 
 sys.path.extend([f'{scriptdir}/../src'])
-
-import ktool.macho
-from ktool.dyld import Dyld
-from ktool.generator import TBDGenerator
-from ktool.headers import HeaderGenerator
-from ktool.macho import MachOFile
-from ktool.objc import ObjCLibrary
-from ktool.util import TapiYAMLWriter, log, LogLevel
-
 log.LOG_LEVEL = LogLevel.WARN
 
 
@@ -39,14 +42,14 @@ class TBDTestCase(unittest.TestCase):
 class FileLoadTestCase(unittest.TestCase):
     def test_fat_load(self):
         with open(scriptdir + '/bins/testbin1_fat', 'rb') as file:
-            macho_file = ktool.macho.MachOFile(file)
-            self.assertEqual(macho_file.type, ktool.macho.MachOFileType.FAT)
+            macho_file = MachOFile(file)
+            self.assertEqual(macho_file.type, MachOFileType.FAT)
             self.assertEqual(len(macho_file.slices), 2)
 
     def test_thin_load(self):
         with open(scriptdir + '/bins/testbin1', 'rb') as file:
-            macho_file = ktool.macho.MachOFile(file)
-            self.assertEqual(macho_file.type, ktool.macho.MachOFileType.THIN)
+            macho_file = MachOFile(file)
+            self.assertEqual(macho_file.type, MachOFileType.THIN)
 
 
 class FrameworksTestCase(unittest.TestCase):
