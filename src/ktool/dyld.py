@@ -1,13 +1,31 @@
-from kmacho.macho import LOAD_COMMAND, MH_FILETYPE, MH_FLAGS
-from .util import log
-from collections import namedtuple
 from enum import IntEnum, Enum
+from collections import namedtuple
 
-from .structs import symtab_entry_t, dyld_header, dyld_header_t, unk_command_t, dylib_command, dylib_command_t, \
-    dyld_info_command, symtab_command, uuid_command, build_version_command, segment_command_64, LOAD_COMMAND_TYPEMAP, \
-    sizeof, struct, sub_client_command
+from kmacho import (
+    MH_FLAGS,
+    MH_FILETYPE,
+    LOAD_COMMAND
+)
 
+from .util import log
 from .macho import _VirtualMemoryMap, Segment
+from .structs import (
+    symtab_entry_t,
+    dyld_header,
+    dyld_header_t,
+    unk_command_t,
+    dylib_command,
+    dylib_command_t,
+    dyld_info_command,
+    symtab_command,
+    uuid_command,
+    build_version_command,
+    segment_command_64,
+    LOAD_COMMAND_TYPEMAP,
+    sizeof,
+    struct,
+    sub_client_command
+)
 
 
 class Dyld:
@@ -382,8 +400,16 @@ class SymbolTable:
 
 
 action = namedtuple("action", ["vmaddr", "libname", "item"])
-record = namedtuple("record",
-                    ["seg_index", "seg_offset", "lib_ordinal", "type", "flags", "name", "addend", "special_dylib"])
+record = namedtuple("record", [
+    "seg_index",
+    "seg_offset",
+    "lib_ordinal",
+    "type",
+    "flags",
+    "name",
+    "addend",
+    "special_dylib"
+])
 
 
 class BindingTable:

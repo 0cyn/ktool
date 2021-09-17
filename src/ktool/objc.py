@@ -1,6 +1,6 @@
-from .util import log
 from enum import Enum
 
+from .util import log
 from .structs import *
 
 type_encodings = {

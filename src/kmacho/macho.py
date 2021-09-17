@@ -1,4 +1,4 @@
-from enum import Enum, IntEnum, IntFlag
+from enum import IntEnum, IntFlag
 
 
 class MH_FLAGS(IntFlag):
@@ -101,7 +101,3 @@ class LOAD_COMMAND(IntEnum):
     VERSION_MIN_WATCHOS      = 0x30
     NOTE                     = 0x31
     BUILD_VERSION            = 0x32
-
-
-
-

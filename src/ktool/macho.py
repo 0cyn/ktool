@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Tuple
 from collections import namedtuple
 
+from .util import log
 from .structs import (
     fat_header,
     fat_header_t,
@@ -14,8 +15,6 @@ from .structs import (
     sizeof,
     struct
 )
-
-from .util import log
 
 
 class MachOFileType(Enum):

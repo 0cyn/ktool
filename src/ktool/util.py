@@ -1,5 +1,6 @@
-import inspect
 import os
+import inspect
+
 from enum import Enum
 
 

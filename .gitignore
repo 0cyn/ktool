@@ -4,3 +4,4 @@ venv/
 *.i64
 dist/
 CHANGELOG.md
+*.egg-info
