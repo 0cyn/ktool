@@ -1,8 +1,8 @@
 import os
 
-from .dyld import Dyld, SymbolType
 from .macho import Slice
 from .objc import ObjCLibrary
+from .dyld import Dyld, SymbolType
 
 from collections import namedtuple
 
@@ -70,7 +70,14 @@ class TBDGenerator:
         return tbd
 
 
-fat_arch_for_slice = namedtuple("fat_arch_for_slice", ["slice", "cputype", "cpusubtype", "offset", "size", "align"])
+fat_arch_for_slice = namedtuple("fat_arch_for_slice", [
+    "slice",
+    "cputype",
+    "cpusubtype",
+    "offset",
+    "size",
+    "align"
+])
 
 
 class FatMachOGenerator:

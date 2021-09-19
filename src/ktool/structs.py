@@ -1,6 +1,8 @@
-from collections import namedtuple
+from kmacho import *
+
 from typing import NamedTuple
-from kmacho.macho import *
+from collections import namedtuple
+
 
 struct = namedtuple("struct", ["struct", "sizes"])
 
