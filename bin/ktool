@@ -16,7 +16,7 @@ from ktool import (
     LogLevel
 )
 
-from kimg4.img4 import get_keybags
+from kimg4.img4 import get_keybags, aes_decrypt
 
 from enum import Enum
 from argparse import ArgumentParser
@@ -43,7 +43,11 @@ def main():
 
     parser_img4.add_argument('filename')
     parser_img4.add_argument('--kbag', dest='get_kbag', action='store_true', help="Decode keybags in an im4p file")
-    parser_img4.set_defaults(func=img4, get_kbag=False)
+    parser_img4.add_argument('--dec', dest='do_decrypt', action='store_true', help="Decrypt an im4p file with iv/key")
+    parser_img4.add_argument('--iv', dest='aes_iv', type=str, help='IV for decryption')
+    parser_img4.add_argument('--key', dest='aes_key', type=str, help='Key for decryption')
+    parser_img4.add_argument('--out', dest='out', help="Output file destination for decryption")
+    parser_img4.set_defaults(func=img4, get_kbag=False, do_decrypt=False, aes_iv=None, aes_key=None, out=None)
 
     parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
     parser_file.add_argument('filename')
@@ -192,6 +196,17 @@ def img4(args):
         with open(args.filename, 'rb') as fp:
             for bag in get_keybags(fp):
                 print(bag)
+    if args.do_decrypt:
+        if not args.aes_key or not args.aes_iv:
+            exit_with_error(KToolError.ArgumentError, "--dec option requires --iv and --key")
+        out = args.out
+        if not out:
+            out = args.filename + '.dec'
+        with open(args.filename, 'rb') as fp:
+            with open(out, 'wb') as out_fp:
+                aes_decrypt(fp, args.aes_key, args.aes_iv, out_fp)
+
+        print(f'Attempted decrypt of data with key/iv and saved to {out}')
 
 
 def lipo(args):

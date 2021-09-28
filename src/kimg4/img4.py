@@ -1,6 +1,9 @@
 import sys
+import os
 import kimg4.asn1 as asn1
-
+import random
+import pyaes
+import string
 
 def asn1_serialize(input_stream, parent=None):
     """
@@ -48,3 +51,28 @@ def get_keybags(fp):
         keybag_hex = keybag_concat.hex().upper()
         return_keybags.append(keybag_hex)
     return return_keybags
+
+
+def aes_decrypt(fp, key, iv, out):
+    iv = bytes.fromhex(iv)
+    key = bytes.fromhex(key)
+    decoder = asn1.Decoder()
+    decoder.start(fp.read())
+
+    # location of the raw encrypted cyphertext in the img4, probably?
+    cipher = asn1_serialize(decoder)[0][3]
+
+    # doing this is lazy
+    temp_filename = '.temp_' + ''.join(random.choice(string.ascii_lowercase) for i in range(10))
+
+    with open(temp_filename, 'wb') as outf:
+        outf.write(cipher)
+
+    # img4 are encrypted with chain block cypher strat
+    mode = pyaes.AESModeOfOperationCBC(key, iv = iv)
+
+    file_in = open(temp_filename, 'rb')
+
+    pyaes.decrypt_stream(mode, file_in, out)
+    file_in.close()
+    os.remove(temp_filename)
