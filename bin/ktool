@@ -16,6 +16,8 @@ from ktool import (
     LogLevel
 )
 
+from kimg4.img4 import get_keybags
+
 from enum import Enum
 from argparse import ArgumentParser
 
@@ -36,6 +38,12 @@ def main():
     parser.add_argument('-v', dest='logging_level', type=int)
     parser.set_defaults(func=help_prompt, bench=False, logging_level=0)
     subparsers = parser.add_subparsers(help='sub-command help')
+
+    parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
+
+    parser_img4.add_argument('filename')
+    parser_img4.add_argument('--kbag', dest='get_kbag', action='store_true', help="Decode keybags in an im4p file")
+    parser_img4.set_defaults(func=img4, get_kbag=False)
 
     parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
     parser_file.add_argument('filename')
@@ -94,12 +102,15 @@ def help_prompt(args):
     """ Usage: ktool [command] <flags> [filename]
     
     Commands for ktool:
-    
+
+    MachO ---
         dump
         file
         lipo
         list
         info
+    IMG4  ---
+        img4
     
     Run ktool [command] -h for more help on how to use said
     commands.
@@ -174,6 +185,13 @@ def help_prompt(args):
         
             ktool info [--slice n] --cmds [filename]"""
     print(help_prompt.__doc__)
+
+
+def img4(args):
+    if args.get_kbag:
+        with open(args.filename, 'rb') as fp:
+            for bag in get_keybags(fp):
+                print(bag)
 
 
 def lipo(args):

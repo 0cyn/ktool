@@ -1,0 +1,50 @@
+import sys
+import kimg4.asn1 as asn1
+
+
+def asn1_serialize(input_stream, parent=None):
+    """
+    This is a serializer for the output of python-asn1.
+    It's specifically designed for IMG4 format ASN1/DER/BER format.
+
+    I really dont trust it, it's not very well designed, but it should work well enough.
+
+    :param input_stream: Input asn1 decoder
+    :param parent: unused element during recursion. would make things smarter.
+    :return:
+    """
+    vals = []
+    while not input_stream.eof():
+        tag = input_stream.peek()
+        if tag.typ == asn1.Types.Primitive:
+            tag, value = input_stream.read()
+            vals.append(value)
+        elif tag.typ == asn1.Types.Constructed:
+            input_stream.enter()
+            items = asn1_serialize(input_stream, parent=asn1.Types.Constructed)
+            input_stream.leave()
+            vals.append(items)
+    return vals
+
+
+def get_keybags(fp):
+    """
+    Dump keybags from an IM4P file.
+
+    This function is not smart and only supports standard img4 IM4P format files.
+
+    :param fp:
+    :return:
+    """
+    return_keybags = []
+    im4p_decoder = asn1.Decoder()
+    im4p_decoder.start(fp.read())
+    kbag = asn1_serialize(im4p_decoder)[0][4]
+    kbag_decoder = asn1.Decoder()
+    kbag_decoder.start(kbag)
+    keybags = asn1_serialize(kbag_decoder)[0]
+    for keybag in keybags:
+        keybag_concat = keybag[1]+keybag[2]
+        keybag_hex = keybag_concat.hex().upper()
+        return_keybags.append(keybag_hex)
+    return return_keybags
