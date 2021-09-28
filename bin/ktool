@@ -19,7 +19,7 @@ from ktool import (
 from kimg4.img4 import get_keybags, aes_decrypt
 
 from enum import Enum
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentError
 
 
 class KToolError(Enum):
@@ -41,7 +41,7 @@ def main():
 
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
 
-    parser_img4.add_argument('filename')
+    parser_img4.add_argument('filename', nargs='?', default='')
     parser_img4.add_argument('--kbag', dest='get_kbag', action='store_true', help="Decode keybags in an im4p file")
     parser_img4.add_argument('--dec', dest='do_decrypt', action='store_true', help="Decrypt an im4p file with iv/key")
     parser_img4.add_argument('--iv', dest='aes_iv', type=str, help='IV for decryption')
@@ -50,14 +50,14 @@ def main():
     parser_img4.set_defaults(func=img4, get_kbag=False, do_decrypt=False, aes_iv=None, aes_key=None, out=None)
 
     parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
-    parser_file.add_argument('filename')
+    parser_file.add_argument('filename', nargs='?', default='')
     parser_file.set_defaults(func=_file)
 
     parser_lipo = subparsers.add_parser('lipo', help='Extract/Combine slices')
     parser_lipo.add_argument('--extract', dest='extract', type=str, help='Extract a slice (--extract arm64)')
     parser_lipo.add_argument('--out', dest='out', help="Output File")
     parser_lipo.add_argument('--create', dest='combine', action='store_true', help="Combine files to create a fat mach-o library")
-    parser_lipo.add_argument('filename', nargs='+')
+    parser_lipo.add_argument('filename', nargs='*', default='')
     parser_lipo.set_defaults(func=lipo, out="", combine=False)
 
     parser_info = subparsers.add_parser('info', help='Print Info about a MachO Library')
@@ -65,7 +65,7 @@ def main():
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO Library")
     parser_info.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
-    parser_info.add_argument('filename')
+    parser_info.add_argument('filename', nargs='?', default='')
     parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, slice_index=0)
 
     parser_dump = subparsers.add_parser('dump', help='Dump items (headers) from binary')
@@ -74,7 +74,7 @@ def main():
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
     parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
-    parser_dump.add_argument('filename')
+    parser_dump.add_argument('filename', nargs='?', default='')
     parser_dump.set_defaults(func=dump, do_headers=False, do_tbd=False, slice_index=0)
 
     parser_list = subparsers.add_parser('list', help='Print various lists')
@@ -83,10 +83,19 @@ def main():
     parser_list.add_argument('--protocols', dest='get_protos', action='store_true', help='Print Protocol list')
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Actions")
-    parser_list.add_argument('filename')
+    parser_list.add_argument('filename', nargs='?', default='')
     parser_list.set_defaults(func=_list, get_syms=False, get_classes=False, get_protos=False, get_linked=False, get_binding=False)
 
     args = parser.parse_args()
+
+    if not hasattr(args, 'filename'):
+        # this is our default function
+        args.func(args)
+        exit()
+
+    if not args.filename or args.filename == '':
+        print(args.func.__doc__)
+        exit()
     log.LOG_LEVEL = LogLevel(args.logging_level)
 
     if args.bench:
@@ -108,95 +117,40 @@ def help_prompt(args):
     Commands for ktool:
 
     MachO ---
-        dump
-        file
-        lipo
-        list
-        info
+        dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
+        file - Print very basic info about the MachO
+        lipo - Utilities for combining/separating slices in fat MachO files.
+        list - Dumps certain tables from MachOs
+        info - Dump misc info about the target mach-o
+
     IMG4  ---
-        img4
+        img4 - IMG4 Utilities
     
-    Run ktool [command] -h for more help on how to use said
-    commands.
-    
-    Examples:
-    
-        ktool dump
-        ----------
-        
-        To dump a set of headers for a bin/framework
-
-            ktool dump --headers --out <directory> [filename]
-
-        To dump .tbd files for a framework
-        
-            ktool dump --tbd [filename]
-        
-        ktool file
-        ----------
-        
-        Print basic information about a file (e.g 'Thin MachO Binary')
-        
-            ktool file [filename]
-        
-        ktool lipo
-        ----------
-        
-        Extract a slice from a fat binary
-        
-            ktool lipo --extract [slicename] [filename]
-        
-        Create a fat Macho Binary from multiple thin binaries
-        
-            ktool lipo --create [--out filename] [filenames]
-        
-        ktool list
-        ----------
-        
-        To print the symbol table of a file
-        
-            ktool list --symbols [filename]
-        
-        To print the list of classes
-        
-            ktool list --classes [filename]
-        
-        To print the list of protocols
-        
-            ktool list --protocols [filename]
-        
-        To print a  list of linked libraries
-        
-            ktool list --linked [filename]
-        
-        To print binding actionms for a file
-        
-            ktool list [--slice n] --binding [filename]
-        
-        ktool info
-        ----------
-        
-        Print generic info about a MachO file
-        
-            ktool info [--slice n] [filename]
-        
-        Print VM -> Slice -> Filename address mapping for a slice
-        of a MachO file
-        
-            ktool info [--slice n] --vm [filename]
-        
-        Print a list of load commands for a file
-        
-            ktool info [--slice n] --cmds [filename]"""
+    Run `ktool [command]`  for info/examples on using that command
+        """
     print(help_prompt.__doc__)
 
 
 def img4(args):
+    """
+    ktool img4
+    IMG4 Utilities
+
+    Getting keybags
+        ktool img4 --kbag <filename>
+
+    Decrypting an im4p
+        ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
+
+    """
+    args_were_passed = False
     if args.get_kbag:
+        args_were_passed = True
         with open(args.filename, 'rb') as fp:
             for bag in get_keybags(fp):
                 print(bag)
     if args.do_decrypt:
+        args_were_passed = True
         if not args.aes_key or not args.aes_iv:
             exit_with_error(KToolError.ArgumentError, "--dec option requires --iv and --key")
         out = args.out
@@ -210,7 +164,21 @@ def img4(args):
 
 
 def lipo(args):
+    """
+    ktool lipo
+    Utilities for combining/separating slices in fat MachO files.
+
+    Extract a slice from a fat binary
+
+        ktool lipo --extract [slicename] [filename]
+
+    Create a fat Macho Binary from multiple thin binaries
+
+        ktool lipo --create [--out filename] [filenames]
+    """
+    args_were_passed = False
     if args.combine:
+        args_were_passed = True
         output = args.out
         if output == "":
             output = args.filename[0] + '.fat'
@@ -232,6 +200,7 @@ def lipo(args):
                 fd.write(arch.slice.full_bytes_for_slice())
 
     elif args.extract != "":
+        args_were_passed = True
         with open(args.filename[0], 'rb') as fd:
             macho_file = MachOFile(fd)
             output = args.out
@@ -244,9 +213,37 @@ def lipo(args):
                     return
             exit_with_error(KToolError.ArgumentError,
                             f'Architecture {args.extract} wasn\'t found (found: {[slice.type.name.lower() for slice in macho_file.slices]})')
+    if not args_were_passed:
+        print(lipo.__doc__)
 
 
 def _list(args):
+    """
+    ktool list
+    Outputs some lists of things
+
+    To print the symbol table of a file
+
+        ktool list --symbols [filename]
+
+    To print the list of classes
+
+        ktool list --classes [filename]
+
+    To print the list of protocols
+
+        ktool list --protocols [filename]
+
+    To print a  list of linked libraries
+
+        ktool list --linked [filename]
+
+    To print binding actionms for a file
+
+        ktool list [--slice n] --binding [filename]
+
+    """
+    args_were_passed = False
     with open(args.filename, 'rb') as fd:
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
@@ -277,6 +274,14 @@ def _list(args):
 
 
 def _file(args):
+    """
+    ktool file
+    ----------
+
+    Print basic information about a file (e.g 'Thin MachO Binary')
+
+        ktool file [filename]
+    """
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
     print(f'\n{args.filename} '.ljust(60, '-') + '\n')
@@ -295,6 +300,23 @@ def _file(args):
 
 
 def info(args):
+    """
+    ktool info
+    Some misc info about the target mach-o
+
+    Print generic info about a MachO file
+
+        ktool info [--slice n] [filename]
+
+    Print VM -> Slice -> Filename address mapping for a slice
+    of a MachO file
+
+        ktool info [--slice n] --vm [filename]
+
+    Print a list of load commands for a file
+
+        ktool info [--slice n] --cmds [filename]
+    """
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
     library = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_binding=False)
@@ -318,6 +340,18 @@ def info(args):
 
 
 def dump(args):
+    """
+    ktool dump
+    Tools to reconstruct certain files from compiled MachOs
+
+    To dump a set of headers for a bin/framework
+
+        ktool dump --headers --out <directory> [filename]
+
+    To dump .tbd files for a framework
+
+        ktool dump --tbd [filename]
+    """
     if args.do_headers:
         fd = open(args.filename, 'rb')
         machofile = MachOFile(fd)

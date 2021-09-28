@@ -22,12 +22,37 @@ Static Mach-O binary metadata analysis tool / information dumper
 ### Installation
 
 ```shell
-# Installtion
+# Installing the python3.10, updated and maintained version
+pip3 install git+git://github.com/kritantadev/ktool
+
+# Installing the python 3.5 version
 pip3 install k2l
 
 # Updating
 pip3 install --upgrade k2l
 ```
+
+### Usage 
+
+```
+> $ ktool
+ Usage: ktool [command] <flags> [filename]
+
+    Commands for ktool:
+
+    MachO ---
+        dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
+        file - Print very basic info about the MachO
+        lipo - Utilities for combining/separating slices in fat MachO files.
+        list - Dumps certain tables from MachOs
+        info - Dump misc info about the target mach-o
+
+    IMG4  ---
+        img4 - IMG4 Utilities
+
+    Run `ktool [command]`  for info/examples on using that command
+```
+
 
 Run `ktool` after install for a list of commands and how to use them.
 

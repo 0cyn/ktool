@@ -5,6 +5,7 @@ import random
 import pyaes
 import string
 
+
 def asn1_serialize(input_stream, parent=None):
     """
     This is a serializer for the output of python-asn1.
@@ -47,7 +48,7 @@ def get_keybags(fp):
     kbag_decoder.start(kbag)
     keybags = asn1_serialize(kbag_decoder)[0]
     for keybag in keybags:
-        keybag_concat = keybag[1]+keybag[2]
+        keybag_concat = keybag[1] + keybag[2]
         keybag_hex = keybag_concat.hex().upper()
         return_keybags.append(keybag_hex)
     return return_keybags
@@ -78,7 +79,7 @@ def aes_decrypt(fp, key: str, iv: str, out):
         outf.write(cipher)
 
     # img4 are encrypted with Cipher-Block Chaining mode
-    mode = pyaes.AESModeOfOperationCBC(key, iv = iv)
+    mode = pyaes.AESModeOfOperationCBC(key, iv=iv)
 
     file_in = open(temp_filename, 'rb')
 
