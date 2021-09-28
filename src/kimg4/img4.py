@@ -53,7 +53,16 @@ def get_keybags(fp):
     return return_keybags
 
 
-def aes_decrypt(fp, key, iv, out):
+def aes_decrypt(fp, key: str, iv: str, out):
+    """
+    Grabs the payload from an im4p and dumps the decrypted output to `out`
+
+    :param fp: Input file pointer
+    :param key: STRING-HEX repr of AES 256 bit key
+    :param iv: STRING-HEX repr of AES 64 bit initialization vector
+    :param out: Output file pointer
+    :return:
+    """
     iv = bytes.fromhex(iv)
     key = bytes.fromhex(key)
     decoder = asn1.Decoder()
@@ -68,7 +77,7 @@ def aes_decrypt(fp, key, iv, out):
     with open(temp_filename, 'wb') as outf:
         outf.write(cipher)
 
-    # img4 are encrypted with chain block cypher strat
+    # img4 are encrypted with Cipher-Block Chaining mode
     mode = pyaes.AESModeOfOperationCBC(key, iv = iv)
 
     file_in = open(temp_filename, 'rb')
