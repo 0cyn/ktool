@@ -1,3 +1,17 @@
+#
+#  ktool | kmacho
+#  macho.py
+#
+#  This file contains pythonized representations of certain #defines and enums from dyld source
+#
+#  This file is part of ktool. ktool is free software that
+#  is made available under the MIT license. Consult the
+#  file "LICENSE" that is distributed together with this file
+#  for the exact licensing terms.
+#
+#  Copyright (c) kat 2021.
+#
+
 from enum import IntEnum, IntFlag
 
 
