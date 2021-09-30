@@ -30,7 +30,7 @@ from ktool import (
     LogLevel
 )
 
-from kimg4.img4 import get_keybags, aes_decrypt
+from kimg4.img4 import IM4P
 
 from enum import Enum
 from argparse import ArgumentParser, ArgumentError
@@ -110,6 +110,7 @@ def main():
     if not args.filename or args.filename == '':
         print(args.func.__doc__)
         exit()
+
     log.LOG_LEVEL = LogLevel(args.logging_level)
 
     if args.bench:
@@ -157,14 +158,12 @@ def img4(args):
         ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
 
     """
-    args_were_passed = False
     if args.get_kbag:
-        args_were_passed = True
         with open(args.filename, 'rb') as fp:
-            for bag in get_keybags(fp):
-                print(bag)
+            im4p = IM4P(fp.read())
+            for bag in im4p.kbag.keybags:
+                print(f'{bag.iv.hex()}{bag.key.hex()}')
     if args.do_decrypt:
-        args_were_passed = True
         if not args.aes_key or not args.aes_iv:
             exit_with_error(KToolError.ArgumentError, "--dec option requires --iv and --key")
         out = args.out
@@ -172,7 +171,8 @@ def img4(args):
             out = args.filename + '.dec'
         with open(args.filename, 'rb') as fp:
             with open(out, 'wb') as out_fp:
-                aes_decrypt(fp, args.aes_key, args.aes_iv, out_fp)
+                im4p = IM4P(fp.read())
+                out_fp.write(im4p.decrypt_data(args.aes_iv, args.aes_key))
 
         print(f'Attempted decrypt of data with key/iv and saved to {out}')
 
@@ -190,9 +190,7 @@ def lipo(args):
 
         ktool lipo --create [--out filename] [filenames]
     """
-    args_were_passed = False
     if args.combine:
-        args_were_passed = True
         output = args.out
         if output == "":
             output = args.filename[0] + '.fat'
@@ -214,7 +212,6 @@ def lipo(args):
                 fd.write(arch.slice.full_bytes_for_slice())
 
     elif args.extract != "":
-        args_were_passed = True
         with open(args.filename[0], 'rb') as fd:
             macho_file = MachOFile(fd)
             output = args.out
@@ -227,8 +224,6 @@ def lipo(args):
                     return
             exit_with_error(KToolError.ArgumentError,
                             f'Architecture {args.extract} wasn\'t found (found: {[slice.type.name.lower() for slice in macho_file.slices]})')
-    if not args_were_passed:
-        print(lipo.__doc__)
 
 
 def _list(args):
@@ -257,7 +252,6 @@ def _list(args):
         ktool list [--slice n] --binding [filename]
 
     """
-    args_were_passed = False
     with open(args.filename, 'rb') as fd:
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
