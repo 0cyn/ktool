@@ -16,7 +16,6 @@ Static Mach-O binary metadata analysis tool / information dumper
   </a>
     <br>
     <br>
-    <code>pip3 install k2l</code>
 </p>
 
 ### Installation
