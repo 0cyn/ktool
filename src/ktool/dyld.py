@@ -1,12 +1,46 @@
-from .util import log
-from collections import namedtuple
+#
+#  ktool | ktool
+#  dyld.py
+#
+#  This file includes a lot of utilities, classes, and abstractions
+#  designed for replicating certain functionality within dyld.
+#
+#  This file is part of ktool. ktool is free software that
+#  is made available under the MIT license. Consult the
+#  file "LICENSE" that is distributed together with this file
+#  for the exact licensing terms.
+#
+#  Copyright (c) kat 2021.
+#
+
 from enum import IntEnum, Enum
+from collections import namedtuple
 
-from ktool.structs import symtab_entry_t, dyld_header, dyld_header_t, unk_command_t, dylib_command, dylib_command_t, \
-    dyld_info_command, symtab_command, uuid_command, build_version_command, segment_command_64, LOAD_COMMAND_TYPEMAP, \
-    sizeof, struct, sub_client_command
+from kmacho import (
+    MH_FLAGS,
+    MH_FILETYPE,
+    LOAD_COMMAND
+)
 
-from ktool.macho import _VirtualMemoryMap, Segment
+from .util import log
+from .macho import _VirtualMemoryMap, Segment
+from .structs import (
+    symtab_entry_t,
+    dyld_header,
+    dyld_header_t,
+    unk_command_t,
+    dylib_command,
+    dylib_command_t,
+    dyld_info_command,
+    symtab_command,
+    uuid_command,
+    build_version_command,
+    segment_command_64,
+    LOAD_COMMAND_TYPEMAP,
+    sizeof,
+    struct,
+    sub_client_command
+)
 
 
 class Dyld:
@@ -19,7 +53,7 @@ class Dyld:
     """
 
     @staticmethod
-    def load(macho_slice):
+    def load(macho_slice, load_symtab=True, load_binding=True):
         """
         Take a slice of a macho file and process it using the dyld functions
 
@@ -32,11 +66,11 @@ class Dyld:
         library = Library(macho_slice)
 
         log.info("Processing Load Commands")
-        Dyld._parse_load_commands(library)
+        Dyld._parse_load_commands(library, load_symtab, load_binding)
         return library
 
     @staticmethod
-    def _parse_load_commands(library):
+    def _parse_load_commands(library, load_symtab=True, load_binding=True):
         for cmd in library.macho_header.load_commands:
             if isinstance(cmd, segment_command_64):
                 log.debug("Loading segment_command_64")
@@ -48,24 +82,26 @@ class Dyld:
 
                 log.debug(f'Added {segment.name} to VM Map')
 
-            if isinstance(cmd, dyld_info_command):
+            elif isinstance(cmd, dyld_info_command):
                 library.info = cmd
-                log.info("Loading Binding Info")
-                library.binding_table = BindingTable(library)
+                if load_binding:
+                    log.info("Loading Binding Info")
+                    library.binding_table = BindingTable(library)
 
-            if isinstance(cmd, symtab_command):
-                log.info("Loading Symbol Table")
-                library.symbol_table = SymbolTable(library, cmd)
+            elif isinstance(cmd, symtab_command):
+                if load_symtab:
+                    log.info("Loading Symbol Table")
+                    library.symbol_table = SymbolTable(library, cmd)
 
-            if isinstance(cmd, uuid_command):
-                library.uuid = cmd.uuid
+            elif isinstance(cmd, uuid_command):
+                library.uuid = cmd.uuid.to_bytes(16, "little")
 
-            if isinstance(cmd, sub_client_command):
+            elif isinstance(cmd, sub_client_command):
                 string = library.get_cstr_at(cmd.off + cmd.offset)
                 library.allowed_clients.append(string)
                 log.debug(f'Loaded Subclient "{string}"')
 
-            if isinstance(cmd, build_version_command):
+            elif isinstance(cmd, build_version_command):
                 library.platform = PlatformType(cmd.platform)
                 library.minos = os_version(x=library.get_bytes(cmd.off + 14, 2), y=library.get_bytes(cmd.off + 13, 1),
                                            z=library.get_bytes(cmd.off + 12, 1))
@@ -77,7 +113,7 @@ class Dyld:
                               f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
                               f'.{library.sdk_version.y}.{library.sdk_version.z}')
 
-            if isinstance(cmd, dylib_command):
+            elif isinstance(cmd, dylib_command):
                 if cmd.cmd == 0xD:  # local
                     library.dylib = ExternalDylib(library, cmd)
                     log.debug(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
@@ -115,6 +151,7 @@ class Library:
         self.slice = macho_slice
 
         self.linked = []
+        self.name = ""
         self.segments = {}
 
         log.debug("Initializing VM Map")
@@ -217,6 +254,11 @@ class LibraryHeader:
         """
         offset = 0
         self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header_t)
+        self.filetype = MH_FILETYPE(self.dyld_header.filetype)
+        self.flags = []
+        for flag in MH_FLAGS:
+            if self.dyld_header.flags & flag.value:
+                self.flags.append(flag)
         self.load_commands = []
         self._process_load_commands(macho_slice)
 
@@ -238,7 +280,10 @@ class LibraryHeader:
         for i in range(1, self.dyld_header.loadcnt):
             cmd = macho_slice.get_at(read_address, 4)
             try:
-                load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_TYPEMAP[cmd])
+                load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_TYPEMAP[LOAD_COMMAND(cmd)])
+            except ValueError:
+                unk_lc = macho_slice.load_struct(read_address, unk_command_t)
+                load_cmd = unk_lc
             except KeyError:
                 unk_lc = macho_slice.load_struct(read_address, unk_command_t)
                 load_cmd = unk_lc
@@ -251,6 +296,7 @@ class ExternalDylib:
     def __init__(self, source_library, cmd):
         self.source_library = source_library
         self.install_name = self._get_name(cmd)
+        self.weak = cmd.cmd == 0x18 | 0x80000000
         self.local = cmd.cmd == 0xD
 
     def _get_name(self, cmd):
@@ -368,8 +414,16 @@ class SymbolTable:
 
 
 action = namedtuple("action", ["vmaddr", "libname", "item"])
-record = namedtuple("record",
-                    ["seg_index", "seg_offset", "lib_ordinal", "type", "flags", "name", "addend", "special_dylib"])
+record = namedtuple("record", [
+    "seg_index",
+    "seg_offset",
+    "lib_ordinal",
+    "type",
+    "flags",
+    "name",
+    "addend",
+    "special_dylib"
+])
 
 
 class BindingTable:
@@ -446,10 +500,12 @@ class BindingTable:
                 binding_opcode = self.library.get_bytes(read_address, 1) & 0xF0
                 value = self.library.get_bytes(read_address, 1) & 0x0F
                 read_address += 1
+
                 if binding_opcode == BINDING_OPCODE.DONE:
                     import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     break
+
                 elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_IMM:
                     lib_ordinal = value
 
@@ -504,8 +560,6 @@ class BindingTable:
                     import_stack.append(
                         record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset += 8
-                else:
-                    assert 0 == 1
 
         return import_stack
 

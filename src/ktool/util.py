@@ -1,5 +1,20 @@
-import inspect
+#
+#  ktool | ktool
+#  util.py
+#
+#  This file contains miscellaneous utilities used around ktool
+#
+#  This file is part of ktool. ktool is free software that
+#  is made available under the MIT license. Consult the
+#  file "LICENSE" that is distributed together with this file
+#  for the exact licensing terms.
+#
+#  Copyright (c) kat 2021.
+#
+
 import os
+import inspect
+
 from enum import Enum
 
 
@@ -94,4 +109,3 @@ class log:
     def error(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.ERROR.value:
             print(f'ERROR - {log.line()} - {msg}')
-

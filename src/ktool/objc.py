@@ -1,7 +1,21 @@
-from .util import log
+#
+#  ktool | ktool
+#  objc.py
+#
+#  This file contains utilities for parsing objective C classes within a MachO binary
+#
+#  This file is part of ktool. ktool is free software that
+#  is made available under the MIT license. Consult the
+#  file "LICENSE" that is distributed together with this file
+#  for the exact licensing terms.
+#
+#  Copyright (c) kat 2021.
+#
+
 from enum import Enum
 
-from ktool.structs import *
+from .util import log
+from .structs import *
 
 type_encodings = {
     "c": "char",
@@ -626,7 +640,7 @@ class Property:
             self.attr = self.decode_property_attributes(
                 self.library.get_cstr_at(property.attr, 0, True, "__objc_methname"))
         except IndexError:
-            # print(f'issue with property {self.name} in {self.library.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
+            log.warn(f'issue with property {self.name} in {self.library.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
             return
         # property_attr = namedtuple("property_attr", ["type", "attributes", "ivar"])
         self.type = self._renderable_type(self.attr.type)

@@ -1,9 +1,23 @@
-from ktool.dyld import SymbolType
-from ktool.objc import ObjCLibrary
+#
+#  ktool | ktool
+#  headers.py
+#
+#  This file contains the utilities used to create ObjC Header File dumps
+#
+#  This file is part of ktool. ktool is free software that
+#  is made available under the MIT license. Consult the
+#  file "LICENSE" that is distributed together with this file
+#  for the exact licensing terms.
+#
+#  Copyright (c) kat 2021.
+#
+
+from .dyld import SymbolType
+from .objc import ObjCLibrary
 
 
 class HeaderUtils:
-    KTOOL_VERSION = "0.7.3"
+    KTOOL_VERSION = "0.8.0"
 
     @staticmethod
     def header_head(library):
@@ -15,15 +29,20 @@ class HeaderUtils:
             prefix += f'SDK: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}\n\n'
             return prefix
         except AttributeError:
-            return ""
+            prefix = "// Headers generated with ktool v" + HeaderUtils.KTOOL_VERSION + "\n"
+            prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
+            prefix += "// Issue loading library metadata\n\n"
+            return prefix
 
 
 class TypeResolver:
     def __init__(self, objc_library: ObjCLibrary):
         self.library = objc_library
         classes = []
+        self.classmap = {}
         for sym in objc_library.library.binding_table.symbol_table:
             if sym.type == SymbolType.CLASS:
+                self.classmap[sym.name[1:]] = sym
                 classes.append(sym)
         self.classes = classes
         self.local_classes = objc_library.classlist
@@ -32,15 +51,14 @@ class TypeResolver:
         for local in self.local_classes:
             if local.name == classname:
                 return ""
-        for oclass in self.classes:
-            if oclass.name[1:] == classname:
-                try:
-                    nam = self.library.library.linked[int(oclass.ordinal) - 1].install_name
-                    if '.dylib' in nam:
-                        return None
-                    return nam
-                except Exception as ex:
-                    pass
+        if classname in self.classmap:
+            try:
+                nam = self.library.library.linked[int(self.classmap[classname].ordinal) - 1].install_name
+                if '.dylib' in nam:
+                    return None
+                return nam
+            except Exception as ex:
+                pass
         return None
 
 

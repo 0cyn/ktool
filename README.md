@@ -16,7 +16,6 @@ Static Mach-O binary metadata analysis tool / information dumper
   </a>
     <br>
     <br>
-    <code>pip3 install k2l</code>
 </p>
     
 Development is currently taking place on the [@python3.10 branch](https://github.com/KritantaDev/ktool/tree/python3.10). 
@@ -24,52 +23,51 @@ Development is currently taking place on the [@python3.10 branch](https://github
 ### Installation
 
 ```shell
-# Installtion
+# Installing the python3.10, updated and maintained version
+pip3 install git+git://github.com/kritantadev/ktool
+
+# Installing the python 3.5 version
 pip3 install k2l
 
 # Updating
 pip3 install --upgrade k2l
 ```
 
+### Usage 
+
+```
+> $ ktool
+ Usage: ktool [command] <flags> [filename]
+
+    Commands for ktool:
+
+    MachO ---
+        dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
+        file - Print very basic info about the MachO
+        lipo - Utilities for combining/separating slices in fat MachO files.
+        list - Dumps certain tables from MachOs
+        info - Dump misc info about the target mach-o
+
+    IMG4  ---
+        img4 - IMG4 Utilities
+
+    Run `ktool [command]`  for info/examples on using that command
+```
+
+
+Run `ktool` after install for a list of commands and how to use them.
+
+### Project purpose and goals
+
+ktool is designed to be a powerful aid in reverse engineering/development for darwin systems.
+
+It is written in python with *zero* compiled dependencies or platform stipulations (as a rule), meaning it can run anywhere python can run, with hopefully no BS/setup/compilation required.
+
+The goal of this project is to provide an actively maintained, platform independent alternative to a ton of (*very useful, amazing*) tools available, and to package them as python libraries to be used in other projects.
+
 ### Documentation
 
 https://ktool.rtfd.io
-
-### ktool commands
-
-
-ktool includes both a library, and a script which uses that library to perform various tasks. 
-
-It'll add the command `ktool` to the python scripts directory (`pyenv exec ktool` if using pyenv)
-
-```shell
-usage: ktool [command] <flags> [filename]
-
-ktool dump:
-ktool dump --headers --out <directory> [filename] - Dump set of headers for a bin/framework
-ktool dump --tbd [filename] - Dump .tbd for a framework
-
-ktool file:
-ktool file [filename] - Prints (very) basic info about a file (e.g. "Thin MachO Binary")
-
-ktool lipo:
-ktool lipo --extract [slicename] [filename] - Extract a slice from a fat binary
-ktool lipo --create [--out filename] [filenames] - Create a fat MachO Binary from multiple thin binaries
-
-ktool list:
-ktool list --symbols [filename] - Print the symbol table for the file
-ktool list --classes [filename] - Print the list of classes
-ktool list --protocols [filename] - Print the list of protocols
-ktool list --linked [filename] - Print a list of linked libraries
-
-ktool info:
-usage: ktool info [-h] [--slice SLICE_INDEX] [--vm] [--cmds] [--binding] filename
-ktool info [--slice n] [filename] - Print generic info about a MachO File
-ktool info [--slice n] --vm [filename] - Print VM -> Slice -> File address mapping for a slice of a MachO File
-ktool info [--slice n] --cmds [filename] - Print list of load commands for a file 
-ktool info [--slice n] --binding [filename] - Print binding actions for a file
-
-```
 
 ---
 
@@ -77,6 +75,9 @@ written in python for the sake of platform independence when operating on static
 
 #### Special thanks to
 
-IDA for making it possible to write the code without actually understanding full internals  
-JLevin and *OS Internals Vol 1 for actually understanding the internals and specifics + writing documentation  
+Blacktop for their amazing ipsw project: https://github.com/blacktop/ipsw  
+if you haven't seen this yet, it's like my tool but stable and better and stuff. written in golang. it is a godsend.
+
+JLevin and *OS Internals for extremely extensive documentation on previously undocumented APIs 
+
 arandomdev for guidance + code

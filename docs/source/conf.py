@@ -22,7 +22,7 @@ copyright = '2021, _kritanta'
 author = '_kritanta'
 
 # The full version, including alpha/beta/rc tags
-release = '0.7.3'
+release = '0.8.0'
 
 # -- General configuration ---------------------------------------------------
 

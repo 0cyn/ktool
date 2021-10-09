@@ -1,5 +1,22 @@
-from collections import namedtuple
+#
+#  ktool | ktool
+#  structs.py
+#
+#  This file contains a custom system for representing structures used within a mach-o header
+#
+#  This file is part of ktool. ktool is free software that
+#  is made available under the MIT license. Consult the
+#  file "LICENSE" that is distributed together with this file
+#  for the exact licensing terms.
+#
+#  Copyright (c) kat 2021.
+#
+
+from kmacho import *
+
 from typing import NamedTuple
+from collections import namedtuple
+
 
 struct = namedtuple("struct", ["struct", "sizes"])
 
@@ -257,25 +274,26 @@ class section_64(NamedTuple):
 section_64_t = struct(section_64, [16, 16, 8, 8, 4, 4, 4, 4, 4, 4, 4, 4])
 
 LOAD_COMMAND_TYPEMAP = {
-    0x2: symtab_command_t,
-    0xB: dysymtab_command_t,
-    0xC: dylib_command_t,
-    0xD: dylib_command_t,
-    0xe: dylinker_command_t,
-    0x14: sub_client_command_t,
-    0x19: segment_command_64_t,
-    0x1B: uuid_command_t,
-    0x1D: linkedit_data_command_t,
-    0x1E: linkedit_data_command_t,
-    0x2A: source_version_command_t,
-    0x26: linkedit_data_command_t,
-    0x29: linkedit_data_command_t,
-    0x32: build_version_command_t,
-    0x80000018: dylib_command_t,
-    0x80000022: dyld_info_command_t,
-    0x80000028: entry_point_command_t,
-    0x8000001C: rpath_command_t,
+    LOAD_COMMAND.SYMTAB: symtab_command_t,
+    LOAD_COMMAND.DYSYMTAB: dysymtab_command_t,
+    LOAD_COMMAND.LOAD_DYLIB: dylib_command_t,
+    LOAD_COMMAND.ID_DYLIB: dylib_command_t,
+    LOAD_COMMAND.LOAD_DYLINKER: dylinker_command_t,
+    LOAD_COMMAND.SUB_CLIENT: sub_client_command_t,
+    LOAD_COMMAND.LOAD_WEAK_DYLIB: dylib_command_t,
+    LOAD_COMMAND.SEGMENT_64: segment_command_64_t,
+    LOAD_COMMAND.UUID: uuid_command_t,
+    LOAD_COMMAND.CODE_SIGNATURE: linkedit_data_command_t,
+    LOAD_COMMAND.SEGMENT_SPLIT_INFO: linkedit_data_command_t,
+    LOAD_COMMAND.SOURCE_VERSION: source_version_command_t,
+    LOAD_COMMAND.DYLD_INFO_ONLY: dyld_info_command_t,
+    LOAD_COMMAND.FUNCTION_STARTS: linkedit_data_command_t,
+    LOAD_COMMAND.DATA_IN_CODE: linkedit_data_command_t,
+    LOAD_COMMAND.BUILD_VERSION: build_version_command_t,
+    LOAD_COMMAND.MAIN: entry_point_command_t,
+    LOAD_COMMAND.RPATH: rpath_command_t,
 }
+
 
 class objc2_class(NamedTuple):
     off: int
@@ -287,6 +305,7 @@ class objc2_class(NamedTuple):
 
 
 objc2_class_t = struct(objc2_class, [8, 8, 8, 8, 8])
+
 
 class objc2_class_ro(NamedTuple):
     off: int
@@ -373,6 +392,7 @@ class objc2_ivar_list(NamedTuple):
     off: int
     entrysize: int
     cnt: int
+
 
 objc2_ivar_list_t = struct(objc2_ivar_list, [4, 4])
 

@@ -1,7 +1,23 @@
-from ktool.dyld import SymbolType, Dyld
-from ktool.macho import Slice
-from ktool.objc import ObjCLibrary
+#
+#  ktool | ktool
+#  generator.py
+#
+#  Holds some miscellaneous generators for certain filetypes
+#
+#  This file is part of ktool. ktool is free software that
+#  is made available under the MIT license. Consult the
+#  file "LICENSE" that is distributed together with this file
+#  for the exact licensing terms.
+#
+#  Copyright (c) kat 2021.
+#
+
 import os
+
+from .macho import Slice
+from .objc import ObjCLibrary
+from .dyld import Dyld, SymbolType
+
 from collections import namedtuple
 
 
@@ -68,7 +84,14 @@ class TBDGenerator:
         return tbd
 
 
-fat_arch_for_slice = namedtuple("fat_arch_for_slice", ["slice", "cputype", "cpusubtype", "offset", "size", "align"])
+fat_arch_for_slice = namedtuple("fat_arch_for_slice", [
+    "slice",
+    "cputype",
+    "cpusubtype",
+    "offset",
+    "size",
+    "align"
+])
 
 
 class FatMachOGenerator:
