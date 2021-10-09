@@ -386,21 +386,19 @@ class Slice:
     def _load_subtype(self):
         cpu_subtype = self.arch_struct.cpusubtype
 
-        match cpu_subtype:
-            case 0:
-                return CPUSubType.ARM64_ALL
-            case 1:
-                return CPUSubType.ARM64_V8
-            case 2:
-                return CPUSubType.ARM64_V8
-            case 3:
-                return CPUSubType.X86_64_ALL
-            case 8:
-                return CPUSubType.X86_64_H
-            case 9:
-                return CPUSubType.ARMV7
-            case 11:
-                return CPUSubType.ARMV7S
-            case _:
-                log.error(f'Unknown CPU SubType ({hex(cpu_subtype)}). File an issue at https://github.com/kritantadev/ktool')
-                return CPUSubType.ARM64_ALL
+        submap = {
+            0: CPUSubType.ARM64_ALL,
+            1: CPUSubType.ARM64_V8,
+            2: CPUSubType.ARM64_V8,
+            3: CPUSubType.X86_64_ALL,
+            8: CPUSubType.X86_64_H,
+            9: CPUSubType.ARMV7,
+            11: CPUSubType.ARMV7S
+        }
+
+        try:
+            subtype_ret = submap[cpu_subtype]
+        except KeyError:
+            log.error(f'Unknown CPU SubType ({hex(cpu_subtype)}) ({self.arch_struct}). File an issue at https://github.com/kritantadev/ktool')
+            exit()
+        return subtype_ret

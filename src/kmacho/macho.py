@@ -12,10 +12,10 @@
 #  Copyright (c) kat 2021.
 #
 
-from enum import IntEnum, IntFlag
+from enum import IntEnum
 
 
-class MH_FLAGS(IntFlag):
+class MH_FLAGS(IntEnum):
     NOUNDEFS = 0x1
     INCRLINK = 0x2
     DYLDLINK = 0x4
