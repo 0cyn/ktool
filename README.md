@@ -12,7 +12,7 @@ Static Mach-O binary metadata analysis tool / information dumper
     <image src="https://readthedocs.org/projects/ktool/badge/?version=latest">
   </a>
   <a href="https://pypi.org/project/k2l/">
-    <image src="https://pypip.in/v/k2l/badge.svg">
+    <image src="https://badge.fury.io/py/k2l.svg">
   </a>
     <br>
     <br>
