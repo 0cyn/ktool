@@ -23,10 +23,7 @@ Development is currently taking place on the [@python3.10 branch](https://github
 ### Installation
 
 ```shell
-# Installing the python3.10, updated and maintained version
-pip3 install git+git://github.com/kritantadev/ktool
-
-# Installing the python 3.5 version
+# Installing
 pip3 install k2l
 
 # Updating
