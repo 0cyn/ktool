@@ -18,8 +18,6 @@ Static Mach-O binary metadata analysis tool / information dumper
     <br>
 </p>
     
-Development is currently taking place on the [@python3.10 branch](https://github.com/KritantaDev/ktool/tree/python3.10). 
-
 ### Installation
 
 ```shell
