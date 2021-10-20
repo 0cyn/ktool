@@ -17,7 +17,7 @@ from .objc import ObjCLibrary
 
 
 class HeaderUtils:
-    KTOOL_VERSION = "0.8.0"
+    KTOOL_VERSION = "0.10.0"
 
     @staticmethod
     def header_head(library):
@@ -40,10 +40,13 @@ class TypeResolver:
         self.library = objc_library
         classes = []
         self.classmap = {}
-        for sym in objc_library.library.binding_table.symbol_table:
-            if sym.type == SymbolType.CLASS:
-                self.classmap[sym.name[1:]] = sym
-                classes.append(sym)
+        try:
+            for sym in objc_library.library.binding_table.symbol_table:
+                if sym.type == SymbolType.CLASS:
+                    self.classmap[sym.name[1:]] = sym
+                    classes.append(sym)
+        except AttributeError:
+            pass
         self.classes = classes
         self.local_classes = objc_library.classlist
 
@@ -242,14 +245,11 @@ class CategoryHeader:
         return self.text
 
     def _generate_text(self):
-        text = []
-        text.append(HeaderUtils.header_head(self.category.library.library))
-
-        text.append("")
-
-        text.append(str(self.interface))
-        text.append("")
-        text.append("")
+        text = [HeaderUtils.header_head(self.category.library.library),
+                "",
+                str(self.interface),
+                "",
+                ""]
 
         return "\n".join(text)
 
@@ -266,14 +266,11 @@ class ProtocolHeader:
         return self.text
 
     def _generate_text(self):
-        text = []
-        text.append(HeaderUtils.header_head(self.protocol.library.library))
-
-        text.append("")
-
-        text.append(str(self.interface))
-        text.append("")
-        text.append("")
+        text = [HeaderUtils.header_head(self.protocol.library.library),
+                "",
+                str(self.interface),
+                "",
+                ""]
 
         return "\n".join(text)
 

@@ -24,23 +24,7 @@ from kmacho import (
 
 from .util import log
 from .macho import _VirtualMemoryMap, Segment
-from .structs import (
-    symtab_entry_t,
-    dyld_header,
-    dyld_header_t,
-    unk_command_t,
-    dylib_command,
-    dylib_command_t,
-    dyld_info_command,
-    symtab_command,
-    uuid_command,
-    build_version_command,
-    segment_command_64,
-    LOAD_COMMAND_TYPEMAP,
-    sizeof,
-    struct,
-    sub_client_command
-)
+from .structs import *
 
 
 class Dyld:
@@ -101,6 +85,10 @@ class Dyld:
                 library.allowed_clients.append(string)
                 log.debug(f'Loaded Subclient "{string}"')
 
+            elif isinstance(cmd, rpath_command):
+                string = library.get_cstr_at(cmd.off + cmd.path)
+                library.rpath = string
+
             elif isinstance(cmd, build_version_command):
                 library.platform = PlatformType(cmd.platform)
                 library.minos = os_version(x=library.get_bytes(cmd.off + 14, 2), y=library.get_bytes(cmd.off + 13, 1),
@@ -137,7 +125,8 @@ class Library:
     This is an abstracted version, other classes will handle the raw struct interaction;
         here, we facilitate that interaction within those classes and generate our abstract representation
 
-    Calling __init__ on this class will kickstart the full process.
+    This class on its own does not handle populating its fields.
+    The Dyld class set is responsible for loading in and processing the raw values to it.
     """
 
     def __init__(self, macho_slice):
@@ -164,6 +153,8 @@ class Library:
         self.platform = None
 
         self.allowed_clients = []
+
+        self.rpath = None
 
         self.minos = None
         self.sdk_version = None
@@ -294,6 +285,7 @@ class LibraryHeader:
 
 class ExternalDylib:
     def __init__(self, source_library, cmd):
+        self.cmd = cmd
         self.source_library = source_library
         self.install_name = self._get_name(cmd)
         self.weak = cmd.cmd == 0x18 | 0x80000000

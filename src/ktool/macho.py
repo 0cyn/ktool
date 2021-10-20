@@ -61,7 +61,7 @@ class MachOFile:
 
     def _load_struct(self, addr: int, struct_type: struct, endian="little"):
         field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?
-        fields = [addr]
+        fields = [addr, self.file[addr:addr + sizeof(struct_type)]]
         ea = addr
 
         for field in struct_type.sizes:
@@ -71,7 +71,7 @@ class MachOFile:
 
         if len(fields) != len(field_names):
             raise ValueError(
-                f'Field count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size '
+                f'Field count mismatch {len(fields)} vs {len(field_names)} in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size '
                 f'Array.')
 
         # noinspection PyProtectedMember
@@ -316,7 +316,7 @@ class Slice:
 
     def load_struct(self, addr: int, struct_type: struct, endian="little"):
         field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?
-        fields = [addr]
+        fields = [addr, self.macho_file.file[addr:addr + sizeof(struct_type)]]
         ea = addr
 
         for field in struct_type.sizes:
@@ -326,7 +326,7 @@ class Slice:
 
         if len(fields) != len(field_names):
             raise ValueError(
-                f'Field count mismatch in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size Array.')
+                f'Field count mismatch {len(fields)} vs {len(field_names)} in load_struct for {str(struct_type.struct)}.\nCheck Fields and Size Array.')
 
         # noinspection PyProtectedMember
         return struct_type.struct._make(fields)
@@ -340,7 +340,6 @@ class Slice:
         return self.macho_file.file[addr:addr + count].decode().rstrip('\x00')
 
     def get_cstr_at(self, addr: int, limit: int = 0):
-        # TODO: This still has issues sometimes
         addr = addr + self.offset
         self.macho_file.file.seek(addr)
         text = self.macho_file.file[addr:self.macho_file.file.find(b"\x00")].decode()
@@ -380,11 +379,13 @@ class Slice:
             elif cpu_type & 0xF == 0xC:
                 return CPUType.ARM
 
-        log.error(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct}). File an issue at https://github.com/kritantadev/ktool')
+        log.error(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct}). File an issue at '
+                  f'https://github.com/kritantadev/ktool')
         return CPUType.ARM
 
     def _load_subtype(self):
         cpu_subtype = self.arch_struct.cpusubtype
+        subtype_ret = None
 
         submap = {
             0: CPUSubType.ARM64_ALL,
@@ -399,6 +400,7 @@ class Slice:
         try:
             subtype_ret = submap[cpu_subtype]
         except KeyError:
-            log.error(f'Unknown CPU SubType ({hex(cpu_subtype)}) ({self.arch_struct}). File an issue at https://github.com/kritantadev/ktool')
+            log.error(f'Unknown CPU SubType ({hex(cpu_subtype)}) ({self.arch_struct}). File an issue at '
+                      f'https://github.com/kritantadev/ktool')
             exit()
         return subtype_ret

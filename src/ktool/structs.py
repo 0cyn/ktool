@@ -20,7 +20,7 @@ from collections import namedtuple
 
 struct = namedtuple("struct", ["struct", "sizes"])
 
-symtab_entry = namedtuple("symtab_entry", ["off", "str_index", "type", "sect_index", "desc", "value"])
+symtab_entry = namedtuple("symtab_entry", ["off", "raw", "str_index", "type", "sect_index", "desc", "value"])
 symtab_entry_t = struct(symtab_entry, [4, 1, 1, 2, 8])
 
 
@@ -31,6 +31,7 @@ def sizeof(t: struct):
 
 class fat_header(NamedTuple):
     off: int
+    raw: bytes
     magic: int
     nfat_archs: int
 
@@ -40,6 +41,7 @@ fat_header_t = struct(fat_header, [4, 4])
 
 class fat_arch(NamedTuple):
     off: int
+    raw: bytes
     cputype: int
     cpusubtype: int
     offset: int
@@ -52,6 +54,7 @@ fat_arch_t = struct(fat_arch, [4, 4, 4, 4, 4])
 
 class dyld_header(NamedTuple):
     off: int
+    raw: bytes
     header: int
     cputype: int
     cpu_subtype: int
@@ -67,6 +70,7 @@ dyld_header_t = struct(dyld_header, [4, 4, 4, 4, 4, 4, 4, 4])
 
 class dylib(NamedTuple):
     off: int
+    raw: bytes
     name: int
     timestamp: int
     current_version: int
@@ -78,8 +82,15 @@ dylib_t = struct(dylib, [4, 4, 4, 4])
 
 class unk_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
+
+    def desc(self, library=None):
+        return 'Unrecognized command'
+
+    def __str__(self):
+        return 'unk_command'
 
 
 unk_command_t = struct(unk_command, [4, 4])
@@ -87,9 +98,31 @@ unk_command_t = struct(unk_command, [4, 4])
 
 class dylib_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     dylib: int
+
+    def desc(self, library=None):
+        if self.cmd == 0xD:
+            ref_dylib = library.dylib
+        else:
+            for exlib in library.linked:
+                if exlib.cmd.off == self.off:
+                    ref_dylib = exlib
+                    break
+        lines = []
+        if ref_dylib.local:
+            lines.append('"Local" dylib Command')
+        if ref_dylib.weak:
+            lines.append('Weak Linked')
+        lines.append(f'Install Name: {ref_dylib.install_name}')
+        return '\n'.join(lines)
+
+    def __str__(self):
+        if self.cmd == 0xD:
+            return 'dylib_command (local)'
+        return 'dylib_command'
 
 
 dylib_command_t = struct(dylib_command, [4, 4, 16])
@@ -97,9 +130,16 @@ dylib_command_t = struct(dylib_command, [4, 4, 16])
 
 class dylinker_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     name: int
+
+    def desc(self, library=None):
+        return ''
+
+    def __str__(self):
+        return 'dylinker_cmd'
 
 
 dylinker_command_t = struct(dylinker_command, [4, 4, 4])
@@ -107,10 +147,22 @@ dylinker_command_t = struct(dylinker_command, [4, 4, 4])
 
 class entry_point_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     entryoff: int
+    raw: bytes
     stacksize: int
+
+    def desc(self, library=None):
+        lines = [
+            f'Entry Offset: {hex(self.entryoff)}',
+            f'Stack Size: {hex(self.stacksize)}'
+        ]
+        return '\n'.join(lines)
+
+    def __str__(self):
+        return 'entry_point_cmd'
 
 
 entry_point_command_t = struct(entry_point_command, [4, 4, 8, 8])
@@ -118,9 +170,16 @@ entry_point_command_t = struct(entry_point_command, [4, 4, 8, 8])
 
 class rpath_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     path: int
+    
+    def desc(self, library=None):
+        return library.rpath
+    
+    def __str__(self):
+        return 'rpath_command'
 
 
 rpath_command_t = struct(rpath_command, [4, 4, 4])
@@ -128,18 +187,42 @@ rpath_command_t = struct(rpath_command, [4, 4, 4])
 
 class dyld_info_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     rebase_off: int
+    raw: bytes
     rebase_size: int
     bind_off: int
+    raw: bytes
     bind_size: int
     weak_bind_off: int
+    raw: bytes
     weak_bind_size: int
     lazy_bind_off: int
+    raw: bytes
     lazy_bind_size: int
     export_off: int
+    raw: bytes
     export_size: int
+
+    def desc(self, library=None):
+        lines = [
+            f'Rebase Table Offset: {hex(self.rebase_off)}',
+            f'Rebase Size: {hex(self.rebase_size)}',
+            f'Binding Table Offset: {hex(self.bind_off)}',
+            f'Binding Table Size: {hex(self.bind_size)}',
+            f'Weak Binding Table Offset: {hex(self.weak_bind_off)}',
+            f'Weak Binding Table Size: {hex(self.weak_bind_size)}',
+            f'Lazy Binding Table Offset: {hex(self.lazy_bind_off)}',
+            f'Lazy Binding Table Size: {hex(self.lazy_bind_size)}',
+            f'Export Table Offset: {hex(self.export_off)}',
+            f'Export Table Size: {hex(self.export_size)}'
+        ]
+        return '\n'.join(lines)
+
+    def __str__(self):
+        return 'dyld_info_command'
 
 
 dyld_info_command_t = struct(dyld_info_command, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])
@@ -147,12 +230,27 @@ dyld_info_command_t = struct(dyld_info_command, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
 
 class symtab_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     symoff: int
+    raw: bytes
     nsyms: int
     stroff: int
+    raw: bytes
     strsize: int
+
+    def desc(self, library=None):
+        lines = [
+            f'Symbol Table Offset: {hex(self.symoff)}',
+            f'Number of Symtab Entries: {self.nsyms}',
+            f'String Table Offset: {hex(self.stroff)}',
+            f'Size of String Table: {hex(self.strsize)}'
+        ]
+        return '\n'.join(lines)
+
+    def __str__(self):
+        return 'symtab_command'
 
 
 symtab_command_t = struct(symtab_command, [4, 4, 4, 4, 4, 4])
@@ -160,34 +258,70 @@ symtab_command_t = struct(symtab_command, [4, 4, 4, 4, 4, 4])
 
 class dysymtab_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     ilocalsym: int
     nlocalsym: int
     iextdefsym: int
     nextdefsym: int
+    iundefsym: int
+    nundefsym: int
     tocoff: int
+    raw: bytes
     ntoc: int
     modtaboff: int
+    raw: bytes
     nmodtab: int
     extrefsymoff: int
+    raw: bytes
     nextrefsyms: int
     indirectsymoff: int
+    raw: bytes
     nindirectsyms: int
     extreloff: int
+    raw: bytes
     nextrel: int
     locreloff: int
+    raw: bytes
     nlocrel: int
 
+    def desc(self, library=None):
+        lines = [f'Index to local symbols: {self.ilocalsym}', f'Number of Local Symbols: {self.nlocalsym}',
+                 f'Index to Externally Defined Symbols: {self.iextdefsym}',
+                 f'Number of Indirect External Symbols: {self.nextdefsym}',
+                 f'Index to Undefined symbols: {self.iundefsym}', f'Number of Local Symbols: {self.nundefsym}',
+                 f'File Offset to table of contents: {hex(self.tocoff)}', f'Table of Contents Entries: {self.ntoc}',
+                 f'Module Table File Offset: {hex(self.modtaboff)}', f'Module Table Entries: {self.nmodtab}',
+                 f'Offset to referenced symbol table: {hex(self.extrefsymoff)}',
+                 f'Number of entries in that table: {self.nextrefsyms}',
+                 f'Offset to indirect symbol table: {hex(self.indirectsymoff)}',
+                 f'Number of indirect symtab entries: {self.nindirectsyms}',
+                 f'File offset to external reloc entries: {hex(self.extreloff)}',
+                 f'Number of external reloc entries: {self.nextrel}',
+                 f'Local relocation entries: {hex(self.locreloff)}',
+                 f'Number of local relocation entries: {self.nlocrel}']
+        return '\n'.join(lines)
 
-dysymtab_command_t = struct(dysymtab_command, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])
+    def __str__(self):
+        return 'dysymtab_command'
+
+
+dysymtab_command_t = struct(dysymtab_command, [4, 4, 4, 4, 4,   4, 4, 4, 4, 4,   4, 4, 4, 4, 4,   4, 4, 4, 4, 4])
 
 
 class uuid_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     uuid: int
+
+    def desc(self, library=None):
+        return f'Library UUID: {self.uuid.to_bytes(16, "little").hex().upper()}'
+
+    def __str__(self):
+        return 'uuid_command'
 
 
 uuid_command_t = struct(uuid_command, [4, 4, 16])
@@ -195,6 +329,7 @@ uuid_command_t = struct(uuid_command, [4, 4, 16])
 
 class build_version_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     platform: int
@@ -202,15 +337,33 @@ class build_version_command(NamedTuple):
     sdk: int
     ntools: int
 
+    def desc(self, library=None):
+        lines = []
+        lines.append(f'Platform: {library.platform.name}')
+        lines.append(f'Minimum OS {library.minos.x}.{library.minos.y}.{library.minos.z}')
+        lines.append(f'SDK Version {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')
+        lines.append(f'ntools: {self.ntools}')
+        return '\n'.join(lines)
+
+    def __str__(self):
+        return 'build_version_cmd'
+
 
 build_version_command_t = struct(build_version_command, [4, 4, 4, 4, 4, 4])
 
 
 class source_version_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     version: int
+
+    def desc(self, library=None):
+        return ''
+
+    def __str__(self):
+        return 'source_version_command'
 
 
 source_version_command_t = struct(source_version_command, [4, 4, 8])
@@ -218,9 +371,17 @@ source_version_command_t = struct(source_version_command, [4, 4, 8])
 
 class sub_client_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     offset: int
+
+    def desc(self, library=None):
+        subclient_name = library.get_cstr_at(self.off + self.offset)
+        return f'Subclient: {subclient_name}'
+
+    def __str__(self):
+        return 'sub_client_cmd'
 
 
 sub_client_command_t = struct(sub_client_command, [4, 4, 4])
@@ -228,10 +389,19 @@ sub_client_command_t = struct(sub_client_command, [4, 4, 4])
 
 class linkedit_data_command(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     dataoff: int
+    raw: bytes
     datasize: int
+
+    def desc(self, library=None):
+        lines = [f'LinkEdit Data Offset: {hex(self.dataoff)}', f'LinkEdit Data Size: {hex(self.datasize)}']
+        return '\n'.join(lines)
+
+    def __str__(self):
+        return f'linkedit_data_command'
 
 
 linkedit_data_command_t = struct(linkedit_data_command, [4, 4, 4, 4])
@@ -239,17 +409,35 @@ linkedit_data_command_t = struct(linkedit_data_command, [4, 4, 4, 4])
 
 class segment_command_64(NamedTuple):
     off: int
+    raw: bytes
     cmd: int
     cmdsize: int
     segname: int
     vmaddr: int
     vmsize: int
     fileoff: int
+    raw: bytes
     filesize: int
     maxprot: int
     initprot: int
     nsects: int
     flags: int
+
+    def desc(self, library=None):
+        segname_hex = hex(self.segname)[2:]
+        segn_bytes = bytes.fromhex(segname_hex)
+        segname = segn_bytes.decode("ascii")[::-1]
+        lines = [f'Command: {hex(self.cmd)}', f'Command Size: {hex(self.cmdsize)}', f'Segment Name: {segname}',
+                 f'VM Address: {hex(self.vmaddr)}', f'VM Size: {hex(self.vmsize)}', f'File Offset: {hex(self.fileoff)}',
+                 f'File Size: {hex(self.filesize)}', f'maxprot: {hex(self.maxprot)}', f'initprot: {hex(self.initprot)}',
+                 f'Number of Sections: {self.nsects}', f'Flags: {hex(self.flags)}']
+        return '\n'.join(lines)
+
+    def __str__(self):
+        segname_hex = hex(self.segname)[2:]
+        segn_bytes = bytes.fromhex(segname_hex)
+        segname = segn_bytes.decode("ascii")[::-1]
+        return f'segment_command_64'
 
 
 segment_command_64_t = struct(segment_command_64, [4, 4, 16, 8, 8, 8, 8, 4, 4, 4, 4])
@@ -257,6 +445,7 @@ segment_command_64_t = struct(segment_command_64, [4, 4, 16, 8, 8, 8, 8, 4, 4, 4
 
 class section_64(NamedTuple):
     off: int
+    raw: bytes
     sectname: int
     segname: int
     addr: int
@@ -264,6 +453,7 @@ class section_64(NamedTuple):
     offset: int
     align: int
     reloff: int
+    raw: bytes
     nreloc: int
     flags: int
     void1: int
@@ -297,6 +487,7 @@ LOAD_COMMAND_TYPEMAP = {
 
 class objc2_class(NamedTuple):
     off: int
+    raw: bytes
     isa: int
     superclass: int
     cache: int
@@ -309,6 +500,7 @@ objc2_class_t = struct(objc2_class, [8, 8, 8, 8, 8])
 
 class objc2_class_ro(NamedTuple):
     off: int
+    raw: bytes
     flags: int
     ivar_base_start: int
     ivar_base_size: int
@@ -327,6 +519,7 @@ objc2_class_ro_t = struct(objc2_class_ro, [4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8])
 
 class objc2_meth(NamedTuple):
     off: int
+    raw: bytes
     selector: int
     types: int
     imp: int
@@ -338,6 +531,7 @@ objc2_meth_list_entry_t = struct(objc2_meth, [4, 4, 4])
 
 class objc2_meth_list(NamedTuple):
     off: int
+    raw: bytes
     entrysize: int
     count: int
 
@@ -347,6 +541,7 @@ objc2_meth_list_t = struct(objc2_meth_list, [4, 4])
 
 class objc2_prop_list(NamedTuple):
     off: int
+    raw: bytes
     entrysize: int
     count: int
 
@@ -356,6 +551,7 @@ objc2_prop_list_t = struct(objc2_prop_list, [4, 4])
 
 class objc2_prop(NamedTuple):
     off: int
+    raw: bytes
     name: int
     attr: int
 
@@ -365,6 +561,7 @@ objc2_prop_t = struct(objc2_prop, [8, 8])
 
 class objc2_prot_list(NamedTuple):
     off: int
+    raw: bytes
     cnt: int
 
 
@@ -373,6 +570,7 @@ objc2_prot_list_t = struct(objc2_prot_list, [8])
 
 class objc2_prot(NamedTuple):
     off: int
+    raw: bytes
     isa: int
     name: int
     prots: int
@@ -390,6 +588,7 @@ objc2_prot_t = struct(objc2_prot, [8, 8, 8, 8, 8, 8, 8, 8, 4, 4])
 
 class objc2_ivar_list(NamedTuple):
     off: int
+    raw: bytes
     entrysize: int
     cnt: int
 
@@ -399,6 +598,7 @@ objc2_ivar_list_t = struct(objc2_ivar_list, [4, 4])
 
 class objc2_ivar(NamedTuple):
     off: int
+    raw: bytes
     offs: int
     name: int
     type: int
@@ -411,6 +611,7 @@ objc2_ivar_t = struct(objc2_ivar, [8, 8, 8, 4, 4])
 
 class objc2_category(NamedTuple):
     off: int
+    raw: bytes
     name: int
     s_class: int
     inst_meths: int

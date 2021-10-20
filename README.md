@@ -32,8 +32,8 @@ pip3 install --upgrade k2l
 
 ```
 > $ ktool
- Usage: ktool [command] <flags> [filename]
-
+Usage: ktool [command] <flags> [filename]
+    
     Commands for ktool:
 
     MachO ---
@@ -45,20 +45,9 @@ pip3 install --upgrade k2l
 
     IMG4  ---
         img4 - IMG4 Utilities
-
+    
     Run `ktool [command]`  for info/examples on using that command
 ```
-
-
-Run `ktool` after install for a list of commands and how to use them.
-
-### Project purpose and goals
-
-ktool is designed to be a powerful aid in reverse engineering/development for darwin systems.
-
-It is written in python with *zero* compiled dependencies or platform stipulations (as a rule), meaning it can run anywhere python can run, with hopefully no BS/setup/compilation required.
-
-The goal of this project is to provide an actively maintained, platform independent alternative to a ton of (*very useful, amazing*) tools available, and to package them as python libraries to be used in other projects.
 
 ### Documentation
 
@@ -66,13 +55,13 @@ https://ktool.rtfd.io
 
 ---
 
-written in python for the sake of platform independence when operating on static binaries and libraries
+written in pure, 100% python for the sake of platform independence when operating on static binaries and libraries. 
+this should run on any and all implementations of python3.
 
 #### Special thanks to
-
-Blacktop for their amazing ipsw project: https://github.com/blacktop/ipsw  
-if you haven't seen this yet, it's like my tool but stable and better and stuff. written in golang. it is a godsend.
 
 JLevin and *OS Internals for extremely extensive documentation on previously undocumented APIs 
 
 arandomdev for guidance + code
+
+Blacktop for their amazing ipsw project: https://github.com/blacktop/ipsw  

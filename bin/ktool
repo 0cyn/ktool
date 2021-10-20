@@ -32,6 +32,8 @@ from ktool import (
 
 from kimg4.img4 import IM4P
 
+from ktool.window import KToolScreen
+
 from enum import Enum
 from argparse import ArgumentParser, ArgumentError
 
@@ -46,12 +48,15 @@ def exit_with_error(error: KToolError, msg):
 
 
 def main():
-
     parser = ArgumentParser(description="ktool")
     parser.add_argument('--bench', dest='bench', action='store_true')
     parser.add_argument('-v', dest='logging_level', type=int)
     parser.set_defaults(func=help_prompt, bench=False, logging_level=0)
     subparsers = parser.add_subparsers(help='sub-command help')
+
+    parser_open = subparsers.add_parser('open', help='open ktool GUI and browse file')
+    parser_open.add_argument('filename', nargs='?', default='')
+    parser_open.set_defaults(func=_open)
 
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
 
@@ -70,7 +75,8 @@ def main():
     parser_lipo = subparsers.add_parser('lipo', help='Extract/Combine slices')
     parser_lipo.add_argument('--extract', dest='extract', type=str, help='Extract a slice (--extract arm64)')
     parser_lipo.add_argument('--out', dest='out', help="Output File")
-    parser_lipo.add_argument('--create', dest='combine', action='store_true', help="Combine files to create a fat mach-o library")
+    parser_lipo.add_argument('--create', dest='combine', action='store_true',
+                             help="Combine files to create a fat mach-o library")
     parser_lipo.add_argument('filename', nargs='*', default='')
     parser_lipo.set_defaults(func=lipo, out="", combine=False)
 
@@ -98,7 +104,8 @@ def main():
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Actions")
     parser_list.add_argument('filename', nargs='?', default='')
-    parser_list.set_defaults(func=_list, get_syms=False, get_classes=False, get_protos=False, get_linked=False, get_binding=False)
+    parser_list.set_defaults(func=_list, get_syms=False, get_classes=False, get_protos=False, get_linked=False,
+                             get_binding=False)
 
     args = parser.parse_args()
 
@@ -131,6 +138,9 @@ def help_prompt(args):
     
     Commands for ktool:
 
+    GUI ---
+        ktool open [filename] - Open the ktool command line GUI and browse a file
+
     MachO ---
         dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
         file - Print very basic info about the MachO
@@ -144,6 +154,12 @@ def help_prompt(args):
     Run `ktool [command]`  for info/examples on using that command
         """
     print(help_prompt.__doc__)
+
+
+def _open(args):
+    log.LOG_LEVEL = LogLevel.NONE
+    screen = KToolScreen()
+    screen.load_file(args.filename)
 
 
 def img4(args):
@@ -247,7 +263,7 @@ def _list(args):
 
         ktool list --linked [filename]
 
-    To print binding actionms for a file
+    To print binding actions for a file
 
         ktool list [--slice n] --binding [filename]
 
@@ -369,7 +385,8 @@ def dump(args):
         objc_lib = ObjCLibrary(library)
 
         if args.outdir is None:
-            exit_with_error(KToolError.ArgumentError, "Missing --out flag (--out <directory>), specifies directory to place headers")
+            exit_with_error(KToolError.ArgumentError,
+                            "Missing --out flag (--out <directory>), specifies directory to place headers")
 
         generator = HeaderGenerator(objc_lib)
         for header_name, header in generator.headers.items():

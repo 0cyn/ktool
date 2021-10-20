@@ -66,6 +66,7 @@ class TapiYAMLWriter:
 
 
 class LogLevel(Enum):
+    NONE = -1
     ERROR = 0
     WARN = 1
     INFO = 2
