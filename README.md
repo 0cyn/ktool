@@ -1,6 +1,6 @@
-<h2 align="center">
-  ktool
-</h2>
+<p align="center">
+<img src=".github/svg/logo.png" alt="Logo" width=500px> 
+</p>
 <h4 align="center">
 Static Mach-O binary metadata analysis tool / information dumper
 </h4>
