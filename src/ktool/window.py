@@ -20,7 +20,6 @@
 #
 # CURRENT TO-DO LIST:::
 # TODO: Properly Abstract out Mouse Clicks / clean up mouse handler code
-# TODO: Fix attributed string wrapping
 #
 # CURRENT FEATURE TO-DO LIST:::
 # TODO: Hex View
@@ -89,25 +88,32 @@ class AttributedString:
 
     @staticmethod
     def ansi_to_attrstr(ansi_str):
+        """This function translates ansi escaped strings (or manually specified ones, by replacing the "escape[" with §),
+                to our Attributed String Format.
+
+        :param ansi_str:
+        :return:
+        """
         pos = 0
         ansi_str = list(ansi_str)
+
         while pos < len(ansi_str):
             if ord(ansi_str[pos]) == 27:
                 ansi_str[pos] = "§"
             pos += 1
+
         ansi_str = "".join(ansi_str)
         ansi_str = ansi_str.replace('§[', '§')
-        # return ansi_str
+
         if ATTR_STRING_DEBUG:
             return ansi_str
+
         pos = 0
         bland_pos = 0
         attr_str = AttributedString(ansi_str)
         bland_str = ""
-        in_attr = False
         attr_start = 0
         attr_end = 0
-        attr = curses.A_NORMAL
         attr_color = 0
         while pos < len(ansi_str):
             if ansi_str[pos] == "§":
@@ -116,11 +122,9 @@ class AttributedString:
                 while ansi_str[pos] != 'm':
                     ansi_escape_code += ansi_str[pos]
                     pos += 1
-                #bland_str += f'[{ansi_escape_code}]'
                 ansi_list = ansi_escape_code.split(';')
 
                 is_reset = False
-                #attr_color = 1
                 first_item = ansi_list[0]
                 if first_item == '38':
                     attr_color = AttributedString.fix_256_code(int(ansi_list[2]))
@@ -147,8 +151,6 @@ class AttributedString:
     @staticmethod
     def fix_256_code(code):
         """Pygments 256 formatter sucks.
-
-
 
         :param code:
         :return:
@@ -425,7 +427,7 @@ class ScrollingDisplayBuffer:
                         self.box.write(x + attr_start, y, text[attr_start:attr_end-1], attr)
                     except PanicException:
                         pass
-                #self.box.write(x, y, str(line.attrs), self.render_attr)
+                # DEBUG: self.box.write(x, y, str(line.attrs), self.render_attr)
             else:
                 self.box.write(x, y, line.ljust(self.width, ' '), self.render_attr)
 
@@ -707,7 +709,6 @@ class SidebarMenuItem:
         :param menu_item: Root item to recurse through children of.
         :return: List of items generated
         """
-        # TODO: Implement Sidebar Indents Here! -depth func arg = 0
         items = [menu_item]
         if menu_item.show_children:
             for child in menu_item.children:
@@ -1476,6 +1477,7 @@ class KToolScreen:
 
         1. Get a keypress ("keypress" includes mouse events because curses)
         2. Send the keypress to the handler, which will update object models, etc.
+        2.5 Handle any exceptions raised by the keypress event.
         3. Redraw all of the views to update the contents of them.
 
         :return:
