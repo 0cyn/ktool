@@ -8,7 +8,7 @@ setup(name='k2l',
       python_requires='>=3.6',
       author='kritanta',
       url='https://github.com/kritantadev/ktool',
-      install_requires=['pyaes', 'kimg4'],
+      install_requires=['pyaes', 'kimg4', 'Pygments'],
       packages=['kmacho', 'ktool'],
       package_dir={
             'kmacho': 'src/kmacho',

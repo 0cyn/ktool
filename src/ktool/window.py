@@ -31,6 +31,11 @@ import curses
 
 from ktool import MachOFile, Dyld, ObjCLibrary, HeaderGenerator
 
+from pygments import highlight
+from pygments.lexers.objective import ObjectiveCLexer
+from pygments.formatters.terminal import TerminalFormatter
+from pygments.formatters.terminal256 import Terminal256Formatter
+
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
 
@@ -54,15 +59,107 @@ Backspace to exit (or click the X in the top right corner).
 PANIC_STRING = ""
 
 
+ATTR_STRING_DEBUG = False
+
+
+class ColorRep:
+    def __init__(self, n):
+        self.n = n
+
+    def get_attr(self):
+        return curses.color_pair(self.n)
+
+
 class Attribute:
     HIGHLIGHTED = curses.A_STANDOUT
     UNDERLINED = curses.A_UNDERLINE
+    COLOR_1 = ColorRep(1)
+    COLOR_2 = ColorRep(2)
+    COLOR_3 = ColorRep(3)
+    COLOR_4 = ColorRep(4)
+    COLOR_5 = ColorRep(5)
+    COLOR_6 = ColorRep(6)
+    COLOR_7 = ColorRep(7)
 
 
 class AttributedString:
     def __init__(self, string: str):
         self.string = string
         self.attrs = []
+
+    @staticmethod
+    def ansi_to_attrstr(ansi_str):
+        pos = 0
+        ansi_str = list(ansi_str)
+        while pos < len(ansi_str):
+            if ord(ansi_str[pos]) == 27:
+                ansi_str[pos] = "§"
+            pos += 1
+        ansi_str = "".join(ansi_str)
+        ansi_str = ansi_str.replace('§[', '§')
+        # return ansi_str
+        if ATTR_STRING_DEBUG:
+            return ansi_str
+        pos = 0
+        bland_pos = 0
+        attr_str = AttributedString(ansi_str)
+        bland_str = ""
+        in_attr = False
+        attr_start = 0
+        attr_end = 0
+        attr = curses.A_NORMAL
+        attr_color = 0
+        while pos < len(ansi_str):
+            if ansi_str[pos] == "§":
+                ansi_escape_code = ""
+                pos += 1
+                while ansi_str[pos] != 'm':
+                    ansi_escape_code += ansi_str[pos]
+                    pos += 1
+                #bland_str += f'[{ansi_escape_code}]'
+                ansi_list = ansi_escape_code.split(';')
+
+                is_reset = False
+                #attr_color = 1
+                first_item = ansi_list[0]
+                if first_item == '38':
+                    attr_color = AttributedString.fix_256_code(int(ansi_list[2]))
+                elif first_item == '39':
+                    is_reset = True
+                elif 30 <= int(first_item) <= 37:
+                    attr_color = int(first_item) - 30 + 8
+
+                if is_reset:
+                    attr_end = bland_pos
+                    attr_str.set_attr(attr_start, attr_end, curses.color_pair(attr_color))
+                else:
+                    attr_start = bland_pos
+                    attr_str.set_attr(attr_end, attr_start, curses.A_NORMAL)
+
+                pos += 1
+            else:
+                bland_str += ansi_str[pos]
+                bland_pos += 1
+                pos += 1
+        attr_str.string = bland_str
+        return attr_str
+
+    @staticmethod
+    def fix_256_code(code):
+        """Pygments 256 formatter sucks.
+
+
+
+        :param code:
+        :return:
+        """
+        if code == 125:
+            return 168
+        if code == 21:
+            return 151
+        if code == 28:
+            return 118
+        return code
 
     def set_attr(self, start, end, attr):
         self.attrs.append([[start, end], attr])
@@ -87,13 +184,23 @@ class ExitProgramException(Exception):
         pass
 
 
+class RebuildAllException(Exception):
+    """Raise this to invoke a rebuild
+    """
+
+
 class PresentDebugMenuException(Exception):
     """Raise this within the runloop to present the debug menu
     """
 
 
 class PresentTitleMenuException(Exception):
-    """Raise this within the runloop to invoke or destroy the Title Bar Menu Rendering code
+    """Raise this within the runloop to invoke the Title Bar Menu Rendering code
+    """
+
+
+class DestroyTitleMenuException(Exception):
+    """Raise this to destroy the menu overlay
     """
 
 
@@ -125,7 +232,7 @@ class RootBox:
             self.stdscr.addstr(y, x, string, attr)
         except curses.error:
             global PANIC_STRING
-            PANIC_STRING = f'Rendering Error while writing {string} @ {x}, {y}\nProgram Panicked'
+            PANIC_STRING = f'Rendering Error while writing {string} @ {x}, {y}\nScreen Bounds: {curses.COLS}x{curses.LINES}\nProgram Panicked'
             raise PanicException
 
 
@@ -183,6 +290,7 @@ class ScrollingDisplayBuffer:
         self.lines = []
         self.processed_lines = []
 
+        self.wrap = True
         self.clean_wrap = True
 
         self.filled_line_count = 0
@@ -220,71 +328,80 @@ class ScrollingDisplayBuffer:
 
         :return:
         """
-        wrapped_lines = []
-        for line in self.lines:
-            attrs = []
-            current_buffer = line
-            if isinstance(line, AttributedString):
-                current_buffer = line.string
-                attrs = line.attrs
-            indent = False
-            x_string_offset = 0
-            while True:
-                stacksize = self.width if not indent else self.width - 10
-                if len(current_buffer) > stacksize:
-                    if indent:
-                        break_index = self.find_clean_breakpoint(current_buffer, self.width - 10)
-                        text = current_buffer[:break_index]
-                        for attr in attrs:
-                            if attr[0][0] <= x_string_offset <= attr[0][1]:
-                                text = AttributedString(text)
-                                text.set_attr(10, len(text.string) - 10, attr[1])
-                            attr[0][0] -= break_index
-                            attr[0][1] -= break_index
-                        current_buffer = current_buffer[break_index:]
-                        if isinstance(text, AttributedString):
-                            text.string = '          ' + text.string
-                        else:
-                            text = '          ' + text
-                    else:
-                        break_index = self.find_clean_breakpoint(current_buffer, self.width)
-                        text = current_buffer[:break_index]
-                        for attr in attrs:
-                            if attr[0][0] <= x_string_offset <= attr[0][1]:
-                                text = AttributedString(text)
-                                text.set_attr(0, len(text.string), attr[1])
-                            attr[0][0] -= break_index
-                            attr[0][1] -= break_index
+        if self.wrap:
+            wrapped_lines = []
+            for line in self.lines:
+                if not isinstance(line, AttributedString):
+                    line = AttributedString(line)
+                max_size = self.width
+                indent_size = 10
+                indenting = False
+                lines = []
+                curs = 0
 
-                        current_buffer = current_buffer[break_index:]
-                    wrapped_lines.append(text)
-                    indent = True
-                else:
-                    text = current_buffer
-
-                    if indent:
-                        if current_buffer.strip() == "":
+                while True:
+                    slice_size = max_size if not indenting else max_size - indent_size
+                    slice_size = min(slice_size, len(line.string) - curs)
+                    text = line.string[curs:curs+slice_size]
+                    if indenting:
+                        text = ' ' * 10 + text
+                    lines.append(text)
+                    curs += slice_size
+                    if len(line.string) - curs <= slice_size:
+                        text = line.string[curs:]
+                        if text.strip() == "":
                             break
+                        text = ' ' * 10 + text
+                        lines.append(text)
+                        break
+                    indenting = True
 
-                        for attr in attrs:
-                            if attr[0][0] <= x_string_offset <= attr[0][1]:
-                                text = AttributedString(text)
-                                text.set_attr(10, len(text.string) - 10, attr[1])
+                if lines[-1] == "" and len(lines) > 1:
+                    lines.pop()
 
-                        if isinstance(text, AttributedString):
-                            text.string = '          ' + text.string
-                        else:
-                            text = '          ' + text
-                    else:
-                        for attr in attrs:
-                            if attr[0][0] <= x_string_offset <= attr[0][1]:
-                                text = AttributedString(text)
-                                text.set_attr(0, len(text.string), attr[1])
-                    wrapped_lines.append(text)
-                    break
+                if len(line.attrs) > 0:
+                    attributes = line.attrs
+                    curs = 0
+                    alines = []
+                    indenting = False
+                    for wline in lines:
+                        if len(wline) > self.width:
+                            global PANIC_STRING
+                            PANIC_STRING = "Line wrapping code failed sanity check: String width was larger than window size"
+                            raise PanicException
+                        attr_str = AttributedString(wline)
+                        for attr in attributes:
+                            attr_start = max(attr[0][0] - curs, 0)
+                            attr_end = attr[0][1] - curs
+                            if attr_end > 0:
+                                if indenting:
+                                    attr_start += 10
+                                    attr_end += 10
+                                attr_str.set_attr(attr_start, attr_end, attr[1])
+                        alines.append(attr_str)
+                        curs += len(wline)
+                        indenting = True
+                    lines = alines
 
-        self.filled_line_count = len(wrapped_lines)
-        self.processed_lines = wrapped_lines
+                wrapped_lines += lines
+
+            self.filled_line_count = len(wrapped_lines)
+            self.processed_lines = wrapped_lines
+
+        else:
+            trunc_lines = []
+            for line in self.lines:
+                if not isinstance(line, AttributedString):
+                    line = AttributedString(line)
+                if len(line.string) > self.width:
+                    slice_size = self.width
+                    line.string = line.string[0:slice_size-3] + "..."
+                    trunc_lines.append(line)
+                else:
+                    trunc_lines.append(line)
+
+            self.filled_line_count = len(self.lines)
+            self.processed_lines = trunc_lines
 
     def draw_lines(self):
         """Update the internal representation of lines to be displayed.
@@ -297,11 +414,18 @@ class ScrollingDisplayBuffer:
         for y, line in enumerate(display_lines):
             if isinstance(line, AttributedString):
                 text = line.string
+                self.box.write(x, y, text, self.render_attr)
                 for attribute in line.attrs:
                     attr_start = attribute[0][0]
-                    attr_end = attribute[0][1]
+                    if attr_start < 0:
+                        continue
+                    attr_end = max(attribute[0][1], self.box.width)
                     attr = attribute[1]
-                    self.box.write(x + attr_start, y, text[attr_start:attr_end], attr)
+                    try:
+                        self.box.write(x + attr_start, y, text[attr_start:attr_end-1], attr)
+                    except PanicException:
+                        pass
+                #self.box.write(x, y, str(line.attrs), self.render_attr)
             else:
                 self.box.write(x, y, line.ljust(self.width, ' '), self.render_attr)
 
@@ -449,6 +573,7 @@ class TitleBar(View):
         self.menu_item_xy_map = {}
 
         self.pres_menu_item = None
+        self.pres_menu_item_index = -1
 
         self.add_menu_item(FileMenuItem())
         self.add_menu_item(EditMenuItem())
@@ -467,11 +592,11 @@ class TitleBar(View):
         if not self.box:
             return
 
-        self.box.write(0, 0, '╒' + '═'.ljust(curses.COLS - 3, '═') + '╕', curses.A_NORMAL)
+        self.box.write(0, 0, '╒' + '═'.ljust(curses.COLS - 3, '═') + '╕', curses.color_pair(9))
         self.box.write(2, 0, f' {WINDOW_NAME} ', curses.A_NORMAL)
-        self.box.write(0, 1, '┟' + ''.ljust(curses.COLS - 3, '━') + '┦', curses.A_NORMAL)
-        self.box.write(TitleBar.MENUS_START, 0, '╤', curses.A_NORMAL)
-        self.box.write(TitleBar.MENUS_START, 1, '┸', curses.A_NORMAL)
+        self.box.write(0, 1, '┟' + ''.ljust(curses.COLS - 3, '━') + '┦', curses.color_pair(9))
+        self.box.write(TitleBar.MENUS_START, 0, '╤', curses.color_pair(9))
+        self.box.write(TitleBar.MENUS_START, 1, '┸', curses.color_pair(9))
         self.box.write(self.box.width - 10, 0, '═ Exit ═', curses.A_NORMAL)
 
         x = TitleBar.MENUS_START + 3
@@ -479,6 +604,29 @@ class TitleBar(View):
             self.box.write(x, 0, item.rend_text, curses.A_NORMAL)
             self.box.write(x + 1, 0, item.rend_text[1], curses.A_UNDERLINE)
             x += item.rend_width + 2
+
+    def handle_key_press(self, key):
+        if self.pres_menu_item_index < 0:
+            return False
+        if key == curses.KEY_LEFT:
+            if self.pres_menu_item_index > 0:
+                n_ind = self.pres_menu_item_index - 1
+                n_item = self.menu_items[n_ind]
+                coords = self.menu_item_xy_map[n_item]
+                self.pres_menu_item = (n_item, coords[0])
+                self.pres_menu_item_index = n_ind
+                raise PresentTitleMenuException
+
+        elif key == curses.KEY_RIGHT:
+            if not self.pres_menu_item_index + 1 >= len(self.menu_items):
+                n_ind = self.pres_menu_item_index + 1
+                n_item = self.menu_items[n_ind]
+                coords = self.menu_item_xy_map[n_item]
+                self.pres_menu_item = (n_item, coords[0])
+                self.pres_menu_item_index = n_ind
+                raise PresentTitleMenuException
+
+        return False
 
     def handle_mouse(self, x, y):
         handle = False
@@ -490,11 +638,13 @@ class TitleBar(View):
 
             if x < 10:
                 raise PresentDebugMenuException
-
+            i = 0
             for item, coords in self.menu_item_xy_map.items():
                 if coords[0] <= x <= coords[0] + item.rend_width:
                     self.pres_menu_item = (item, coords[0])
+                    self.pres_menu_item_index = i
                     raise PresentTitleMenuException
+                i += 1
 
         return handle
 
@@ -516,8 +666,8 @@ class FooterBar(View):
         self.debug_text = ''
 
     def redraw(self):
-        self.box.write(0, 0, '╘' + '═'.ljust(curses.COLS - 3, '═') + '╛', curses.A_NORMAL)
-        self.box.write(FooterBar.MENUS_START, 0, '╧', curses.A_NORMAL)
+        self.box.write(0, 0, '╘' + '═'.ljust(curses.COLS - 3, '═') + '╛', curses.color_pair(9))
+        self.box.write(FooterBar.MENUS_START, 0, '╧', curses.color_pair(9))
 
         if self.show_debug:
             self.box.write(self.box.width - len(self.debug_text) - 5, 0, self.debug_text, curses.A_NORMAL)
@@ -541,6 +691,12 @@ class SidebarMenuItem:
         self.children = []
         self.show_children = False
         self.selected = False
+
+    def parse_mmc(self):
+        attrib_content = []
+        for item in self.content.lines:
+            attrib_content.append(AttributedString.ansi_to_attrstr(item))
+        self.content = MainMenuContentItem(attrib_content)
 
     @staticmethod
     def item_list_with_children(menu_item, depth=1):
@@ -577,9 +733,9 @@ class Sidebar(ScrollView):
         # Redraw right-side divider
         self.update_item_listing()
         for index in range(0, curses.LINES - 2):
-            self.box.write(0, index, VERT_LINE, curses.A_NORMAL)
-            self.box.write(Sidebar.WIDTH, index, VERT_LINE, curses.A_NORMAL)
-        self.box.write(SIDEBAR_WIDTH, 0, '┰', curses.A_NORMAL)
+            self.box.write(0, index, VERT_LINE, curses.color_pair(9))
+            self.box.write(Sidebar.WIDTH, index, VERT_LINE, curses.color_pair(9))
+        self.box.write(SIDEBAR_WIDTH, 0, '┰', curses.color_pair(9))
 
     def select_item(self, index):
         """
@@ -771,26 +927,34 @@ class MainScreen(ScrollView):
         width = curses.COLS - Sidebar.WIDTH - 2
 
         for index in range(0, curses.LINES - 2):
-            self.box.write(width, index, VERT_LINE, curses.A_NORMAL)
+            self.box.write(width, index, VERT_LINE, curses.color_pair(9))
 
         # Redraw the text
         self.scroll_view_text_buffer.draw_lines()
 
         width = curses.COLS - Sidebar.WIDTH - 3
         # Clear and Redraw the Info Box bar
-        self.info_box.write(-1, 1, '╞' + ''.ljust(width, '═') + '╡', curses.A_NORMAL)
-        self.info_box.write(2, 1, f'╡ {self.tabname.strip()} ╞',
-                            curses.A_NORMAL if not self.highlighted else curses.A_STANDOUT)
+        self.info_box.write(-1, 1, '╞' + ''.ljust(width, '═') + '╡', curses.color_pair(9))
+        self.info_box.write(2, 1, f'╡ {self.tabname.strip()} ╞', curses.color_pair(9))
+        self.info_box.write(3, 1, f' {self.tabname.strip()} ', curses.A_NORMAL if not self.highlighted else curses.A_STANDOUT)
 
     def handle_key_press(self, key):
         if key == curses.KEY_UP:
             self.scroll_view_text_buffer.scrollcursor = max(0, self.scroll_view_text_buffer.scrollcursor - 1)
+            self.scroll_view_text_buffer.draw_lines()
+            return True
         elif key == curses.KEY_DOWN:
             self.scroll_view_text_buffer.scrollcursor = min(
                 self.scroll_view_text_buffer.filled_line_count - self.scroll_view_text_buffer.height + 1,
                 self.scroll_view_text_buffer.scrollcursor + 1)
+            self.scroll_view_text_buffer.draw_lines()
+            return True
+        elif key == ord("d"):
+            global ATTR_STRING_DEBUG
+            ATTR_STRING_DEBUG = True
+            raise RebuildAllException
 
-        self.scroll_view_text_buffer.draw_lines()
+        return False
 
 
 class DebugMenu(ScrollView):
@@ -856,10 +1020,10 @@ class MenuOverlayRenderingView(View):
         self.active_render_subbox = Box(None, start[0], start[1], width, height)
 
         for line in range(start[1], start[1] + height):
-            self.box.write(start[0], line, ' ' * width, curses.color_pair(1))
+            self.box.write(start[0], line, ' ' * width, curses.A_STANDOUT)
 
         for linen, item in enumerate([i[0] for i in self.active_render_menu.menu_items]):
-            self.box.write(start[0] + 1, start[1] + 1 + linen, f'{item}', curses.color_pair(1))
+            self.box.write(start[0] + 1, start[1] + 1 + linen, f'{item}', curses.A_STANDOUT)
 
     def handle_mouse(self, x, y):
         if not self.draw or not self.active_render_menu:
@@ -871,14 +1035,14 @@ class MenuOverlayRenderingView(View):
             if y < 0:
                 return False
             if y > len(self.active_render_menu.menu_items):
-                raise PresentTitleMenuException
+                raise DestroyTitleMenuException
             if y == len(self.active_render_menu.menu_items):
                 return False
             item_tup = self.active_render_menu.menu_items[y]
             item_tup[1]()
             return True
 
-        raise PresentTitleMenuException
+        raise DestroyTitleMenuException
 
 
 # # # # #
@@ -890,6 +1054,7 @@ class MenuOverlayRenderingView(View):
 
 
 class KToolMachOLoader:
+    SUPPORTS_256 = False
 
     @staticmethod
     def parent_count(item):
@@ -930,15 +1095,16 @@ class KToolMachOLoader:
     def _file(lib, parent=None):
         file_content_item = MainMenuContentItem()
 
-        file_content_item.lines.append(f'Name: {lib.name}')
-        file_content_item.lines.append(f'Filetype: {lib.macho_header.filetype.name}')
-        file_content_item.lines.append(f'Flags: {", ".join([i.name for i in lib.macho_header.flags])}')
-        file_content_item.lines.append(f'UUID: {lib.uuid.hex().upper()}')
-        file_content_item.lines.append(f'Platform: {lib.platform.name}')
-        file_content_item.lines.append(f'Minimum OS: {lib.minos.x}.{lib.minos.y}.{lib.minos.z}')
-        file_content_item.lines.append(f'SDK Version: {lib.sdk_version.x}.{lib.sdk_version.y}.{lib.sdk_version.z}')
+        file_content_item.lines.append(f'Name: §35m{lib.name}§39m')
+        file_content_item.lines.append(f'Filetype: §35m{lib.macho_header.filetype.name}§39m')
+        file_content_item.lines.append(f'Flags: §35m{"§39m, §35m".join([i.name for i in lib.macho_header.flags])}§39m')
+        file_content_item.lines.append(f'UUID: §35m{lib.uuid.hex().upper()}§39m')
+        file_content_item.lines.append(f'Platform: §35m{lib.platform.name}§39m')
+        file_content_item.lines.append(f'Minimum OS: §35m{lib.minos.x}.{lib.minos.y}.{lib.minos.z}§39m')
+        file_content_item.lines.append(f'SDK Version: §35m{lib.sdk_version.x}.{lib.sdk_version.y}.{lib.sdk_version.z}§39m')
 
         menuitem = SidebarMenuItem("File Info", file_content_item, parent)
+        menuitem.parse_mmc()
 
         return menuitem
 
@@ -949,6 +1115,7 @@ class KToolMachOLoader:
             linked_libs_item.lines.append('(Weak) ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
 
         menuitem = SidebarMenuItem("Linked Libraries", linked_libs_item, parent)
+        menuitem.parse_mmc()
         return menuitem
 
     @staticmethod
@@ -967,6 +1134,7 @@ class KToolMachOLoader:
             lc_menu_item = SidebarMenuItem(str(cmd), mmci, menuitem)
             menuitem.children.append(lc_menu_item)
 
+        menuitem.parse_mmc()
         return menuitem
 
     @staticmethod
@@ -978,6 +1146,7 @@ class KToolMachOLoader:
 
         menuitem = SidebarMenuItem("Symbol Table", mmci, parent)
 
+        menuitem.parse_mmc()
         return menuitem
 
     @staticmethod
@@ -988,6 +1157,7 @@ class KToolMachOLoader:
 
         menuitem = SidebarMenuItem("VM Memory Map", mmci, parent)
 
+        menuitem.parse_mmc()
         return menuitem
 
     @staticmethod
@@ -1004,12 +1174,13 @@ class KToolMachOLoader:
         for sym in lib.binding_table.symbol_table:
             try:
                 mmci.lines.append(
-                    f'{sym.name.ljust(20, " ")} | {hex(sym.addr).ljust(15, " ")} | {lib.linked[int(sym.ordinal) - 1].install_name} | | {sym.type}')
-            except AttributeError:
+                    f'{sym.name.ljust(20, " ")} | {hex(sym.addr).ljust(15, " ")} | {lib.linked[int(sym.ordinal) - 1].install_name} | {sym.type}')
+            except IndexError:
                 pass
 
         menuitem = SidebarMenuItem("Binding Info", mmci, parent)
 
+        menuitem.parse_mmc()
         return menuitem
 
     @staticmethod
@@ -1021,10 +1192,15 @@ class KToolMachOLoader:
 
         for header_name, header in generator.headers.items():
             mmci = MainMenuContentItem()
-            mmci.lines = header.text.split('\n')
+            formatter = Terminal256Formatter() if KToolMachOLoader.SUPPORTS_256 else TerminalFormatter()
+            text = highlight(header.text, ObjectiveCLexer(), formatter)
+            lines = text.split('\n')
+            mmci.lines = lines
             h_menu_item = SidebarMenuItem(header_name, mmci, menuitem)
+            h_menu_item.parse_mmc()
             menuitem.children.append(h_menu_item)
 
+        menuitem.parse_mmc()
         return menuitem
 
 
@@ -1043,6 +1219,7 @@ class KToolScreen:
     def __init__(self):
 
         self.supports_color = False
+        self.supported_colors = 0
 
         self.stdscr = self.setup()
 
@@ -1095,7 +1272,9 @@ class KToolScreen:
         curses.curs_set(0)
 
         self.supports_color = curses.has_colors()
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        for i in range(0, curses.COLORS):
+            curses.init_pair(i + 1, i, -1)
+            self.supported_colors += 1
 
         return stdscr
 
@@ -1140,6 +1319,8 @@ class KToolScreen:
         :return:
         """
         try:
+            # KToolMachOLoader.SUPPORTS_256 = self.supported_colors > 200
+
             self.mainscreen.scroll_view_text_buffer.lines = [f'Loading {filename}...']
             self.redraw_all()
 
@@ -1153,7 +1334,7 @@ class KToolScreen:
                 self.sidebar.add_menu_item(item)
 
             self.active_key_handler = self.sidebar
-            self.key_handlers = [self.sidebar, self.mainscreen]
+            self.key_handlers = [self.sidebar, self.mainscreen, self.titlebar]
             self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu]
 
             self.program_loop()
@@ -1187,8 +1368,9 @@ class KToolScreen:
         self.sidebar.box = Box(self.root, 0, 1, Sidebar.WIDTH, curses.LINES - 2)
 
         self.sidebar.scroll_view = Box(self.root, 1, 2, Sidebar.WIDTH - 2, curses.LINES - 4)
-        self.sidebar.scroll_view_text_buffer = ScrollingDisplayBuffer(self.sidebar.scroll_view, 1, 0, Sidebar.WIDTH - 5,
+        self.sidebar.scroll_view_text_buffer = ScrollingDisplayBuffer(self.sidebar.scroll_view, 1, 0, Sidebar.WIDTH - 4,
                                                                       curses.LINES - 5)
+        self.sidebar.scroll_view_text_buffer.wrap = False
 
         width = curses.COLS - Sidebar.WIDTH - 2
         self.mainscreen.box = Box(self.root, Sidebar.WIDTH, 1, width, curses.LINES - 2)
@@ -1234,15 +1416,18 @@ class KToolScreen:
 
         self.stdscr.refresh()
 
-    def handle_present_menu_exception(self):
-        if self.is_showing_menu_overlay:
+    def handle_present_menu_exception(self, yes):
+        if not yes:
             self.title_menu_overlay.draw = False
             self.is_showing_menu_overlay = False
+            self.titlebar.pres_menu_item_index = -1
+            self.active_key_handler = self.sidebar
         else:
             self.title_menu_overlay.draw = True
             self.title_menu_overlay.active_render_menu = self.titlebar.pres_menu_item[0]
             self.title_menu_overlay.active_menu_start_x = self.titlebar.pres_menu_item[1]
             self.is_showing_menu_overlay = True
+            self.active_key_handler = self.titlebar
 
     def handle_mouse(self, x, y):
         self.last_mouse_event = f'M: x={x}, y={y}'
@@ -1280,7 +1465,10 @@ class KToolScreen:
                 self.mainscreen.highlighted = False
 
         else:
-            self.active_key_handler.handle_key_press(c)
+            if not self.active_key_handler.handle_key_press(c):
+                for handler in self.key_handlers[::-1]:
+                    if handler.handle_key_press(c):
+                        break
 
     def program_loop(self):
         """
@@ -1302,8 +1490,16 @@ class KToolScreen:
 
                 self.redraw_all()
 
+            except RebuildAllException:
+                self.rebuild_all()
+                self.redraw_all()
+
             except PresentTitleMenuException:
-                self.handle_present_menu_exception()
+                self.handle_present_menu_exception(True)
+                self.redraw_all()
+
+            except DestroyTitleMenuException:
+                self.handle_present_menu_exception(False)
                 self.redraw_all()
 
             except PresentDebugMenuException:
