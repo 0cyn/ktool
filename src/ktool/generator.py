@@ -14,6 +14,7 @@
 
 import os
 
+from . import log
 from .macho import Slice
 from .objc import ObjCLibrary
 from .dyld import Dyld, SymbolType
@@ -132,8 +133,8 @@ class FatMachOGenerator:
         :rtype: fat_arch_for_slice
         """
         lib = Dyld.load(fat_slice)
-        cputype = lib.macho_header.dyld_header.cpu
-        cpu_subtype = lib.macho_header.dyld_header.cput
+        cputype = lib.macho_header.dyld_header.cputype
+        cpu_subtype = lib.macho_header.dyld_header.cpu_subtype
 
         if len(fat_slice.macho_file.slices) > 1:
             size = fat_slice.arch_struct.size
@@ -165,7 +166,6 @@ class FatMachOGenerator:
                 if offset > previous_fat_arch.offset + previous_fat_arch.size:
                     break
 
-        print(hex(offset))
-        print(hex(size))
+        log.debug(f'Create arch with offset {hex(offset)} and size {hex(size)}')
 
         return fat_arch_for_slice(fat_slice, cputype, cpu_subtype, offset, size, align_directive)

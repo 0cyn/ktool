@@ -17,6 +17,7 @@
 import os
 import pprint
 
+from kmacho import LOAD_COMMAND
 from ktool import (
     Dyld,
     TBDGenerator,
@@ -27,7 +28,7 @@ from ktool import (
     ObjCLibrary,
     TapiYAMLWriter,
     log,
-    LogLevel
+    LogLevel, entry_point_command_t, sizeof, dylib_command_t, dylib, dylib_command
 )
 
 from kimg4.img4 import IM4P
@@ -35,7 +36,7 @@ from kimg4.img4 import IM4P
 from ktool.window import KToolScreen
 
 from enum import Enum
-from argparse import ArgumentParser, ArgumentError
+from argparse import ArgumentParser
 
 
 class KToolError(Enum):
@@ -57,6 +58,13 @@ def main():
     parser_open = subparsers.add_parser('open', help='open ktool GUI and browse file')
     parser_open.add_argument('filename', nargs='?', default='')
     parser_open.set_defaults(func=_open)
+
+    parser_insert = subparsers.add_parser('insert', help='Insert data into MachO Binary')
+    parser_insert.add_argument('filename', nargs='?', default='')
+    parser_insert.add_argument('--lc', dest='lc', help="Type of Load Command to insert")
+    parser_insert.add_argument('--payload', dest='payload', help="Payload (if required) for insertion")
+    parser_insert.add_argument('--out', dest='out', help="Output file destination for patches")
+    parser_insert.set_defaults(func=insert, out=None, lc=None, payload=None)
 
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
 
@@ -141,14 +149,17 @@ def help_prompt(args):
     GUI ---
         ktool open [filename] - Open the ktool command line GUI and browse a file
 
-    MachO ---
+    MachO Editing ---
+        insert - Utils for inserting load commands into MachO Binaries
+
+    MachO Analysis ---
         dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
         file - Print very basic info about the MachO
         lipo - Utilities for combining/separating slices in fat MachO files.
         list - Dumps certain tables from MachOs
         info - Dump misc info about the target mach-o
 
-    IMG4  ---
+    Misc Utilities ---
         img4 - IMG4 Utilities
     
     Run `ktool [command]`  for info/examples on using that command
@@ -160,6 +171,57 @@ def _open(args):
     log.LOG_LEVEL = LogLevel.NONE
     screen = KToolScreen()
     screen.load_file(args.filename)
+
+
+def insert(args):
+    """
+    ktool insert
+    Utils for inserting load commands into mach-o binaries
+
+    insert a LOAD_DYLIB command
+
+        ktool insert --lc load --payload /Dylib/Install/Name/Here.dylib --out <output filename> [filename]
+
+    commands currently supported:
+        load: LOAD_DYLIB
+        load-weak: LOAD_WEAK_DYLIB
+        lazy-load: LAZY_LOAD_DYLIB
+        load-upward: LOAD_UPWARD_DYLIB
+    """
+    lc = None
+    if args.lc == "load":
+        lc = LOAD_COMMAND.LOAD_DYLIB
+    elif args.lc == "load-weak" or args.lc == "load_weak":
+        lc = LOAD_COMMAND.LOAD_WEAK_DYLIB
+    elif args.lc in ["load_lazy", "load-lazy", "lazy-load", "lazy_load"]:
+        lc = LOAD_COMMAND.LAZY_LOAD_DYLIB
+    elif args.lc == "load-upward" or args.lc == "load_upward":
+        lc = LOAD_COMMAND.LOAD_UPWARD_DYLIB
+
+    patched_libraries = []
+
+    with open(args.filename, 'rb') as fp:
+        machofile = MachOFile(fp)
+        for macho_slice in machofile.slices:
+            library = Dyld.load(macho_slice)
+            last_dylib_command_index = -1
+            for i, cmd in enumerate(library.macho_header.load_commands):
+                if isinstance(cmd, dylib_command):
+                    last_dylib_command_index = i+1
+            dylib_item = dylib.assemble()
+            library.insert_lc_with_suf(dylib_command_t, lc, [dylib_item.raw], args.payload, last_dylib_command_index)
+            patched_libraries.append(library)
+
+    with open(args.out, 'wb') as fd:
+        if len(patched_libraries) > 1:
+            slices = [library.slice for library in patched_libraries]
+            fat_generator = FatMachOGenerator(slices)
+            fd.write(fat_generator.fat_head)
+            for arch in fat_generator.fat_archs:
+                fd.seek(arch.offset)
+                fd.write(arch.slice.patched_bytes())
+        else:
+            fd.write(patched_libraries[0].slice.patched_bytes())
 
 
 def img4(args):

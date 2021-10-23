@@ -11,12 +11,12 @@
 #
 #  Copyright (c) kat 2021.
 #
+import math
 
 from kmacho import *
 
 from typing import NamedTuple
 from collections import namedtuple
-
 
 struct = namedtuple("struct", ["struct", "sizes"])
 
@@ -27,6 +27,58 @@ symtab_entry_t = struct(symtab_entry, [4, 1, 1, 2, 8])
 def sizeof(t: struct):
     assert isinstance(t, struct)
     return sum(t.sizes)
+
+
+def assemble_lc(struct_t, fields, endian="little"):
+    ol_fields = fields
+    fields = [-1, 0] + fields
+    struct_item = struct_t.struct._make(fields)
+    raw_bytes: bytes = b''
+    new_fields = []
+    for index, field_size in enumerate(struct_t.sizes):
+        original_field = ol_fields[index]
+        if not isinstance(original_field, bytes):
+            original_field = original_field.to_bytes(field_size, endian)
+        raw_bytes += original_field
+    new_raw = raw_bytes
+    fields = [0, new_raw] + ol_fields
+    struct_item = struct_t.struct._make(fields)
+    return struct_item
+
+
+def assemble_lc_with_suffix(struct_t, load_command: LOAD_COMMAND, fields, suffix, endian="little"):
+    ol_fields = fields
+    raw_bytes: bytes = b''
+    cmd = load_command.value
+
+    encoded = suffix.encode('utf-8') + b'\x00'
+    cmd_off = 0
+
+    cmdsize = sizeof(LOAD_COMMAND_TYPEMAP[load_command])
+    cmdsize += len(encoded)
+    cmdsize = 0x8 * math.ceil(cmdsize/0x8)
+    raw_bytes += cmd.to_bytes(4, endian)
+    raw_bytes += cmdsize.to_bytes(4, endian)
+
+    for index, field_size in enumerate(struct_t.sizes[2:]):
+        original_field = ol_fields[index]
+        if not isinstance(original_field, bytes):
+            original_field = original_field.to_bytes(field_size, endian)
+        raw_bytes += original_field
+
+    raw_bytes += encoded
+
+    ocmdsize = sizeof(LOAD_COMMAND_TYPEMAP[load_command])
+    ocmdsize += len(encoded)
+    pad_bytes = cmdsize - ocmdsize
+    for i in range(0, pad_bytes):
+        raw_bytes += b'\x00'
+
+    cmd_raw = raw_bytes
+    fields = [cmd_off, cmd_raw, cmd, cmdsize] + ol_fields
+
+    struct_item = struct_t.struct._make(fields)
+    return struct_item
 
 
 class fat_header(NamedTuple):
@@ -76,6 +128,11 @@ class dylib(NamedTuple):
     current_version: int
     compatibility_version: int
 
+    @staticmethod
+    def assemble():
+        raw = b'\x18\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00'
+        return dylib(0, raw, 0x18, 0x2, 0x010000, 0x010000)
+
 
 dylib_t = struct(dylib, [4, 4, 4, 4])
 
@@ -87,7 +144,11 @@ class unk_command(NamedTuple):
     cmdsize: int
 
     def desc(self, library=None):
-        return 'Unrecognized command'
+        ret = []
+        ret.append(f'cmd: {hex(self.cmd)}')
+        ret.append(f'cmdsize: {hex(self.cmdsize)}')
+        ret.append(f'raw: {str(self.raw)}')
+        return '\n'.join(ret)
 
     def __str__(self):
         return 'unk_command'
@@ -151,7 +212,6 @@ class entry_point_command(NamedTuple):
     cmd: int
     cmdsize: int
     entryoff: int
-    raw: bytes
     stacksize: int
 
     def desc(self, library=None):
@@ -174,10 +234,10 @@ class rpath_command(NamedTuple):
     cmd: int
     cmdsize: int
     path: int
-    
+
     def desc(self, library=None):
         return library.rpath
-    
+
     def __str__(self):
         return 'rpath_command'
 
@@ -191,19 +251,14 @@ class dyld_info_command(NamedTuple):
     cmd: int
     cmdsize: int
     rebase_off: int
-    raw: bytes
     rebase_size: int
     bind_off: int
-    raw: bytes
     bind_size: int
     weak_bind_off: int
-    raw: bytes
     weak_bind_size: int
     lazy_bind_off: int
-    raw: bytes
     lazy_bind_size: int
     export_off: int
-    raw: bytes
     export_size: int
 
     def desc(self, library=None):
@@ -234,10 +289,8 @@ class symtab_command(NamedTuple):
     cmd: int
     cmdsize: int
     symoff: int
-    raw: bytes
     nsyms: int
     stroff: int
-    raw: bytes
     strsize: int
 
     def desc(self, library=None):
@@ -268,22 +321,16 @@ class dysymtab_command(NamedTuple):
     iundefsym: int
     nundefsym: int
     tocoff: int
-    raw: bytes
     ntoc: int
     modtaboff: int
-    raw: bytes
     nmodtab: int
     extrefsymoff: int
-    raw: bytes
     nextrefsyms: int
     indirectsymoff: int
-    raw: bytes
     nindirectsyms: int
     extreloff: int
-    raw: bytes
     nextrel: int
     locreloff: int
-    raw: bytes
     nlocrel: int
 
     def desc(self, library=None):
@@ -307,7 +354,7 @@ class dysymtab_command(NamedTuple):
         return 'dysymtab_command'
 
 
-dysymtab_command_t = struct(dysymtab_command, [4, 4, 4, 4, 4,   4, 4, 4, 4, 4,   4, 4, 4, 4, 4,   4, 4, 4, 4, 4])
+dysymtab_command_t = struct(dysymtab_command, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])
 
 
 class uuid_command(NamedTuple):
@@ -393,7 +440,6 @@ class linkedit_data_command(NamedTuple):
     cmd: int
     cmdsize: int
     dataoff: int
-    raw: bytes
     datasize: int
 
     def desc(self, library=None):
@@ -416,7 +462,6 @@ class segment_command_64(NamedTuple):
     vmaddr: int
     vmsize: int
     fileoff: int
-    raw: bytes
     filesize: int
     maxprot: int
     initprot: int
@@ -453,7 +498,6 @@ class section_64(NamedTuple):
     offset: int
     align: int
     reloff: int
-    raw: bytes
     nreloc: int
     flags: int
     void1: int

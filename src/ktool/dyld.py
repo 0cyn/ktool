@@ -229,6 +229,42 @@ class Library:
         return self.slice.decode_uleb128(readHead)
 
 
+
+    def insert_lc_with_suf(self, struct_t, lc, fields, suffix, index=-1):
+        load_cmd = assemble_lc_with_suffix(struct_t, lc, fields, suffix)
+
+        off = sizeof(dyld_header_t)
+        off += self.macho_header.dyld_header.loadsize
+        raw = load_cmd.raw
+        size = len(load_cmd.raw)
+
+        if index != -1:
+            b_load_cmd = self.macho_header.load_commands[index-1]
+            off = b_load_cmd.off + b_load_cmd.cmdsize
+            after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
+            self.slice.patch(off, raw)
+            self.slice.patch(off+size, after_bytes)
+        else:
+            self.slice.patch(off, raw)
+
+        self.macho_header.load_commands.append(load_cmd)
+
+        nd_header_magic = self.macho_header.dyld_header.header
+        nd_cputype = self.macho_header.dyld_header.cputype
+        nd_cpusub = self.macho_header.dyld_header.cpu_subtype
+        nd_filetype = self.macho_header.dyld_header.filetype
+        nd_loadcnt = self.macho_header.dyld_header.loadcnt + 1
+        nd_loadsize = self.macho_header.dyld_header.loadsize + size
+        nd_flags = self.macho_header.dyld_header.flags
+        nd_void = self.macho_header.dyld_header.void
+
+        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
+        nd_hc_raw = nd_hc.raw
+
+        self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
+        self.macho_header.dyld_header = nd_hc
+
+
 class LibraryHeader:
     """
     This class represents the Mach-O Header
@@ -244,6 +280,7 @@ class LibraryHeader:
         :type macho_slice: Slice
         """
         offset = 0
+        self.slice = macho_slice
         self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header_t)
         self.filetype = MH_FILETYPE(self.dyld_header.filetype)
         self.flags = []
@@ -252,6 +289,61 @@ class LibraryHeader:
                 self.flags.append(flag)
         self.load_commands = []
         self._process_load_commands(macho_slice)
+
+    def raw_bytes(self):
+        size = sizeof(dyld_header_t)
+        size += self.dyld_header.loadsize
+        read_addr = self.dyld_header.off
+        return self.slice.get_bytes_at(read_addr, size)
+
+    def insert_lc_with_suf(self, struct_t, lc, fields, suffix):
+        load_cmd = assemble_lc_with_suffix(struct_t, lc, fields, suffix)
+
+        off = sizeof(dyld_header_t)
+        off += self.dyld_header.loadsize
+        raw = load_cmd.raw
+        size = len(load_cmd.raw)
+        self.slice.patch(off, raw)
+        log.error(str(off) + ' : ' + str(raw))
+        self.load_commands.append(load_cmd)
+
+        nd_header_magic = self.dyld_header.header
+        nd_cputype = self.dyld_header.cputype
+        nd_cpusub = self.dyld_header.cpu_subtype
+        nd_filetype = self.dyld_header.filetype
+        nd_loadcnt = self.dyld_header.loadcnt + 1
+        nd_loadsize = self.dyld_header.loadsize + size
+        nd_flags = self.dyld_header.flags
+        nd_void = self.dyld_header.void
+
+        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
+        nd_hc_raw = nd_hc.raw
+        self.slice.patch(self.dyld_header.off, nd_hc_raw)
+        self.dyld_header = nd_hc
+
+    def insert_lc(self, struct_t, fields, endian="little"):
+        load_cmd = assemble_lc(struct_t, fields, endian)
+
+        off = sizeof(dyld_header_t)
+        off += self.dyld_header.loadsize
+        raw = load_cmd.raw
+        size = len(load_cmd.raw)
+        self.slice.patch(off, raw)
+        self.load_commands.append(load_cmd)
+
+        nd_header_magic = self.dyld_header.header
+        nd_cputype = self.dyld_header.cputype
+        nd_cpusub = self.dyld_header.cpu_subtype
+        nd_filetype = self.dyld_header.filetype
+        nd_loadcnt = self.dyld_header.loadcnt + 1
+        nd_loadsize = self.dyld_header.loadsize + size
+        nd_flags = self.dyld_header.flags
+        nd_void = self.dyld_header.void
+
+        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
+        nd_hc_raw = nd_hc.raw
+        self.slice.patch(self.dyld_header.off, nd_hc_raw)
+        self.dyld_header = nd_hc
 
     def _process_load_commands(self, macho_slice):
         """
@@ -268,7 +360,7 @@ class LibraryHeader:
         # possibly this could be modified to check for other load commands
         #       as a rare obfuscation technique involves fucking with these to screw with RE tools.
 
-        for i in range(1, self.dyld_header.loadcnt):
+        for i in range(1, self.dyld_header.loadcnt+1):
             cmd = macho_slice.get_at(read_address, 4)
             try:
                 load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_TYPEMAP[LOAD_COMMAND(cmd)])
@@ -446,6 +538,7 @@ class BindingTable:
         self.lookup_table = {}
         self.link_table = {}
         self.symbol_table = self._load_symbol_table()
+        self.rebase_table = self._load_rebase_info()
 
     def _load_symbol_table(self):
         table = []
@@ -470,6 +563,10 @@ class BindingTable:
             item = bind_command.name
             actions.append(action(vm_address & 0xFFFFFFFFF, lib, item))
         return actions
+
+    def _load_rebase_info(self):
+        read_addr = self.library.info.rebase_off
+
 
     def _load_binding_info(self):
         lib = self.library

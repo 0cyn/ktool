@@ -295,12 +295,18 @@ class Slice:
         self.macho_file = macho_file
         self.arch_struct = arch_struct
 
+        self.patches = {}
+
         if self.arch_struct:
             self.offset = arch_struct.offset
             self.type = self._load_type()
             self.subtype = self._load_subtype()
         else:
             self.offset = offset
+
+    def patch(self, address, raw):
+        log.debug(f'Patched At: {hex(address)} Bytes: {str(raw)}')
+        self.patches[address] = raw
 
     def full_bytes_for_slice(self):
         if self.offset == 0:
@@ -314,8 +320,18 @@ class Slice:
             return self.macho_file.file[0:size]
         return self.macho_file.file[self.offset:+self.offset + self.arch_struct.size]
 
+    def patched_bytes(self):
+        raw = self.full_bytes_for_slice()
+        arr = bytearray(raw)
+        for address, patched_bytes in self.patches.items():
+            patched_bar = bytearray(patched_bytes)
+            for i, byte in enumerate(patched_bar):
+                arr[address+i] = byte
+        return bytes(arr)
+
     def load_struct(self, addr: int, struct_type: struct, endian="little"):
         field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?
+
         fields = [addr, self.macho_file.file[addr:addr + sizeof(struct_type)]]
         ea = addr
 
@@ -334,6 +350,10 @@ class Slice:
     def get_at(self, addr, count, endian="little"):
         addr = addr + self.offset
         return int.from_bytes(self.macho_file.file[addr:addr + count], endian)
+
+    def get_bytes_at(self, addr, count):
+        addr = addr + self.offset
+        return self.macho_file.file[addr:addr+count]
 
     def get_str_at(self, addr: int, count: int):
         addr = addr + self.offset
