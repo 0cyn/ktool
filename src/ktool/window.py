@@ -27,6 +27,7 @@
 # # # # #
 
 import curses
+from math import ceil
 
 from ktool import MachOFile, Dyld, ObjCLibrary, HeaderGenerator
 
@@ -851,6 +852,16 @@ class Sidebar(ScrollView):
             if len(item.children) > 0:
                 item.show_children = True
                 self.update_item_listing()
+
+        elif key == ord(" "):
+            index = self.selected_index
+            item = self.processed_items[index]
+            if item.show_children:
+                self.collapse_index(index)
+            else:
+                if len(item.children) > 0:
+                    item.show_children = True
+                    self.update_item_listing()
         else:
             return False
 
@@ -1001,6 +1012,26 @@ class DebugMenu(ScrollView):
         return handle
 
 
+class LoaderStatusView(View):
+    def __init__(self):
+        super().__init__()
+        self.draw = False
+        self.status_string = "Loading..."
+
+    def redraw(self):
+        if not self.draw:
+            return
+        box_width = 40
+        start_x = ceil(self.box.width / 2 - box_width / 2)
+        height = 4
+        start_y = ceil(self.box.height / 2 - height / 2)
+
+        for i in range(start_y, start_y + height + 1):
+            self.box.write(start_x, i, ' ' * box_width, curses.A_STANDOUT)
+
+        self.box.write(start_x+1, start_y + 1, self.status_string, curses.A_STANDOUT)
+
+
 class MenuOverlayRenderingView(View):
     def __init__(self):
         super().__init__()
@@ -1015,7 +1046,7 @@ class MenuOverlayRenderingView(View):
             return
 
         start = (self.active_menu_start_x + 1, 1)
-        width = 20
+        width = 30
         height = len(self.active_render_menu.menu_items) + 2
 
         self.active_render_subbox = Box(None, start[0], start[1], width, height)
@@ -1067,33 +1098,34 @@ class KToolMachOLoader:
         return count
 
     @staticmethod
-    def contents_for_file(fd):
+    def contents_for_file(fd, callback):
         machofile = MachOFile(fd)
         items = []
         for macho_slice in machofile.slices:
-            items.append(KToolMachOLoader.slice_item(macho_slice))
+            items.append(KToolMachOLoader.slice_item(macho_slice, callback))
         return items
 
     @staticmethod
-    def slice_item(macho_slice):
+    def slice_item(macho_slice, callback):
         loaded_library = Dyld.load(macho_slice)
         if hasattr(macho_slice, 'type'):
             slice_nick = macho_slice.type.name + " Slice"
         else:
             slice_nick = "Thin MachO"
+        callback("Loading MachO Slice")
         slice_item = SidebarMenuItem(f'{slice_nick}', None, None)
-        slice_item.content = KToolMachOLoader._file(loaded_library, slice_item).content
-        slice_item.children = [KToolMachOLoader.linked(loaded_library, slice_item),
-                               KToolMachOLoader.symtab(loaded_library, slice_item),
-                               KToolMachOLoader.binding_items(loaded_library, slice_item),
-                               KToolMachOLoader.vm_map(loaded_library, slice_item),
-                               KToolMachOLoader.load_cmds(loaded_library, slice_item)]
-        slice_item.children += KToolMachOLoader.objc_items(loaded_library, slice_item)
+        slice_item.content = KToolMachOLoader._file(loaded_library, slice_item, callback).content
+        slice_item.children = [KToolMachOLoader.linked(loaded_library, slice_item, callback),
+                               KToolMachOLoader.symtab(loaded_library, slice_item, callback),
+                               KToolMachOLoader.binding_items(loaded_library, slice_item, callback),
+                               KToolMachOLoader.vm_map(loaded_library, slice_item, callback),
+                               KToolMachOLoader.load_cmds(loaded_library, slice_item, callback)]
+        slice_item.children += KToolMachOLoader.objc_items(loaded_library, slice_item, callback)
         slice_item.show_children = True
         return slice_item
 
     @staticmethod
-    def _file(lib, parent=None):
+    def _file(lib, parent=None, callback=None):
         file_content_item = MainMenuContentItem()
 
         file_content_item.lines.append(f'Name: §35m{lib.name}§39m')
@@ -1110,17 +1142,20 @@ class KToolMachOLoader:
         return menuitem
 
     @staticmethod
-    def linked(lib, parent=None):
+    def linked(lib, parent=None, callback=None):
         linked_libs_item = MainMenuContentItem()
         for exlib in lib.linked:
-            linked_libs_item.lines.append('(Weak) ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
+            linked_libs_item.lines.append('§31m(Weak)§39m ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
 
         menuitem = SidebarMenuItem("Linked Libraries", linked_libs_item, parent)
         menuitem.parse_mmc()
         return menuitem
 
     @staticmethod
-    def load_cmds(lib, parent=None):
+    def load_cmds(lib, parent=None, callback=None):
+
+        callback("Processing Load Commands")
+
         load_cmds = MainMenuContentItem()
 
         lines = [f'Load Command Count: {len(lib.macho_header.load_commands)}']
@@ -1132,6 +1167,14 @@ class KToolMachOLoader:
         for cmd in lib.macho_header.load_commands:
             mmci = MainMenuContentItem()
             mmci.lines = cmd.desc(lib).split('\n')
+            raw: bytes = cmd.raw
+            raw_str = ""
+            for i, byte in enumerate(raw):
+                raw_str += hex(byte)[2:].upper() + ' '
+                if i % 4 == 3:
+                    raw_str += ' '
+            mmci.lines.append('Hex Data ---')
+            mmci.lines.append(raw_str)
             lc_menu_item = SidebarMenuItem(str(cmd), mmci, menuitem)
             menuitem.children.append(lc_menu_item)
 
@@ -1139,7 +1182,7 @@ class KToolMachOLoader:
         return menuitem
 
     @staticmethod
-    def symtab(lib, parent=None):
+    def symtab(lib, parent=None, callback=None):
         mmci = MainMenuContentItem()
 
         for sym in lib.symbol_table.table:
@@ -1151,7 +1194,7 @@ class KToolMachOLoader:
         return menuitem
 
     @staticmethod
-    def vm_map(lib, parent=None):
+    def vm_map(lib, parent=None, callback=None):
         mmci = MainMenuContentItem()
 
         mmci.lines = str(lib.vm).split('\n')
@@ -1162,13 +1205,13 @@ class KToolMachOLoader:
         return menuitem
 
     @staticmethod
-    def objc_items(lib, parent=None):
+    def objc_items(lib, parent=None, callback=None):
         objc_lib = ObjCLibrary(lib)
 
-        return [KToolMachOLoader.objc_headers(objc_lib, parent)]
+        return [KToolMachOLoader.objc_headers(objc_lib, parent, callback)]
 
     @staticmethod
-    def binding_items(lib, parent=None):
+    def binding_items(lib, parent=None, callback=None):
 
         mmci = MainMenuContentItem()
 
@@ -1185,13 +1228,15 @@ class KToolMachOLoader:
         return menuitem
 
     @staticmethod
-    def objc_headers(objc_lib, parent=None):
+    def objc_headers(objc_lib, parent=None, callback=None):
         generator = HeaderGenerator(objc_lib)
         hnci = MainMenuContentItem
         hnci.lines = generator.headers.keys()
         menuitem = SidebarMenuItem("ObjC Headers", hnci, parent)
-
+        count = len(generator.headers.keys())
+        i = 1
         for header_name, header in generator.headers.items():
+            callback(f'Loading Header {i}/{count}')
             mmci = MainMenuContentItem()
             formatter = Terminal256Formatter() if KToolMachOLoader.SUPPORTS_256 else TerminalFormatter()
             text = highlight(header.text, ObjectiveCLexer(), formatter)
@@ -1200,6 +1245,7 @@ class KToolMachOLoader:
             h_menu_item = SidebarMenuItem(header_name, mmci, menuitem)
             h_menu_item.parse_mmc()
             menuitem.children.append(h_menu_item)
+            i += 1
 
         menuitem.parse_mmc()
         return menuitem
@@ -1235,6 +1281,7 @@ class KToolScreen:
         self.debug_menu = DebugMenu()
 
         self.title_menu_overlay = MenuOverlayRenderingView()
+        self.loader_status = LoaderStatusView()
         self.is_showing_menu_overlay = False
 
         self.active_key_handler = self.sidebar
@@ -1243,7 +1290,7 @@ class KToolScreen:
         self.last_mouse_event = ""
 
         self.render_group = [self.titlebar, self.sidebar, self.mainscreen, self.footerbar, self.title_menu_overlay,
-                             self.debug_menu]
+                             self.debug_menu, self.loader_status]
 
         self.rebuild_all()
 
@@ -1312,6 +1359,10 @@ class KToolScreen:
             self.mainscreen.scroll_view_text_buffer.process_lines()
         self.mainscreen.set_tab_name(item.name)
 
+    def update_load_status(self, msg):
+        self.loader_status.status_string = msg
+        self.redraw_all()
+
     def load_file(self, filename):
         """
         Load a file by filename into the GUI.
@@ -1321,7 +1372,7 @@ class KToolScreen:
         """
         try:
             # KToolMachOLoader.SUPPORTS_256 = self.supported_colors > 200
-
+            self.loader_status.draw = True
             self.mainscreen.scroll_view_text_buffer.lines = [f'Loading {filename}...']
             self.redraw_all()
 
@@ -1331,12 +1382,15 @@ class KToolScreen:
 
             self.sidebar.add_menu_item(SidebarMenuItem(f'{filename}', MainMenuContentItem(MAIN_TEXT.split('\n')), None))
 
-            for item in KToolMachOLoader.contents_for_file(fd):
+            for item in KToolMachOLoader.contents_for_file(fd, self.update_load_status):
                 self.sidebar.add_menu_item(item)
 
             self.active_key_handler = self.sidebar
             self.key_handlers = [self.sidebar, self.mainscreen, self.titlebar]
             self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu]
+            self.loader_status.draw = False
+
+            self.redraw_all()
 
             self.program_loop()
 
@@ -1362,6 +1416,7 @@ class KToolScreen:
         curses.COLS = cols
 
         self.title_menu_overlay.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)
+        self.loader_status.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)
 
         # Rebuild all of our contexts so they're drawn with updated screen width/height
         self.titlebar.box = Box(self.root, 0, 0, curses.COLS, 1)
