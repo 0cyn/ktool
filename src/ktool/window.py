@@ -350,7 +350,7 @@ class ScrollingDisplayBuffer:
                         text = ' ' * 10 + text
                     lines.append(text)
                     curs += slice_size
-                    if len(line.string) - curs <= slice_size:
+                    if len(line.string) + 10 - curs <= max_size:
                         text = line.string[curs:]
                         if text.strip() == "":
                             break
