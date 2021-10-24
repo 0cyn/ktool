@@ -42,11 +42,11 @@ GUI (Still in active development) ---
 MachO Editing ---
     insert - Utils for inserting load commands into MachO Binaries
     edit - Utils for editing MachO Binaries
+    lipo - Utilities for combining/separating slices in fat MachO files.
 
 MachO Analysis ---
     dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
     file - Print very basic info about the MachO
-    lipo - Utilities for combining/separating slices in fat MachO files.
     list - Dumps certain tables from MachOs
     info - Dump misc info about the target mach-o
 
