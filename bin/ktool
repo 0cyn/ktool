@@ -16,6 +16,7 @@
 
 import os
 import pprint
+import threading
 
 from kmacho import LOAD_COMMAND
 from ktool import (
@@ -37,6 +38,25 @@ from ktool.window import KToolScreen
 
 from enum import Enum
 from argparse import ArgumentParser
+import json
+import urllib.request
+from packaging.version import Version, LegacyVersion
+
+UPDATE_AVAILABLE = False
+
+
+def check_for_update():
+    import pkg_resources
+    own_version = pkg_resources.get_distribution('k2l').version
+    endpoint = "https://pypi.org/pypi/k2l/json"
+    try:
+        with urllib.request.urlopen(endpoint, timeout=1) as url:
+            data = json.loads(url.read().decode(), strict=False)
+        if Version(own_version) < Version(data['info']['version']):
+            global UPDATE_AVAILABLE
+            UPDATE_AVAILABLE = True
+    except Exception:
+        pass
 
 
 class KToolError(Enum):
@@ -46,6 +66,28 @@ class KToolError(Enum):
 def exit_with_error(error: KToolError, msg):
     print(f'Encountered an Error ({error.name})\n', f"{msg}")
     exit(error.value)
+
+
+def require_args(args, always=None, one_of=None):
+    if always:
+        for i in always:
+            if not hasattr(args, i):
+                print(args.func.__doc__)
+                exit_with_error(KToolError.ArgumentError, f'Missing required argument {i}')
+            elif not getattr(args, i):
+                print(args.func.__doc__)
+                exit_with_error(KToolError.ArgumentError, f'Missing required argument {i}')
+
+    if one_of:
+        found_one = False
+        for i in one_of:
+            if hasattr(args, i):
+                if getattr(args, i):
+                    found_one = True
+                    break
+        if not found_one:
+            print(args.func.__doc__)
+            exit_with_error(KToolError.ArgumentError, f'Missing one of [{",".join(one_of)}]')
 
 
 def main():
@@ -65,6 +107,12 @@ def main():
     parser_insert.add_argument('--payload', dest='payload', help="Payload (if required) for insertion")
     parser_insert.add_argument('--out', dest='out', help="Output file destination for patches")
     parser_insert.set_defaults(func=insert, out=None, lc=None, payload=None)
+
+    parser_edit = subparsers.add_parser('edit', help='Edit attributes of the MachO')
+    parser_edit.add_argument('filename', nargs='?', default='')
+    parser_edit.add_argument('--iname', dest='iname', help='Modify the Install Name of a library')
+    parser_edit.add_argument('--out', dest='out', help="Output file destination for patches")
+    parser_edit.set_defaults(func=edit, out=None, iname=None)
 
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
 
@@ -117,6 +165,9 @@ def main():
 
     args = parser.parse_args()
 
+    download_thread = threading.Thread(target=check_for_update(), name="UpdateChecker")
+    download_thread.start()
+
     if not hasattr(args, 'filename'):
         # this is our default function
         args.func(args)
@@ -140,17 +191,22 @@ def main():
     else:
         args.func(args)
 
+    if UPDATE_AVAILABLE:
+        print(f'\n\nUpdate Available ---')
+        print(f'run `pip3 install --upgrade k2l` to fetch the latest update')
+
 
 def help_prompt(args):
-    """ Usage: ktool [command] <flags> [filename]
+    """Usage: ktool [command] <flags> [filename]
     
     Commands for ktool:
 
-    GUI ---
+    GUI (Still in active development) ---
         ktool open [filename] - Open the ktool command line GUI and browse a file
 
     MachO Editing ---
         insert - Utils for inserting load commands into MachO Binaries
+        edit - Utils for editing MachO Binaries
 
     MachO Analysis ---
         dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
@@ -188,6 +244,9 @@ def insert(args):
         lazy-load: LAZY_LOAD_DYLIB
         load-upward: LOAD_UPWARD_DYLIB
     """
+
+    require_args(args, always=['lc'])
+
     lc = None
     if args.lc == "load":
         lc = LOAD_COMMAND.LOAD_DYLIB
@@ -210,6 +269,7 @@ def insert(args):
                     last_dylib_command_index = i+1
             dylib_item = dylib.assemble()
             library.insert_lc_with_suf(dylib_command_t, lc, [dylib_item.raw], args.payload, last_dylib_command_index)
+            library = Dyld.load(macho_slice)
             patched_libraries.append(library)
 
     with open(args.out, 'wb') as fd:
@@ -219,9 +279,55 @@ def insert(args):
             fd.write(fat_generator.fat_head)
             for arch in fat_generator.fat_archs:
                 fd.seek(arch.offset)
-                fd.write(arch.slice.patched_bytes())
+                fd.write(arch.slice.full_bytes_for_slice())
         else:
-            fd.write(patched_libraries[0].slice.patched_bytes())
+            fd.write(patched_libraries[0].slice.full_bytes_for_slice())
+
+
+def edit(args):
+    """
+    ktool edit
+    Utils for editing MachO Binaries
+
+    Modify the install name of a library
+
+        ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
+
+    """
+
+    require_args(args, one_of=['iname'])
+
+    patched_libraries = []
+
+    new_iname = args.iname
+
+    with open(args.filename, 'rb') as fp:
+        machofile = MachOFile(fp)
+        for macho_slice in machofile.slices:
+            library = Dyld.load(macho_slice)
+            id_dylib_index = -1
+            for i, cmd in enumerate(library.macho_header.load_commands):
+                if cmd.cmd == 0xD:
+                    id_dylib_index = i
+                    break
+            dylib_item = dylib.assemble()
+            library.rm_load_command(id_dylib_index)
+            library = Dyld.load(macho_slice)
+            library.insert_lc_with_suf(dylib_command_t, LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
+            library = Dyld.load(macho_slice)
+            patched_libraries.append(library)
+
+    with open(args.out, 'wb') as fd:
+        if len(patched_libraries) > 1:
+            slices = [library.slice for library in patched_libraries]
+            fat_generator = FatMachOGenerator(slices)
+            fd.write(fat_generator.fat_head)
+            for arch in fat_generator.fat_archs:
+                fd.seek(arch.offset)
+                fd.write(arch.slice.full_bytes_for_slice())
+        else:
+            fd.write(patched_libraries[0].slice.full_bytes_for_slice())
+
 
 
 def img4(args):
@@ -236,6 +342,9 @@ def img4(args):
         ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
 
     """
+
+    require_args(args, one_of=['get_kbag', 'do_decrypt'])
+
     if args.get_kbag:
         with open(args.filename, 'rb') as fp:
             im4p = IM4P(fp.read())
@@ -268,6 +377,9 @@ def lipo(args):
 
         ktool lipo --create [--out filename] [filenames]
     """
+
+    require_args(args, one_of=['combine', 'extract'])
+
     if args.combine:
         output = args.out
         if output == "":
@@ -330,6 +442,9 @@ def _list(args):
         ktool list [--slice n] --binding [filename]
 
     """
+
+    require_args(args, one_of=['get_syms', 'get_binding', 'get_classes', 'get_protos', 'get_linked'])
+
     with open(args.filename, 'rb') as fd:
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
@@ -438,6 +553,9 @@ def dump(args):
 
         ktool dump --tbd [filename]
     """
+
+    require_args(args, one_of=['do_headers', 'do_tbd'])
+
     if args.do_headers:
         fd = open(args.filename, 'rb')
         machofile = MachOFile(fd)
@@ -472,6 +590,8 @@ def dump(args):
         with open(library.name + '.tbd', 'w') as filen:
             filen.write(TapiYAMLWriter.write_out(tbdgen.dict))
         fd.close()
+
+
 
 
 if __name__ == "__main__":

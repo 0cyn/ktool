@@ -34,19 +34,26 @@ pip3 install --upgrade k2l
 > $ ktool
 Usage: ktool [command] <flags> [filename]
     
-    Commands for ktool:
+Commands:
 
-    MachO ---
-        dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
-        file - Print very basic info about the MachO
-        lipo - Utilities for combining/separating slices in fat MachO files.
-        list - Dumps certain tables from MachOs
-        info - Dump misc info about the target mach-o
+GUI (Still in active development) ---
+    ktool open [filename] - Open the ktool command line GUI and browse a file
 
-    IMG4  ---
-        img4 - IMG4 Utilities
-    
-    Run `ktool [command]`  for info/examples on using that command
+MachO Editing ---
+    insert - Utils for inserting load commands into MachO Binaries
+    edit - Utils for editing MachO Binaries
+
+MachO Analysis ---
+    dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
+    file - Print very basic info about the MachO
+    lipo - Utilities for combining/separating slices in fat MachO files.
+    list - Dumps certain tables from MachOs
+    info - Dump misc info about the target mach-o
+
+Misc Utilities ---
+    img4 - IMG4 Utilities
+
+Run `ktool [command]`  for info/examples on using that command
 ```
 
 ### Documentation

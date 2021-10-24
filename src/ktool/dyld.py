@@ -228,7 +228,29 @@ class Library:
         """
         return self.slice.decode_uleb128(readHead)
 
+    def rm_load_command(self, index):
+        b_load_cmd = self.macho_header.load_commands.pop(index)
 
+        off = b_load_cmd.off + b_load_cmd.cmdsize
+        after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
+
+        self.slice.patch(b_load_cmd.off, after_bytes)
+        self.slice.patch(self.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize, b'\x00'*b_load_cmd.cmdsize)
+
+        nd_header_magic = self.macho_header.dyld_header.header
+        nd_cputype = self.macho_header.dyld_header.cputype
+        nd_cpusub = self.macho_header.dyld_header.cpu_subtype
+        nd_filetype = self.macho_header.dyld_header.filetype
+        nd_loadcnt = self.macho_header.dyld_header.loadcnt - 1
+        nd_loadsize = self.macho_header.dyld_header.loadsize - b_load_cmd.cmdsize
+        nd_flags = self.macho_header.dyld_header.flags
+        nd_void = self.macho_header.dyld_header.void
+
+        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
+        nd_hc_raw = nd_hc.raw
+
+        self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
+        self.macho_header.dyld_header = nd_hc
 
     def insert_lc_with_suf(self, struct_t, lc, fields, suffix, index=-1):
         load_cmd = assemble_lc_with_suffix(struct_t, lc, fields, suffix)

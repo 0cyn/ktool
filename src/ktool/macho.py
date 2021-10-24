@@ -39,7 +39,7 @@ class MachOFileType(Enum):
 class MachOFile:
     def __init__(self, file):
         self.file_object = file
-        self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ)
+        self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_COPY)
         self.slices = []
         self.magic = self._get_at(0, 4)
         self.type = self._load_filetype()
@@ -306,7 +306,9 @@ class Slice:
 
     def patch(self, address, raw):
         log.debug(f'Patched At: {hex(address)} Bytes: {str(raw)}')
-        self.patches[address] = raw
+        self.macho_file.file.seek(self.offset + address)
+        self.macho_file.file.write(raw)
+        self.macho_file.file.seek(0)
 
     def full_bytes_for_slice(self):
         if self.offset == 0:
@@ -319,15 +321,6 @@ class Slice:
 
             return self.macho_file.file[0:size]
         return self.macho_file.file[self.offset:+self.offset + self.arch_struct.size]
-
-    def patched_bytes(self):
-        raw = self.full_bytes_for_slice()
-        arr = bytearray(raw)
-        for address, patched_bytes in self.patches.items():
-            patched_bar = bytearray(patched_bytes)
-            for i, byte in enumerate(patched_bar):
-                arr[address+i] = byte
-        return bytes(arr)
 
     def load_struct(self, addr: int, struct_type: struct, endian="little"):
         field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?

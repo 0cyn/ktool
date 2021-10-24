@@ -27,7 +27,10 @@
 # # # # #
 
 import curses
+import os
 from math import ceil
+
+from datetime import datetime
 
 from ktool import MachOFile, Dyld, ObjCLibrary, HeaderGenerator
 
@@ -199,6 +202,11 @@ class PresentDebugMenuException(Exception):
 
 class PresentTitleMenuException(Exception):
     """Raise this within the runloop to invoke the Title Bar Menu Rendering code
+    """
+
+class FileBrowserOpenNewFileException(Exception):
+    """
+
     """
 
 
@@ -534,7 +542,7 @@ class FileMenuItem(TitleBarMenuItem):
         self.menu_items.append(("Save Edits", self.save))
 
     def open(self):
-        raise ExitProgramException
+        raise FileBrowserOpenNewFileException
 
     def save(self):
         pass
@@ -668,12 +676,32 @@ class FooterBar(View):
         self.show_debug = False
         self.debug_text = ''
 
+        self.hi_text = ''
+
+        self.now = datetime.now().time()
+        graveyard = 'hope your night is going well'
+        morning = 'good morning! :)'
+        afternoon = 'good afternoon'
+        evening = 'good evening ~'
+        msgmap = {
+            (22, 24): graveyard,
+            (0, 4): graveyard,
+            (5, 11): morning,
+            (12, 16): afternoon,
+            (17, 21): evening
+        }
+        for key, val in msgmap.items():
+            if self.now.hour in range(key[0], key[1]):
+                self.hi_text = f' {val} '
+
     def redraw(self):
         self.box.write(0, 0, '╘' + '═'.ljust(curses.COLS - 3, '═') + '╛', curses.color_pair(9))
         self.box.write(FooterBar.MENUS_START, 0, '╧', curses.color_pair(9))
 
         if self.show_debug:
             self.box.write(self.box.width - len(self.debug_text) - 5, 0, self.debug_text, curses.A_NORMAL)
+        else:
+            self.box.write(self.box.width - len(self.hi_text) - 5, 0, self.hi_text, curses.color_pair(9))
 
 
 # # # # #
@@ -1077,6 +1105,91 @@ class MenuOverlayRenderingView(View):
         raise DestroyTitleMenuException
 
 
+class FileSystemBrowserOverlayView(ScrollView):
+    def __init__(self):
+        super().__init__()
+        self.draw = False
+        self.current_dir_path = os.getcwd()
+        self.select_file = True
+        self.callback = None
+
+        self.selected_index = 0
+
+    def redraw(self):
+        start_x = 3
+        width = self.box.width - (2 * start_x)
+        start_y = start_x
+        height = self.box.height - (2 * start_y)
+
+        lc = '╒'
+        rc = '╕'
+        div = '═'
+        bl = '╘'
+        br = '╛'
+        lj = '╞'
+        rj = '╡'
+
+        bgcolor = curses.A_NORMAL
+
+        self.box.write(start_x, start_y, lc + ''.ljust(width - 2, div) + rc, bgcolor)
+
+        for line in range(start_y+1, start_y + height + 1):
+            self.box.write(start_x, line, VERT_LINE + ''.ljust(width - 2, ' ') + VERT_LINE, bgcolor)
+
+        self.box.write(start_x, start_y + height, bl + ''.ljust(width - 2, div) + br, bgcolor)
+        self.box.write(start_x, start_y + height-2, lj + ''.ljust(width - 2, div) + rj, bgcolor)
+        self.box.write(start_x+width-10, start_y+height-1, ' SELECT ', curses.A_STANDOUT)
+
+        lines = ['..'] + [i for i in os.listdir(self.current_dir_path)]
+        nlines = []
+        for item in lines:
+            if os.path.isdir(item):
+                nlines.append(f'{item}/')
+            else:
+                nlines.append(item)
+
+        for index, name in enumerate(nlines):
+            if self.selected_index == index:
+                name = AttributedString(name)
+                name.set_attr(0, len(name.string) - 1, Attribute.HIGHLIGHTED)
+                self.scroll_view_text_buffer.lines.append(name)
+            else:
+                self.scroll_view_text_buffer.lines.append(name)
+
+        # This chunk of code makes sure the currently selected sidebar position is always visible.
+        # It scrolls as the user selection moves up/down
+        # The "while" loop makes sure that, if a submenu multiple times the size of the screen height was collapsed,
+        #       the scroll cursor will jump to a position where things are visible again.
+        scroll_view_height = self.scroll_view_text_buffer.height
+        if self.selected_index - scroll_view_height + 4 > self.scroll_view_text_buffer.scrollcursor:
+            while self.selected_index - scroll_view_height + 4 > self.scroll_view_text_buffer.scrollcursor:
+                self.scroll_view_text_buffer.scrollcursor += 1
+        elif self.selected_index < self.scroll_view_text_buffer.scrollcursor + 2 and self.scroll_view_text_buffer.scrollcursor > 0:
+            while self.selected_index < self.scroll_view_text_buffer.scrollcursor + 2 and self.scroll_view_text_buffer.scrollcursor > 0:
+                self.scroll_view_text_buffer.scrollcursor -= 1
+
+        self.scroll_view_text_buffer.process_lines()
+        self.scroll_view_text_buffer.draw_lines()
+
+    def handle_key_press(self, key):
+        if not self.draw:
+            return False
+
+        if key == curses.KEY_UP:
+            index = self.selected_index
+            if index - 1 in range(0, len(self.scroll_view_text_buffer.lines)):
+                self.selected_index -= 1
+            return True
+
+        elif key == curses.KEY_DOWN:
+            index = self.selected_index
+            if index + 1 in range(0, len(self.scroll_view_text_buffer.lines)):
+                self.selected_index += 1
+            return True
+
+        return False
+
+
 # # # # #
 #
 # File Loaders:::
@@ -1284,6 +1397,7 @@ class KToolScreen:
 
         self.title_menu_overlay = MenuOverlayRenderingView()
         self.loader_status = LoaderStatusView()
+        self.file_browser = FileSystemBrowserOverlayView()
         self.is_showing_menu_overlay = False
 
         self.active_key_handler = self.sidebar
@@ -1292,7 +1406,7 @@ class KToolScreen:
         self.last_mouse_event = ""
 
         self.render_group = [self.titlebar, self.sidebar, self.mainscreen, self.footerbar, self.title_menu_overlay,
-                             self.debug_menu, self.loader_status]
+                             self.debug_menu, self.loader_status, self.file_browser]
 
         self.rebuild_all()
 
@@ -1388,7 +1502,7 @@ class KToolScreen:
                 self.sidebar.add_menu_item(item)
 
             self.active_key_handler = self.sidebar
-            self.key_handlers = [self.sidebar, self.mainscreen, self.titlebar]
+            self.key_handlers = [self.sidebar, self.mainscreen, self.titlebar, self.file_browser]
             self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu]
             self.loader_status.draw = False
 
@@ -1443,6 +1557,11 @@ class KToolScreen:
         self.debug_menu.scroll_view_text_buffer = ScrollingDisplayBuffer(self.debug_menu.scroll_view, 0, 0,
                                                                          curses.COLS - 22, curses.LINES - 12)
         self.debug_menu.scroll_view_text_buffer.render_attr = curses.color_pair(1)
+
+        self.file_browser.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)
+        self.file_browser.scroll_view = Box(self.root, 5, 4, curses.COLS - 10, curses.LINES - 8)
+        self.file_browser.scroll_view_text_buffer = ScrollingDisplayBuffer(self.file_browser.scroll_view, 0, 0, curses.COLS - 10, curses.LINES - 10)
+        self.file_browser.scroll_view_text_buffer.wrap = False
 
         self.mainscreen.tabname = ""
         self.update_mainscreen_text()
@@ -1547,6 +1666,12 @@ class KToolScreen:
 
                 self.handle_key_press(c)
 
+                self.redraw_all()
+
+            except FileBrowserOpenNewFileException:
+                self.file_browser.draw = True
+                self.handle_present_menu_exception(False)
+                self.active_key_handler = self.file_browser
                 self.redraw_all()
 
             except RebuildAllException:
