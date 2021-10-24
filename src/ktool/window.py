@@ -22,7 +22,7 @@
 # TODO: Properly Abstract out Mouse Clicks / clean up mouse handler code
 #
 # CURRENT FEATURE TO-DO LIST:::
-# TODO: Hex View
+# TODO: Implement the title bar menu actions
 #
 # # # # #
 
@@ -1170,10 +1170,12 @@ class KToolMachOLoader:
             raw: bytes = cmd.raw
             raw_str = ""
             for i, byte in enumerate(raw):
-                raw_str += hex(byte)[2:].upper() + ' '
+                raw_str += hex(byte)[2:].upper().rjust(2, '0') + ' '
                 if i % 4 == 3:
                     raw_str += ' '
+            mmci.lines.append('')
             mmci.lines.append('Hex Data ---')
+            mmci.lines.append('')
             mmci.lines.append(raw_str)
             lc_menu_item = SidebarMenuItem(str(cmd), mmci, menuitem)
             menuitem.children.append(lc_menu_item)
