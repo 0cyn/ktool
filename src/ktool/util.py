@@ -17,6 +17,10 @@ import inspect
 
 from enum import Enum
 
+import pkg_resources
+
+KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
+
 
 class TapiYAMLWriter:
 

@@ -15,21 +15,22 @@
 from .dyld import SymbolType
 from .objc import ObjCLibrary
 
+from .util import KTOOL_VERSION
+
 
 class HeaderUtils:
-    KTOOL_VERSION = "0.10.1"
 
     @staticmethod
     def header_head(library):
         try:
-            prefix = "// Headers generated with ktool v" + HeaderUtils.KTOOL_VERSION + "\n"
+            prefix = "// Headers generated with ktool v" + KTOOL_VERSION + "\n"
             prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
             prefix += f'// Platform: {library.platform.name} | '
             prefix += f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z} | '
             prefix += f'SDK: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}\n\n'
             return prefix
         except AttributeError:
-            prefix = "// Headers generated with ktool v" + HeaderUtils.KTOOL_VERSION + "\n"
+            prefix = "// Headers generated with ktool v" + KTOOL_VERSION + "\n"
             prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
             prefix += "// Issue loading library metadata\n\n"
             return prefix

@@ -32,6 +32,8 @@ from ktool import (
     LogLevel, entry_point_command_t, sizeof, dylib_command_t, dylib, dylib_command
 )
 
+from ktool.util import KTOOL_VERSION
+
 from kimg4.img4 import IM4P
 
 from ktool.window import KToolScreen
@@ -46,13 +48,11 @@ UPDATE_AVAILABLE = False
 
 
 def check_for_update():
-    import pkg_resources
-    own_version = pkg_resources.get_distribution('k2l').version
     endpoint = "https://pypi.org/pypi/k2l/json"
     try:
         with urllib.request.urlopen(endpoint, timeout=1) as url:
             data = json.loads(url.read().decode(), strict=False)
-        if Version(own_version) < Version(data['info']['version']):
+        if Version(KTOOL_VERSION) < Version(data['info']['version']):
             global UPDATE_AVAILABLE
             UPDATE_AVAILABLE = True
     except Exception:
