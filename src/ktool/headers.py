@@ -328,7 +328,8 @@ class Interface:
 
         meths = "\n\n"
         for i in self.methods:
-            meths += str(i) + ';\n'
+            if '.cxx_' not in str(i):
+                meths += str(i) + ';\n'
 
         foot = "\n\n@end"
         return head + ivars + props + meths + foot
