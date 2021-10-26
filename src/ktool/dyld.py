@@ -318,55 +318,6 @@ class LibraryHeader:
         read_addr = self.dyld_header.off
         return self.slice.get_bytes_at(read_addr, size)
 
-    def insert_lc_with_suf(self, struct_t, lc, fields, suffix):
-        load_cmd = assemble_lc_with_suffix(struct_t, lc, fields, suffix)
-
-        off = sizeof(dyld_header_t)
-        off += self.dyld_header.loadsize
-        raw = load_cmd.raw
-        size = len(load_cmd.raw)
-        self.slice.patch(off, raw)
-        log.error(str(off) + ' : ' + str(raw))
-        self.load_commands.append(load_cmd)
-
-        nd_header_magic = self.dyld_header.header
-        nd_cputype = self.dyld_header.cputype
-        nd_cpusub = self.dyld_header.cpu_subtype
-        nd_filetype = self.dyld_header.filetype
-        nd_loadcnt = self.dyld_header.loadcnt + 1
-        nd_loadsize = self.dyld_header.loadsize + size
-        nd_flags = self.dyld_header.flags
-        nd_void = self.dyld_header.void
-
-        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
-        nd_hc_raw = nd_hc.raw
-        self.slice.patch(self.dyld_header.off, nd_hc_raw)
-        self.dyld_header = nd_hc
-
-    def insert_lc(self, struct_t, fields, endian="little"):
-        load_cmd = assemble_lc(struct_t, fields, endian)
-
-        off = sizeof(dyld_header_t)
-        off += self.dyld_header.loadsize
-        raw = load_cmd.raw
-        size = len(load_cmd.raw)
-        self.slice.patch(off, raw)
-        self.load_commands.append(load_cmd)
-
-        nd_header_magic = self.dyld_header.header
-        nd_cputype = self.dyld_header.cputype
-        nd_cpusub = self.dyld_header.cpu_subtype
-        nd_filetype = self.dyld_header.filetype
-        nd_loadcnt = self.dyld_header.loadcnt + 1
-        nd_loadsize = self.dyld_header.loadsize + size
-        nd_flags = self.dyld_header.flags
-        nd_void = self.dyld_header.void
-
-        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
-        nd_hc_raw = nd_hc.raw
-        self.slice.patch(self.dyld_header.off, nd_hc_raw)
-        self.dyld_header = nd_hc
-
     def _process_load_commands(self, macho_slice):
         """
         This function takes the raw slice and parses through its load commands

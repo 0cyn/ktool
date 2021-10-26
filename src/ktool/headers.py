@@ -17,7 +17,7 @@ from .objc import ObjCLibrary
 
 
 class HeaderUtils:
-    KTOOL_VERSION = "0.10.0"
+    KTOOL_VERSION = "0.10.1"
 
     @staticmethod
     def header_head(library):

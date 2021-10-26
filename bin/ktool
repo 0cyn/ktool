@@ -165,7 +165,7 @@ def main():
 
     args = parser.parse_args()
 
-    download_thread = threading.Thread(target=check_for_update(), name="UpdateChecker")
+    download_thread = threading.Thread(target=check_for_update, name="UpdateChecker")
     download_thread.start()
 
     if not hasattr(args, 'filename'):
@@ -195,30 +195,32 @@ def main():
         print(f'\n\nUpdate Available ---')
         print(f'run `pip3 install --upgrade k2l` to fetch the latest update')
 
+    exit(0)
+
 
 def help_prompt(args):
     """Usage: ktool [command] <flags> [filename]
-    
-    Commands for ktool:
 
-    GUI (Still in active development) ---
-        ktool open [filename] - Open the ktool command line GUI and browse a file
+Commands:
 
-    MachO Editing ---
-        insert - Utils for inserting load commands into MachO Binaries
-        edit - Utils for editing MachO Binaries
+GUI (Still in active development) ---
+    ktool open [filename] - Open the ktool command line GUI and browse a file
 
-    MachO Analysis ---
-        dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
-        file - Print very basic info about the MachO
-        lipo - Utilities for combining/separating slices in fat MachO files.
-        list - Dumps certain tables from MachOs
-        info - Dump misc info about the target mach-o
+MachO Editing ---
+    insert - Utils for inserting load commands into MachO Binaries
+    edit - Utils for editing MachO Binaries
+    lipo - Utilities for combining/separating slices in fat MachO files.
 
-    Misc Utilities ---
-        img4 - IMG4 Utilities
-    
-    Run `ktool [command]`  for info/examples on using that command
+MachO Analysis ---
+    dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
+    file - Print very basic info about the MachO
+    list - Dumps certain tables from MachOs
+    info - Dump misc info about the target mach-o
+
+Misc Utilities ---
+    img4 - IMG4 Utilities
+
+Run `ktool [command]`  for info/examples on using that command
         """
     print(help_prompt.__doc__)
 
@@ -327,7 +329,6 @@ def edit(args):
                 fd.write(arch.slice.full_bytes_for_slice())
         else:
             fd.write(patched_libraries[0].slice.full_bytes_for_slice())
-
 
 
 def img4(args):

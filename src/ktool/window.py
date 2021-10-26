@@ -31,6 +31,9 @@ import os
 from math import ceil
 
 from datetime import datetime
+from threading import Thread
+
+import concurrent.futures
 
 from ktool import MachOFile, Dyld, ObjCLibrary, HeaderGenerator
 
@@ -1343,6 +1346,17 @@ class KToolMachOLoader:
         return menuitem
 
     @staticmethod
+    def get_header_item(text, name, menuitem):
+        mmci = MainMenuContentItem()
+        formatter = Terminal256Formatter() if KToolMachOLoader.SUPPORTS_256 else TerminalFormatter()
+        text = highlight(text, ObjectiveCLexer(), formatter)
+        lines = text.split('\n')
+        mmci.lines = lines
+        h_menu_item = SidebarMenuItem(name, mmci, menuitem)
+        h_menu_item.parse_mmc()
+        return h_menu_item
+
+    @staticmethod
     def objc_headers(objc_lib, parent=None, callback=None):
         generator = HeaderGenerator(objc_lib)
         hnci = MainMenuContentItem
@@ -1350,17 +1364,15 @@ class KToolMachOLoader:
         menuitem = SidebarMenuItem("ObjC Headers", hnci, parent)
         count = len(generator.headers.keys())
         i = 1
-        for header_name, header in generator.headers.items():
-            callback(f'Loading Header {i}/{count}')
-            mmci = MainMenuContentItem()
-            formatter = Terminal256Formatter() if KToolMachOLoader.SUPPORTS_256 else TerminalFormatter()
-            text = highlight(header.text, ObjectiveCLexer(), formatter)
-            lines = text.split('\n')
-            mmci.lines = lines
-            h_menu_item = SidebarMenuItem(header_name, mmci, menuitem)
-            h_menu_item.parse_mmc()
-            menuitem.children.append(h_menu_item)
+
+        futures = []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            for header_name, header in generator.headers.items():
+                futures.append(executor.submit(KToolMachOLoader.get_header_item, header.text, header_name, menuitem))
             i += 1
+
+        menuitem.children = [f.result() for f in futures]
 
         menuitem.parse_mmc()
         return menuitem
