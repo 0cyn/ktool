@@ -111,8 +111,9 @@ def main():
     parser_edit = subparsers.add_parser('edit', help='Edit attributes of the MachO')
     parser_edit.add_argument('filename', nargs='?', default='')
     parser_edit.add_argument('--iname', dest='iname', help='Modify the Install Name of a library')
+    parser_edit.add_argument('--apad', dest='apad', help='Add MachO Header Padding (You probably dont want to do this manually)')
     parser_edit.add_argument('--out', dest='out', help="Output file destination for patches")
-    parser_edit.set_defaults(func=edit, out=None, iname=None)
+    parser_edit.set_defaults(func=edit, out=None, iname=None, apad=None)
 
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
 
@@ -297,38 +298,64 @@ def edit(args):
 
     """
 
-    require_args(args, one_of=['iname'])
+    require_args(args, one_of=['iname', 'apad'])
 
     patched_libraries = []
 
-    new_iname = args.iname
+    if args.iname:
 
-    with open(args.filename, 'rb') as fp:
-        machofile = MachOFile(fp)
-        for macho_slice in machofile.slices:
-            library = Dyld.load(macho_slice)
-            id_dylib_index = -1
-            for i, cmd in enumerate(library.macho_header.load_commands):
-                if cmd.cmd == 0xD:
-                    id_dylib_index = i
-                    break
-            dylib_item = dylib.assemble()
-            library.rm_load_command(id_dylib_index)
-            library = Dyld.load(macho_slice)
-            library.insert_lc_with_suf(dylib_command_t, LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
-            library = Dyld.load(macho_slice)
+        new_iname = args.iname
+
+        with open(args.filename, 'rb') as fp:
+            machofile = MachOFile(fp)
+            for macho_slice in machofile.slices:
+                library = Dyld.load(macho_slice)
+                id_dylib_index = -1
+                for i, cmd in enumerate(library.macho_header.load_commands):
+                    if cmd.cmd == 0xD:
+                        id_dylib_index = i
+                        break
+                dylib_item = dylib.assemble()
+                library.rm_load_command(id_dylib_index)
+                library = Dyld.load(macho_slice)
+                library.insert_lc_with_suf(dylib_command_t, LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
+                library = Dyld.load(macho_slice)
+                patched_libraries.append(library)
+
+        with open(args.out, 'wb') as fd:
+            if len(patched_libraries) > 1:
+                slices = [library.slice for library in patched_libraries]
+                fat_generator = FatMachOGenerator(slices)
+                fd.write(fat_generator.fat_head)
+                for arch in fat_generator.fat_archs:
+                    fd.seek(arch.offset)
+                    fd.write(arch.slice.full_bytes_for_slice())
+            else:
+                fd.write(patched_libraries[0].slice.full_bytes_for_slice())
+
+    elif args.apad:
+        add_padding = int(args.apad)
+        with open(args.filename, 'rb') as fp:
+            machofile = MachOFile(fp)
+            library = Dyld.load(machofile.slices[0])
+            library.increase_header_pad(add_padding)
             patched_libraries.append(library)
 
-    with open(args.out, 'wb') as fd:
-        if len(patched_libraries) > 1:
-            slices = [library.slice for library in patched_libraries]
-            fat_generator = FatMachOGenerator(slices)
-            fd.write(fat_generator.fat_head)
-            for arch in fat_generator.fat_archs:
-                fd.seek(arch.offset)
-                fd.write(arch.slice.full_bytes_for_slice())
-        else:
-            fd.write(patched_libraries[0].slice.full_bytes_for_slice())
+        with open(args.out, 'wb') as fd:
+            if len(patched_libraries) > 1:
+                slices = [library.slice for library in patched_libraries]
+                fat_generator = FatMachOGenerator(slices)
+                fd.write(fat_generator.fat_head)
+                for arch in fat_generator.fat_archs:
+                    fd.seek(arch.offset)
+                    fd.write(arch.slice.full_bytes_for_slice())
+            else:
+                if patched_libraries[0].slice.use_patched_bytes:
+                    print('using patched bytes')
+                    fd.seek(0)
+                    fd.write(patched_libraries[0].slice.patched_bytes)
+                else:
+                    fd.write(patched_libraries[0].slice.full_bytes_for_slice())
 
 
 def img4(args):

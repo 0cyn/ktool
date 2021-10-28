@@ -228,6 +228,85 @@ class Library:
         """
         return self.slice.decode_uleb128(readHead)
 
+    def increase_header_pad(self, amount):
+
+        first_segment_file_addr = 0xFFFFFFFF
+
+        for cmd in self.macho_header.load_commands:
+            if isinstance(cmd, segment_command_64):
+                segment = Segment(self, cmd)
+                if 'PAGEZERO' in segment.name:
+                    continue
+                new_seg_file_addr = segment.file_address + amount if segment.file_address != 0 else 0
+                new_seg_vm_addr = segment.vm_address + amount
+                seg_raw = segment.cmd.raw
+                nsfa_bytes = new_seg_file_addr.to_bytes(8, byteorder='little')
+                ba_seg_raw = bytearray(seg_raw)
+                ba_seg_raw = ba_seg_raw[0:40] + bytearray(nsfa_bytes) + ba_seg_raw[48:]
+                raw_array = ba_seg_raw
+
+                sections = segment.sections
+                for _, sect in sections.items():
+                    first_segment_file_addr = min(first_segment_file_addr, sect.cmd.offset)
+                    sect_cmd = sect.cmd
+                    sect_raw = sect_cmd.raw
+                    ba_sect_raw = bytearray(sect_raw)
+                    new_sect_file_addr = sect_cmd.offset + amount
+                    new_sect_vm_addr = sect_cmd.addr + amount
+                    nsectfa = new_sect_file_addr.to_bytes(4, byteorder='little')
+                    ba_sect_raw = ba_sect_raw[0:48] + bytearray(nsectfa) + ba_sect_raw[52:]
+                    raw_array = raw_array + ba_sect_raw
+
+                raw = bytes(raw_array)
+
+                self.slice.patch(cmd.off, raw)
+
+            if isinstance(cmd, symtab_command):
+                stc_raw = bytearray(cmd.raw)
+                nsto = bytearray((cmd.symoff + amount).to_bytes(4, byteorder='little'))
+                nstto = bytearray((cmd.stroff + amount).to_bytes(4, byteorder='little'))
+                stc_raw = stc_raw[:8] + nsto + stc_raw[12:16] + nstto + stc_raw[20:]
+
+                self.slice.patch(cmd.off, bytes(stc_raw))
+
+            if isinstance(cmd, dyld_info_command):
+                dic_raw = bytearray(cmd.raw)
+
+                new_rebase_off = bytearray((cmd.rebase_off + amount).to_bytes(4, byteorder='little'))
+                new_bind_off = bytearray((cmd.bind_off + amount).to_bytes(4, byteorder='little'))
+                new_weak_bind_off = bytearray((cmd.weak_bind_off + amount).to_bytes(4, byteorder='little'))
+                new_lazy_bind_off = bytearray((cmd.lazy_bind_off + amount).to_bytes(4, byteorder='little'))
+                new_export_off = bytearray((cmd.export_off + amount).to_bytes(4, byteorder='little'))
+
+                dic_raw = dic_raw[0:8] + new_rebase_off + dic_raw[12:16] + new_bind_off + dic_raw[20:24] + new_weak_bind_off + dic_raw[28:32] + new_lazy_bind_off + dic_raw[36:40] + new_export_off + dic_raw[44:]
+
+                self.slice.patch(cmd.off, bytes(dic_raw))
+
+            if isinstance(cmd, dysymtab_command):
+                dstc_raw = bytearray(cmd.raw)
+
+                ntocoff = bytearray((cmd.tocoff + amount).to_bytes(4, byteorder='little')) if cmd.tocoff > 0 else bytearray(b'\x00\x00\x00\x00')
+                nmodtaboff = bytearray((cmd.modtaboff + amount).to_bytes(4, byteorder='little')) if cmd.modtaboff > 0 else bytearray(b'\x00\x00\x00\x00')
+                nextrefsymoff = bytearray((cmd.extrefsymoff + amount).to_bytes(4, byteorder='little')) if cmd.extrefsymoff > 0 else bytearray(b'\x00\x00\x00\x00')
+                nindirsymoff = bytearray((cmd.indirectsymoff + amount).to_bytes(4, byteorder='little')) if cmd.indirectsymoff > 0 else bytearray(b'\x00\x00\x00\x00')
+                nextreloff = bytearray((cmd.extreloff + amount).to_bytes(4, byteorder='little')) if cmd.extreloff > 0 else bytearray(b'\x00\x00\x00\x00')
+                nlocreloff = bytearray((cmd.locreloff + amount).to_bytes(4, byteorder='little')) if cmd.locreloff > 0 else bytearray(b'\x00\x00\x00\x00')
+
+                dstc_raw = dstc_raw[:32] + ntocoff + dstc_raw[36:40] + nmodtaboff + dstc_raw[44:48] + nextrefsymoff + dstc_raw[52:56] + nindirsymoff + dstc_raw[60:64] + nextreloff + dstc_raw[68:72] + nlocreloff + dstc_raw[76:]
+
+                self.slice.patch(cmd.off, bytes(dstc_raw))
+
+            if isinstance(cmd, linkedit_data_command):
+                patched = patch_field(cmd, linkedit_data_command_t, 2, cmd.dataoff+amount)
+                self.slice.patch(cmd.off, patched)
+
+        after_bytes = self.slice.full_bytes_for_slice()[first_segment_file_addr:]
+        new_after_bytes_prefix = b'\x00' * amount
+        new_after_bytes = new_after_bytes_prefix + after_bytes
+        self.slice.patch(first_segment_file_addr, new_after_bytes_prefix)
+        self.slice.patch(first_segment_file_addr + len(new_after_bytes_prefix), after_bytes)
+
+
     def rm_load_command(self, index):
         b_load_cmd = self.macho_header.load_commands.pop(index)
 
@@ -251,6 +330,41 @@ class Library:
 
         self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
         self.macho_header.dyld_header = nd_hc
+
+    def insert_lc(self, struct_t, lc, fields, index=-1):
+        load_cmd = assemble_lc(struct_t, lc, fields)
+
+        off = sizeof(dyld_header_t)
+        off += self.macho_header.dyld_header.loadsize
+        raw = load_cmd.raw
+        size = len(load_cmd.raw)
+
+        if index != -1:
+            b_load_cmd = self.macho_header.load_commands[index-1]
+            off = b_load_cmd.off + b_load_cmd.cmdsize
+            after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
+            self.slice.patch(off, raw)
+            self.slice.patch(off+size, after_bytes)
+        else:
+            self.slice.patch(off, raw)
+
+        self.macho_header.load_commands.append(load_cmd)
+
+        nd_header_magic = self.macho_header.dyld_header.header
+        nd_cputype = self.macho_header.dyld_header.cputype
+        nd_cpusub = self.macho_header.dyld_header.cpu_subtype
+        nd_filetype = self.macho_header.dyld_header.filetype
+        nd_loadcnt = self.macho_header.dyld_header.loadcnt + 1
+        nd_loadsize = self.macho_header.dyld_header.loadsize + size
+        nd_flags = self.macho_header.dyld_header.flags
+        nd_void = self.macho_header.dyld_header.void
+
+        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
+        nd_hc_raw = nd_hc.raw
+
+        self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
+        self.macho_header.dyld_header = nd_hc
+
 
     def insert_lc_with_suf(self, struct_t, lc, fields, suffix, index=-1):
         load_cmd = assemble_lc_with_suffix(struct_t, lc, fields, suffix)

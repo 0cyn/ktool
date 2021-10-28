@@ -297,6 +297,9 @@ class Slice:
 
         self.patches = {}
 
+        self.patched_bytes = b''
+        self.use_patched_bytes = False
+
         if self.arch_struct:
             self.offset = arch_struct.offset
             self.type = self._load_type()
@@ -304,9 +307,31 @@ class Slice:
         else:
             self.offset = offset
 
+        self.size = 0
+        if self.offset == 0:
+            f = self.macho_file.file_object
+            old_file_position = f.tell()
+            f.seek(0, os.SEEK_END)
+            self.size = f.tell()
+            f.seek(old_file_position)
+        else:
+            self.size = self.arch_struct.size
+
     def patch(self, address, raw):
-        log.debug(f'Patched At: {hex(address)} Bytes: {str(raw)}')
         self.macho_file.file.seek(self.offset + address)
+        log.debug(f'Patched At: {hex(address)} ')
+        log.debug(f'New Bytes: {str(raw)}')
+        diff = self.size - (self.offset + address + len(raw))
+        if diff < 0:
+            data = self.full_bytes_for_slice()
+            data = data[:address] + raw
+            # log.debug(data)
+            self.patched_bytes = data
+            self.use_patched_bytes = True
+            return
+        old_raw = self.macho_file.file.read(len(raw))
+        self.macho_file.file.seek(self.offset + address)
+        log.debug(f'Old Bytes: {str(old_raw)}')
         self.macho_file.file.write(raw)
         self.macho_file.file.seek(0)
 

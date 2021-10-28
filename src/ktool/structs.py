@@ -29,19 +29,35 @@ def sizeof(t: struct):
     return sum(t.sizes)
 
 
-def assemble_lc(struct_t, fields, endian="little"):
+def patch_field(struc, struct_t: struct, field_index: int, value: int, endian="little"):
+    rar = bytearray(struc.raw)
+    before_size = sum(struct_t.sizes[:field_index])
+    f_size = struct_t.sizes[field_index]
+    after_start = before_size + f_size
+    return bytes(rar[:before_size] + bytearray(value.to_bytes(f_size, endian)) + rar[after_start:])
+
+
+def assemble_lc(struct_t, load_command: LOAD_COMMAND, fields, endian="little"):
     ol_fields = fields
-    fields = [-1, 0] + fields
-    struct_item = struct_t.struct._make(fields)
     raw_bytes: bytes = b''
-    new_fields = []
-    for index, field_size in enumerate(struct_t.sizes):
+    cmd = load_command.value
+
+    cmd_off = 0
+
+    cmdsize = sizeof(LOAD_COMMAND_TYPEMAP[load_command])
+
+    raw_bytes += cmd.to_bytes(4, endian)
+    raw_bytes += cmdsize.to_bytes(4, endian)
+
+    for index, field_size in enumerate(struct_t.sizes[2:]):
         original_field = ol_fields[index]
         if not isinstance(original_field, bytes):
             original_field = original_field.to_bytes(field_size, endian)
         raw_bytes += original_field
-    new_raw = raw_bytes
-    fields = [0, new_raw] + ol_fields
+
+    cmd_raw = raw_bytes
+    fields = [cmd_off, cmd_raw, cmd, cmdsize] + ol_fields
+
     struct_item = struct_t.struct._make(fields)
     return struct_item
 
@@ -56,7 +72,7 @@ def assemble_lc_with_suffix(struct_t, load_command: LOAD_COMMAND, fields, suffix
 
     cmdsize = sizeof(LOAD_COMMAND_TYPEMAP[load_command])
     cmdsize += len(encoded)
-    cmdsize = 0x8 * math.ceil(cmdsize/0x8)
+    cmdsize = 0x8 * math.ceil(cmdsize / 0x8)
     raw_bytes += cmd.to_bytes(4, endian)
     raw_bytes += cmdsize.to_bytes(4, endian)
 

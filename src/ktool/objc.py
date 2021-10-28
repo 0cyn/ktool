@@ -485,6 +485,8 @@ class Class:
         bad_addr = False
         try:
             objc2_superclass: objc2_class = self.library.load_struct(objc2_class_item.superclass, objc2_class_t)
+            superclass = Class(self.library, objc2_superclass.off, False, objc2_superclass)
+            self.superclass = superclass.name
         except:
             bad_addr = True
 
