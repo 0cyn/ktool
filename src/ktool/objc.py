@@ -365,21 +365,29 @@ class Method:
         try:
             self.sel = library.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
             type_string = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
-        except ValueError as ex:
+            self.type_string = type_string
+            self.types = library.tp.process(type_string)
+            if len(self.types) == 0:
+                raise ValueError("Empty Typestr")
+        except Exception as ex:
             try:
                 selref = library.get_bytes(method.selector + vmaddr, 8, vm=True)
                 self.sel = library.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
                 type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
-            except ValueError as ex:
+
+                self.type_string = type_string
+                self.types = library.tp.process(type_string)
+                if len(self.types) == 0:
+                    raise ValueError("Empty Typestr")
+            except Exception as ex:
                 self.sel = library.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
                 type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
-        except Exception as ex:
-            raise ex
 
-        self.type_string = type_string
-        self.types = library.tp.process(type_string)
-        if len(self.types) == 0:
-            raise ValueError("Empty Typestr")
+                self.type_string = type_string
+                self.types = library.tp.process(type_string)
+                if len(self.types) == 0:
+                    raise ValueError("Empty Typestr")
+
 
         self.return_string = self._renderable_type(self.types[0])
         self.arguments = [self._renderable_type(i) for i in self.types[1:]]
