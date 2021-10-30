@@ -160,10 +160,11 @@ def main():
     parser_list.add_argument('--classes', dest='get_classes', action='store_true', help='Print class list')
     parser_list.add_argument('--protocols', dest='get_protos', action='store_true', help='Print Protocol list')
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
-    parser_list.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Actions")
+    parser_list.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Symbols")
+    parser_list.add_argument('--bind-act', dest='get_bindact', action='store_true', help="Print Binding Info Actions")
     parser_list.add_argument('filename', nargs='?', default='')
     parser_list.set_defaults(func=_list, get_syms=False, get_classes=False, get_protos=False, get_linked=False,
-                             get_binding=False)
+                             get_binding=False, get_bindact=False)
 
     args = parser.parse_args()
 
@@ -472,7 +473,7 @@ def _list(args):
 
     """
 
-    require_args(args, one_of=['get_syms', 'get_binding', 'get_classes', 'get_protos', 'get_linked'])
+    require_args(args, one_of=['get_syms', 'get_binding', 'get_classes', 'get_protos', 'get_linked', 'get_bindact'])
 
     with open(args.filename, 'rb') as fd:
         machofile = MachOFile(fd)
@@ -490,6 +491,8 @@ def _list(args):
                         f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
                 except:
                     pass
+        if args.get_bindact:
+            pprint.pprint(library.binding_table.import_stack)
         if args.get_classes:
             objc_lib = ObjCLibrary(library)
             for obj_class in objc_lib.classlist:
