@@ -29,7 +29,7 @@ from ktool import (
     ObjCLibrary,
     TapiYAMLWriter,
     log,
-    LogLevel, entry_point_command_t, sizeof, dylib_command_t, dylib, dylib_command
+    LogLevel, dylib_command_t, dylib, dylib_command
 )
 
 from ktool.util import KTOOL_VERSION
@@ -42,7 +42,7 @@ from enum import Enum
 from argparse import ArgumentParser
 import json
 import urllib.request
-from packaging.version import Version, LegacyVersion
+from packaging.version import Version
 
 UPDATE_AVAILABLE = False
 
@@ -149,10 +149,11 @@ def main():
     parser_dump.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
+    parser_dump.add_argument('--sorted', dest='sort_headers', action='store_true')
     parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
     parser_dump.add_argument('filename', nargs='?', default='')
-    parser_dump.set_defaults(func=dump, do_headers=False, do_tbd=False, slice_index=0)
+    parser_dump.set_defaults(func=dump, do_headers=False, sort_headers=False, do_tbd=False, slice_index=0)
 
     parser_list = subparsers.add_parser('list', help='Print various lists')
     parser_list.add_argument('--symbols', dest='get_syms', action='store_true', help='Print symbol list')
@@ -592,6 +593,11 @@ def dump(args):
             library.name = args.filename
         objc_lib = ObjCLibrary(library)
 
+        if args.sort_headers:
+            for objc_class in objc_lib.classlist:
+                objc_class.methods = sorted(objc_class.methods, key=lambda h: h.signature)
+                objc_class.properties = sorted(objc_class.properties, key=lambda h: h.name)
+
         if args.outdir is None:
             exit_with_error(KToolError.ArgumentError,
                             "Missing --out flag (--out <directory>), specifies directory to place headers")
@@ -618,8 +624,6 @@ def dump(args):
         with open(library.name + '.tbd', 'w') as filen:
             filen.write(TapiYAMLWriter.write_out(tbdgen.dict))
         fd.close()
-
-
 
 
 if __name__ == "__main__":

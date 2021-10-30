@@ -551,7 +551,7 @@ class Class:
                         self.struct_list.append(type.value)
 
             except Exception as ex:
-                pass
+                log.warning(f'Failed to load methods with {str(ex)}')
             if uses_relative_methods:
                 ea += sizeof(objc2_meth_list_entry_t)
                 vm_ea += sizeof(objc2_meth_list_entry_t)

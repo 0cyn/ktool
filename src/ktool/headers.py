@@ -363,11 +363,11 @@ class Interface:
         for method in self.objc_class.methods:
             bad = False
             for name in self.getters:
-                if name in method.sel:
+                if name in method.sel and ':' not in method.sel:
                     bad = True
                     break
             for name in self.setters:
-                if name in method.sel:
+                if name in method.sel and 'set' in method.sel:
                     bad = True
                     break
             if bad:
