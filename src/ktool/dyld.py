@@ -229,7 +229,7 @@ class Library:
         return self.slice.decode_uleb128(readHead)
 
     def increase_header_pad(self, amount):
-
+        # TODO: finish
         first_segment_file_addr = 0xFFFFFFFF
 
         for cmd in self.macho_header.load_commands:
@@ -325,7 +325,7 @@ class Library:
         nd_flags = self.macho_header.dyld_header.flags
         nd_void = self.macho_header.dyld_header.void
 
-        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
+        nd_hc = assemble_dyld_header([nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
         nd_hc_raw = nd_hc.raw
 
         self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
@@ -359,12 +359,11 @@ class Library:
         nd_flags = self.macho_header.dyld_header.flags
         nd_void = self.macho_header.dyld_header.void
 
-        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
+        nd_hc = assemble_dyld_header([nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
         nd_hc_raw = nd_hc.raw
 
         self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
         self.macho_header.dyld_header = nd_hc
-
 
     def insert_lc_with_suf(self, struct_t, lc, fields, suffix, index=-1):
         load_cmd = assemble_lc_with_suffix(struct_t, lc, fields, suffix)
@@ -394,7 +393,7 @@ class Library:
         nd_flags = self.macho_header.dyld_header.flags
         nd_void = self.macho_header.dyld_header.void
 
-        nd_hc = assemble_lc(dyld_header_t, [nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
+        nd_hc = assemble_dyld_header([nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
         nd_hc_raw = nd_hc.raw
 
         self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
@@ -586,6 +585,7 @@ class SymbolTable:
 
 action = namedtuple("action", ["vmaddr", "libname", "item"])
 record = namedtuple("record", [
+    "off",
     "seg_index",
     "seg_offset",
     "lib_ordinal",
@@ -654,7 +654,6 @@ class BindingTable:
     def _load_rebase_info(self):
         read_addr = self.library.info.rebase_off
 
-
     def _load_binding_info(self):
         lib = self.library
         read_address = lib.info.bind_off
@@ -675,11 +674,12 @@ class BindingTable:
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
                 binding_opcode = self.library.get_bytes(read_address, 1) & 0xF0
                 value = self.library.get_bytes(read_address, 1) & 0x0F
+                cmd_start_addr = read_address
                 read_address += 1
 
                 if binding_opcode == BINDING_OPCODE.DONE:
                     import_stack.append(
-                        record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     break
 
                 elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_IMM:
@@ -713,14 +713,14 @@ class BindingTable:
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_ULEB:
                     import_stack.append(
-                        record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset += 8
                     o, read_address = self.library.decode_uleb128(read_address)
                     seg_offset += o
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_IMM_SCALED:
                     import_stack.append(
-                        record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset = seg_offset + (value * 8) + 8
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
@@ -729,12 +729,12 @@ class BindingTable:
 
                     for i in range(0, count):
                         import_stack.append(
-                            record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                            record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                         seg_offset += skip + 8
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND:
                     import_stack.append(
-                        record(seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
                     seg_offset += 8
 
         return import_stack

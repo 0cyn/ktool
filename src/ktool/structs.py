@@ -37,6 +37,23 @@ def patch_field(struc, struct_t: struct, field_index: int, value: int, endian="l
     return bytes(rar[:before_size] + bytearray(value.to_bytes(f_size, endian)) + rar[after_start:])
 
 
+def assemble_dyld_header(fields, endian="little"):
+    ol_fields = fields
+    raw_bytes: bytes = b''
+    struct_t = dyld_header_t
+    off = 0
+
+    for index, field_size in enumerate(struct_t.sizes):
+        original_field = ol_fields[index]
+        if not isinstance(original_field, bytes):
+            original_field = original_field.to_bytes(field_size, endian)
+        raw_bytes += original_field
+
+    raw = raw_bytes
+    fields = [0, raw] + fields
+    return struct_t.struct._make(fields)
+
+
 def assemble_lc(struct_t, load_command: LOAD_COMMAND, fields, endian="little"):
     ol_fields = fields
     raw_bytes: bytes = b''
