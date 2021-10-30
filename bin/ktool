@@ -595,8 +595,8 @@ def dump(args):
 
         if args.sort_headers:
             for objc_class in objc_lib.classlist:
-                objc_class.methods = sorted(objc_class.methods, key=lambda h: h.signature)
-                objc_class.properties = sorted(objc_class.properties, key=lambda h: h.name)
+                objc_class.methods.sort(key=lambda h: h.signature)
+                objc_class.properties.sort(key=lambda h: h.name)
 
         if args.outdir is None:
             exit_with_error(KToolError.ArgumentError,
