@@ -360,34 +360,22 @@ class Ivar:
 
 
 class Method:
-    def __init__(self, library, meta, method: objc2_meth, vmaddr: int):
+    def __init__(self, library, meta, method: objc2_meth, vmaddr: int, uses_rel_meth=False, rms_are_direct=False):
         self.meta = meta
-        try:
-            self.sel = library.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
-            type_string = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
-            self.type_string = type_string
-            self.types = library.tp.process(type_string)
-            if len(self.types) == 0:
-                raise ValueError("Empty Typestr")
-        except Exception as ex:
-            try:
+
+        if uses_rel_meth:
+            if rms_are_direct:
+                self.sel = library.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
+                self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+            else:
                 selref = library.get_bytes(method.selector + vmaddr, 8, vm=True)
                 self.sel = library.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
-                type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+                self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+        else:
+            self.sel = library.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
+            self.type_string = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
 
-                self.type_string = type_string
-                self.types = library.tp.process(type_string)
-                if len(self.types) == 0:
-                    raise ValueError("Empty Typestr")
-            except Exception as ex:
-                self.sel = library.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
-                type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
-
-                self.type_string = type_string
-                self.types = library.tp.process(type_string)
-                if len(self.types) == 0:
-                    raise ValueError("Empty Typestr")
-
+        self.types = library.tp.process(self.type_string)
 
         self.return_string = self._renderable_type(self.types[0])
         self.arguments = [self._renderable_type(i) for i in self.types[1:]]
@@ -407,7 +395,7 @@ class Method:
             ptr_addition = ""
             for i in range(0, type.pointer_count):
                 ptr_addition += '*'
-            return ptr_addition + type.value.name
+            return 'struct ' + type.value.name + ' ' + ptr_addition
 
     def _build_method_signature(self):
         dash = "+" if self.meta else "-"
@@ -542,7 +530,8 @@ class Class:
         RELATIVE_METHOD_FLAG = 0x80000000
         METHOD_LIST_FLAGS_MASK = 0xFFFF0000
 
-        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK != 0
+        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
+        rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
 
         ea += 8
         vm_ea += 8
@@ -552,7 +541,7 @@ class Class:
             else:
                 meth = self.library.load_struct(ea, objc2_meth_t, vm=False)
             try:
-                method = Method(self.library, self.meta, meth, vm_ea)
+                method = Method(self.library, self.meta, meth, vm_ea, uses_relative_methods, rms_are_direct)
                 methods.append(method)
                 for type in method.types:
                     if type.type == EncodedType.STRUCT:

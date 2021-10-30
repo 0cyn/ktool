@@ -50,11 +50,15 @@ class TypeResolver:
             pass
         self.classes = classes
         self.local_classes = objc_library.classlist
+        self.local_protos = objc_library.protolist
 
     def find_linked(self, classname):
         for local in self.local_classes:
             if local.name == classname:
                 return ""
+        for local in self.local_protos:
+            if local.name == classname[1:-1]:
+                return "-Protocol"
         if classname in self.classmap:
             try:
                 nam = self.library.library.linked[int(self.classmap[classname].ordinal) - 1].install_name
@@ -115,6 +119,7 @@ class Header:
 
         self.imported_classes = {}
         self.locally_imported_classes = []
+        self.locally_imported_protocols = []
 
         self._get_import_section()
 
@@ -152,6 +157,9 @@ class Header:
         for oclass in self.locally_imported_classes:
             text.append(f'#import "{oclass}.h"')
 
+        for oprot in self.locally_imported_protocols:
+            text.append(f'#import "{oprot}-Protocol.h"')
+
         text.append("")
 
         text.append(str(self.interface))
@@ -172,7 +180,6 @@ class Header:
                         if tp[1:-1] not in self.forward_declaration_protocols:
                             self.forward_declaration_protocols.append(tp[1:-1])
                     elif tp.startswith('NSObject<'):
-
                         if tp[9:-1] not in self.forward_declaration_protocols:
                             self.forward_declaration_protocols.append(tp[9:-1])
                     else:
@@ -184,6 +191,13 @@ class Header:
             else:
                 if tp not in self.imported_classes:
                     self.imported_classes[tp] = rt
+        for proto in self.interface.objc_class.protocols:
+            tname = f'<{proto.name}>'
+            rt = self.type_resolver.find_linked(tname)
+            if rt == "-Protocol":
+                self.locally_imported_protocols.append(proto.name)
+            else:
+                self.forward_declaration_protocols.append(proto.name)
         for ivar in self.interface.ivars:
             if ivar.is_id:
                 tp = ivar.type
@@ -203,6 +217,9 @@ class Header:
                 elif rt == "":
                     if tp not in self.locally_imported_classes:
                         self.locally_imported_classes.append(tp)
+                elif rt == "-Protocol":
+                    if tp not in self.locally_imported_protocols:
+                        self.locally_imported_protocols.append(tp[1:-1])
                 else:
                     if tp not in self.imported_classes:
                         self.imported_classes[tp] = rt
@@ -225,6 +242,9 @@ class Header:
                 elif rt == "":
                     if tp not in self.locally_imported_classes:
                         self.locally_imported_classes.append(tp)
+                elif rt == "-Protocol":
+                    if tp not in self.locally_imported_protocols:
+                        self.locally_imported_protocols.append(tp[1:-1])
                 else:
                     if tp not in self.imported_classes:
                         self.imported_classes[tp] = rt
