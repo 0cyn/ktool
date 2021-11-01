@@ -3345,7 +3345,7 @@ def ktool(filename):
         hg = HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fp).slices[0])))
         return hg.headers
 
-filename = 'http://cors.io/?' + browser.prompt('MachO URL')
+filename = 'https://cors.io/?' + browser.prompt('MachO URL')
 
 headers = ktool(filename)
 
