@@ -1,0 +1,52 @@
+<!--
+  ~
+  ~ ktool | C:/Users/krita/PycharmProjects/ktool/index.html
+  ~ index.html
+  ~
+  ~
+  ~
+  ~ This file is part of ktool. ktool is free software that
+  ~ is made available under the MIT license. Consult the
+  ~ file "LICENSE" that is distributed together with this file
+  ~ for the exact licensing terms.
+  ~
+  ~ Copyright (c) kat 2021.
+  ~
+  -->
+<?php
+?>
+
+<html>
+<head>
+    <title>ktool-web</title>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.9/brython.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.9/brython_stdlib.js">
+    </script>
+    <link rel="stylesheet"
+          href="https://highlightjs.org/static/demo/styles/kimbie-dark.css">
+    <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/highlight.min.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+</head>
+<script type="text/javascript">
+    function rehighlight() {
+        hljs.initHighlighting.called = false;
+        hljs.initHighlighting();
+    }
+</script>
+<script type="text/python" src="ktool_min.py"></script>
+<style>
+    body {
+        background-color: #1e1e29;
+        color: white;
+    }
+</style>
+<body onload="brython()">
+<div id="container">
+
+</div>
+<script id="thing">
+
+</script>
+</body>
+</html>
