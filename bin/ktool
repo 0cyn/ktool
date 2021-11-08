@@ -152,7 +152,6 @@ def main():
     parser_info.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO Library")
-    parser_info.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
     parser_info.add_argument('filename', nargs='?', default='')
     parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, slice_index=0)
 
@@ -167,15 +166,12 @@ def main():
     parser_dump.set_defaults(func=dump, do_headers=False, sort_headers=False, do_tbd=False, slice_index=0)
 
     parser_list = subparsers.add_parser('list', help='Print various lists')
-    parser_list.add_argument('--symbols', dest='get_syms', action='store_true', help='Print symbol list')
     parser_list.add_argument('--classes', dest='get_classes', action='store_true', help='Print class list')
     parser_list.add_argument('--protocols', dest='get_protos', action='store_true', help='Print Protocol list')
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
-    parser_list.add_argument('--binding', dest='get_binding', action='store_true', help="Print Binding Info Symbols")
-    parser_list.add_argument('--bind-act', dest='get_bindact', action='store_true', help="Print Binding Info Actions")
+    parser_list.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
     parser_list.add_argument('filename', nargs='?', default='')
-    parser_list.set_defaults(func=_list, get_syms=False, get_classes=False, get_protos=False, get_linked=False,
-                             get_binding=False, get_bindact=False)
+    parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False)
 
     parser_symbols = subparsers.add_parser('symbols', help='Print various symbols')
     parser_symbols.add_argument('--imports', dest='get_imports', action='store_true', help='Print Imports')
@@ -561,14 +557,21 @@ def _list(args):
 
         ktool list --linked [filename]
 
+    To print a list of Load Commands and their data
+
+        ktool list --cmds [filename]
+
     """
 
-    require_args(args, one_of=['get_classes', 'get_protos', 'get_linked'])
+    require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs'])
 
     with open(args.filename, 'rb') as fd:
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
+        if args.get_lcs:
+            for lc in library.macho_header.load_commands:
+                print(str(lc))
         if args.get_classes:
             objc_lib = ObjCLibrary(library)
             for obj_class in objc_lib.classlist:
@@ -622,9 +625,6 @@ def info(args):
 
         ktool info [--slice n] --vm [filename]
 
-    Print a list of load commands for a file
-
-        ktool info [--slice n] --cmds [filename]
     """
     fd = open(args.filename, 'rb')
     machofile = MachOFile(fd)
@@ -632,9 +632,6 @@ def info(args):
     filt = False
     if args.get_vm:
         print(library.vm)
-        filt = True
-    if args.get_lcs:
-        pprint.pprint(library.macho_header.load_commands)
         filt = True
     if not filt:
         print(f'Name: {library.name}')
