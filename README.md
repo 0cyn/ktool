@@ -33,7 +33,7 @@ pip3 install --upgrade k2l
 ```
 > $ ktool
 Usage: ktool [command] <flags> [filename]
-    
+
 Commands:
 
 GUI (Still in active development) ---
@@ -46,12 +46,14 @@ MachO Editing ---
 
 MachO Analysis ---
     dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
-    file - Print very basic info about the MachO
-    list - Dumps certain tables from MachOs
-    info - Dump misc info about the target mach-o
+    list - Print various lists (Classlist, etc.)
+    symbols - Print various tables (Symbols, binding info)
+    info - Print misc info about the target mach-o
 
 Misc Utilities ---
+    file - Print very basic info about the MachO
     img4 - IMG4 Utilities
+    
 
 Run `ktool [command]`  for info/examples on using that command
 ```
@@ -67,7 +69,7 @@ this should run on any and all implementations of python3.
 
 #### Special thanks to
 
-JLevin and *OS Internals for extremely extensive documentation on previously undocumented APIs 
+JLevin and *OS Internals for existing
 
 arandomdev for guidance + code
 
