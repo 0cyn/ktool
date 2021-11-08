@@ -77,8 +77,8 @@ class Struct:
     def __str__(self):
         text = f'{self.__class__.__name__}('
         for field in self._field_list:
-            text += f'{field} = {hex(self._fields[field])}, '
-        return text + ')'
+            text += f'{field}={hex(self._fields[field])}, '
+        return text[:-2] + ')'
 
     def __init__(self, fields=None, sizes=None):
         if sizes is None:
