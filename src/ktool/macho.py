@@ -20,15 +20,9 @@ from typing import Tuple
 from collections import namedtuple
 
 from .util import log
-from .structs import (
-    fat_header,
-    fat_header_t,
-    fat_arch_t,
-    segment_command_64_t,
-    section_64_t,
-    sizeof,
-    struct
-)
+
+from kmacho import *
+from kmacho.structs import *
 
 
 class MachOFileType(Enum):
@@ -45,37 +39,31 @@ class MachOFile:
         self.type = self._load_filetype()
 
         if self.type == MachOFileType.FAT:
-            self.header: fat_header = self._load_struct(0, fat_header_t, "big")
+            self.header: fat_header = self._load_struct(0, fat_header, "big")
             for off in range(0, self.header.nfat_archs):
-                offset = sizeof(fat_header_t) + (off * sizeof(fat_arch_t))
-                arch_struct = self._load_struct(offset, fat_arch_t, "big")
+                offset = fat_header.SIZE + (off * fat_arch.SIZE)
+                arch_struct = self._load_struct(offset, fat_arch, "big")
                 self.slices.append(Slice(self, arch_struct))
         else:
             self.slices.append(Slice(self, None))
 
     def _load_filetype(self):
-        if self.magic == 0xCAFEBABE:
+        if self.magic == FAT_MAGIC or self.magic == FAT_CIGAM:
             return MachOFileType.FAT
-        elif self.magic == 0xCFFAEDFE or self.magic == 0xCEFAEDFE:
+        elif self.magic == MH_MAGIC or self.magic == MH_FILETYPE or self.magic == MH_MAGIC_64 or self.magic == MH_CIGAM_64:
             return MachOFileType.THIN
 
-    def _load_struct(self, addr: int, struct_type: struct, endian="little"):
-        field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?
-        fields = [addr, self.file[addr:addr + sizeof(struct_type)]]
-        ea = addr
+    def _load_struct(self, addr: int, struct_type, endian="little"):
+        size = struct_type.SIZE
+        data = self._get_bytes_at(addr, size)
 
-        for field in struct_type.sizes:
-            field_addr = ea
-            fields.append(self._get_at(field_addr, field, endian))
-            ea += field
+        struct = Struct.create_with_bytes(struct_type, data, endian)
+        struct.off = addr
 
-        if len(fields) != len(field_names):
-            raise ValueError(
-                f'Field count mismatch {len(fields)} vs {len(field_names)} in load_struct for {struct.struct.__doc__}.\nCheck Fields and Size '
-                f'Array.')
+        return struct
 
-        # noinspection PyProtectedMember
-        return struct_type.struct._make(fields)
+    def _get_bytes_at(self, addr, count):
+        return self.file[addr: addr + count]
 
     # noinspection PyTypeChecker
     def _get_at(self, addr, count, endian="big"):
@@ -88,10 +76,6 @@ class MachOFile:
 class Segment:
     """
 
-
-    segment_command_64:
-    ["off", "cmd", "cmdsize", "segname", "vmaddr", "vmsize", "fileoff", "filesize",
-        "maxprot", "initprot", "nsects", "flags"]
     """
 
     def __init__(self, library, cmd):
@@ -107,32 +91,25 @@ class Segment:
         self.name = self.name[::-1]
         self.sections = self._process_sections()
 
+        self.type = SectionType(S_FLAGS_MASKS.SECTION_TYPE & self.cmd.flags)
+
     def _process_sections(self):
         sections = {}
-        ea = self.cmd.off + sizeof(segment_command_64_t)
+        ea = self.cmd.off + segment_command_64.SIZE
 
         for section in range(0, self.cmd.nsects):
-            sect = self.library.load_struct(ea, section_64_t)
+            sect = self.library.load_struct(ea, section_64)
             section = Section(self, sect)
             sections[section.name] = section
-            ea += sizeof(section_64_t)
+            ea += section_64.SIZE
 
-        ea += sizeof(segment_command_64_t)
+        ea += segment_command_64.SIZE
         return sections
 
 
 class Section:
     """
 
-
-    section_64
-     ["off",
-     "sectname",
-     "segname",
-     "addr", VM ADDRESS
-     "size", SIZE ON BOTH
-     "offset", FILE ADDRESS
-     "align", "reloff", "nreloc", "flags", "void1", "void2", "void3"]
     """
 
     def __init__(self, segment, cmd):
@@ -264,22 +241,6 @@ class _VirtualMemoryMap:
                 self.stats[name] = 0
 
 
-class CPUType(Enum):
-    X86 = 0
-    X86_64 = 1
-    ARM = 2
-    ARM64 = 3
-
-
-class CPUSubType(Enum):
-    X86_64_ALL = 0
-    X86_64_H = 1
-    ARMV7 = 2
-    ARMV7S = 3
-    ARM64_ALL = 4
-    ARM64_V8 = 5
-
-
 class Slice:
     """
 
@@ -303,7 +264,7 @@ class Slice:
         if self.arch_struct:
             self.offset = arch_struct.offset
             self.type = self._load_type()
-            self.subtype = self._load_subtype()
+            self.subtype = self._load_subtype(self.type)
         else:
             self.offset = offset
 
@@ -337,33 +298,17 @@ class Slice:
 
     def full_bytes_for_slice(self):
         if self.offset == 0:
-
-            f = self.macho_file.file_object
-            old_file_position = f.tell()
-            f.seek(0, os.SEEK_END)
-            size = f.tell()
-            f.seek(old_file_position)
-
-            return self.macho_file.file[0:size]
+            return self.macho_file.file[0:self.size]
         return self.macho_file.file[self.offset:+self.offset + self.arch_struct.size]
 
-    def load_struct(self, addr: int, struct_type: struct, endian="little"):
-        field_names = list(struct_type.struct.__dict__['_fields'])  # unimportant?
+    def load_struct(self, addr: int, struct_type, endian="little"):
+        size = struct_type.SIZE
+        data = self.get_bytes_at(addr, size)
 
-        fields = [addr, self.macho_file.file[addr:addr + sizeof(struct_type)]]
-        ea = addr
+        struct = Struct.create_with_bytes(struct_type, data, endian)
+        struct.off = addr
 
-        for field in struct_type.sizes:
-            field_addr = ea
-            fields.append(self.get_at(field_addr, field, endian))
-            ea += field
-
-        if len(fields) != len(field_names):
-            raise ValueError(
-                f'Field count mismatch {len(fields)} vs {len(field_names)} in load_struct for {str(struct_type.struct)}.\nCheck Fields and Size Array.')
-
-        # noinspection PyProtectedMember
-        return struct_type.struct._make(fields)
+        return struct
 
     def get_at(self, addr, count, endian="little"):
         addr = addr + self.offset
@@ -404,39 +349,23 @@ class Slice:
         return value, readHead
 
     def _load_type(self):
-        cpu_type = self.arch_struct.cputype
-
-        if cpu_type & 0xF000000 != 0:
-            if cpu_type & 0xF == 0x7:
-                return CPUType.X86_64
-            elif cpu_type & 0xF == 0xC:
-                return CPUType.ARM64
-        else:
-            if cpu_type & 0xF == 0x7:
-                return CPUType.X86
-            elif cpu_type & 0xF == 0xC:
-                return CPUType.ARM
-
-        log.error(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct}). File an issue at '
-                  f'https://github.com/kritantadev/ktool')
-        return CPUType.ARM
-
-    def _load_subtype(self):
-        cpu_subtype = self.arch_struct.cpusubtype
-        subtype_ret = None
-
-        submap = {
-            0: CPUSubType.ARM64_ALL,
-            1: CPUSubType.ARM64_V8,
-            2: CPUSubType.ARM64_V8,
-            3: CPUSubType.X86_64_ALL,
-            8: CPUSubType.X86_64_H,
-            9: CPUSubType.ARMV7,
-            11: CPUSubType.ARMV7S
-        }
+        cpu_type = self.arch_struct.cpu_type
 
         try:
-            subtype_ret = submap[cpu_subtype]
+            return CPUType(cpu_type)
+        except KeyError:
+            log.error(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct}). File an issue at '
+                      f'https://github.com/kritantadev/ktool')
+            return CPUType.ARM
+
+    def _load_subtype(self, cputype):
+        cpu_subtype = self.arch_struct.cpu_subtype
+
+        subtype_ret = None
+
+        try:
+            sub = CPU_SUBTYPES[cputype]
+            return sub(cpu_subtype)
         except KeyError:
             log.error(f'Unknown CPU SubType ({hex(cpu_subtype)}) ({self.arch_struct}). File an issue at '
                       f'https://github.com/kritantadev/ktool')

@@ -12,19 +12,22 @@
 #
 #  Copyright (c) kat 2021.
 #
-
+import math
 from enum import IntEnum, Enum
 from collections import namedtuple
 
 from kmacho import (
     MH_FLAGS,
     MH_FILETYPE,
-    LOAD_COMMAND
+    LOAD_COMMAND,
+    BINDING_OPCODE,
+    REBASE_OPCODE, LOAD_COMMAND_MAP
 )
+
+from kmacho.structs import *
 
 from .util import log
 from .macho import _VirtualMemoryMap, Segment
-from .structs import *
 
 
 class Dyld:
@@ -70,7 +73,10 @@ class Dyld:
                 library.info = cmd
                 if load_binding:
                     log.info("Loading Binding Info")
-                    library.binding_table = BindingTable(library)
+                    library.binding_table = BindingTable(library, cmd.bind_off, cmd.bind_size)
+                    library.weak_binding_table = BindingTable(library, cmd.weak_bind_off, cmd.weak_bind_size)
+                    library.lazy_binding_table = BindingTable(library, cmd.lazy_bind_off, cmd.lazy_bind_size)
+                    #library.exports = BindingTable(library, cmd.export_off, cmd.export_size)
 
             elif isinstance(cmd, symtab_command):
                 if load_symtab:
@@ -158,7 +164,11 @@ class Library:
 
         self.minos = None
         self.sdk_version = None
+
         self.binding_table = None
+        self.weak_binding_table = None
+        self.lazy_binding_table = None
+        self.exports = None
 
         self.symbol_table = None
 
@@ -176,12 +186,12 @@ class Library:
             offset = self.vm.get_file_address(offset, section_name)
         return self.slice.get_at(offset, length)
 
-    def load_struct(self, address: int, struct_type: struct, vm=False, section_name=None, endian="little"):
+    def load_struct(self, address: int, struct_type, vm=False, section_name=None, endian="little"):
         """
         Load a struct (struct_type_t) from a location and return the processed object
 
         :param address: Address to load struct from
-        :param struct_type: type of struct (e.g. dyld_header_t)
+        :param struct_type: type of struct (e.g. dyld_header)
         :param vm:  Is `address` a VM address?
         :param section_name: if `vm==True`, the section name (slightly improves translation speed)
         :param endian: Endianness of bytes to read.
@@ -228,85 +238,6 @@ class Library:
         """
         return self.slice.decode_uleb128(readHead)
 
-    def increase_header_pad(self, amount):
-        # TODO: finish
-        first_segment_file_addr = 0xFFFFFFFF
-
-        for cmd in self.macho_header.load_commands:
-            if isinstance(cmd, segment_command_64):
-                segment = Segment(self, cmd)
-                if 'PAGEZERO' in segment.name:
-                    continue
-                new_seg_file_addr = segment.file_address + amount if segment.file_address != 0 else 0
-                new_seg_vm_addr = segment.vm_address + amount
-                seg_raw = segment.cmd.raw
-                nsfa_bytes = new_seg_file_addr.to_bytes(8, byteorder='little')
-                ba_seg_raw = bytearray(seg_raw)
-                ba_seg_raw = ba_seg_raw[0:40] + bytearray(nsfa_bytes) + ba_seg_raw[48:]
-                raw_array = ba_seg_raw
-
-                sections = segment.sections
-                for _, sect in sections.items():
-                    first_segment_file_addr = min(first_segment_file_addr, sect.cmd.offset)
-                    sect_cmd = sect.cmd
-                    sect_raw = sect_cmd.raw
-                    ba_sect_raw = bytearray(sect_raw)
-                    new_sect_file_addr = sect_cmd.offset + amount
-                    new_sect_vm_addr = sect_cmd.addr + amount
-                    nsectfa = new_sect_file_addr.to_bytes(4, byteorder='little')
-                    ba_sect_raw = ba_sect_raw[0:48] + bytearray(nsectfa) + ba_sect_raw[52:]
-                    raw_array = raw_array + ba_sect_raw
-
-                raw = bytes(raw_array)
-
-                self.slice.patch(cmd.off, raw)
-
-            if isinstance(cmd, symtab_command):
-                stc_raw = bytearray(cmd.raw)
-                nsto = bytearray((cmd.symoff + amount).to_bytes(4, byteorder='little'))
-                nstto = bytearray((cmd.stroff + amount).to_bytes(4, byteorder='little'))
-                stc_raw = stc_raw[:8] + nsto + stc_raw[12:16] + nstto + stc_raw[20:]
-
-                self.slice.patch(cmd.off, bytes(stc_raw))
-
-            if isinstance(cmd, dyld_info_command):
-                dic_raw = bytearray(cmd.raw)
-
-                new_rebase_off = bytearray((cmd.rebase_off + amount).to_bytes(4, byteorder='little'))
-                new_bind_off = bytearray((cmd.bind_off + amount).to_bytes(4, byteorder='little'))
-                new_weak_bind_off = bytearray((cmd.weak_bind_off + amount).to_bytes(4, byteorder='little'))
-                new_lazy_bind_off = bytearray((cmd.lazy_bind_off + amount).to_bytes(4, byteorder='little'))
-                new_export_off = bytearray((cmd.export_off + amount).to_bytes(4, byteorder='little'))
-
-                dic_raw = dic_raw[0:8] + new_rebase_off + dic_raw[12:16] + new_bind_off + dic_raw[20:24] + new_weak_bind_off + dic_raw[28:32] + new_lazy_bind_off + dic_raw[36:40] + new_export_off + dic_raw[44:]
-
-                self.slice.patch(cmd.off, bytes(dic_raw))
-
-            if isinstance(cmd, dysymtab_command):
-                dstc_raw = bytearray(cmd.raw)
-
-                ntocoff = bytearray((cmd.tocoff + amount).to_bytes(4, byteorder='little')) if cmd.tocoff > 0 else bytearray(b'\x00\x00\x00\x00')
-                nmodtaboff = bytearray((cmd.modtaboff + amount).to_bytes(4, byteorder='little')) if cmd.modtaboff > 0 else bytearray(b'\x00\x00\x00\x00')
-                nextrefsymoff = bytearray((cmd.extrefsymoff + amount).to_bytes(4, byteorder='little')) if cmd.extrefsymoff > 0 else bytearray(b'\x00\x00\x00\x00')
-                nindirsymoff = bytearray((cmd.indirectsymoff + amount).to_bytes(4, byteorder='little')) if cmd.indirectsymoff > 0 else bytearray(b'\x00\x00\x00\x00')
-                nextreloff = bytearray((cmd.extreloff + amount).to_bytes(4, byteorder='little')) if cmd.extreloff > 0 else bytearray(b'\x00\x00\x00\x00')
-                nlocreloff = bytearray((cmd.locreloff + amount).to_bytes(4, byteorder='little')) if cmd.locreloff > 0 else bytearray(b'\x00\x00\x00\x00')
-
-                dstc_raw = dstc_raw[:32] + ntocoff + dstc_raw[36:40] + nmodtaboff + dstc_raw[44:48] + nextrefsymoff + dstc_raw[52:56] + nindirsymoff + dstc_raw[60:64] + nextreloff + dstc_raw[68:72] + nlocreloff + dstc_raw[76:]
-
-                self.slice.patch(cmd.off, bytes(dstc_raw))
-
-            if isinstance(cmd, linkedit_data_command):
-                patched = patch_field(cmd, linkedit_data_command_t, 2, cmd.dataoff+amount)
-                self.slice.patch(cmd.off, patched)
-
-        after_bytes = self.slice.full_bytes_for_slice()[first_segment_file_addr:]
-        new_after_bytes_prefix = b'\x00' * amount
-        new_after_bytes = new_after_bytes_prefix + after_bytes
-        self.slice.patch(first_segment_file_addr, new_after_bytes_prefix)
-        self.slice.patch(first_segment_file_addr + len(new_after_bytes_prefix), after_bytes)
-
-
     def rm_load_command(self, index):
         b_load_cmd = self.macho_header.load_commands.pop(index)
 
@@ -316,25 +247,18 @@ class Library:
         self.slice.patch(b_load_cmd.off, after_bytes)
         self.slice.patch(self.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize, b'\x00'*b_load_cmd.cmdsize)
 
-        nd_header_magic = self.macho_header.dyld_header.header
-        nd_cputype = self.macho_header.dyld_header.cputype
-        nd_cpusub = self.macho_header.dyld_header.cpu_subtype
-        nd_filetype = self.macho_header.dyld_header.filetype
-        nd_loadcnt = self.macho_header.dyld_header.loadcnt - 1
-        nd_loadsize = self.macho_header.dyld_header.loadsize - b_load_cmd.cmdsize
-        nd_flags = self.macho_header.dyld_header.flags
-        nd_void = self.macho_header.dyld_header.void
+        dyld_head = self.macho_header.dyld_header
+        dyld_head.loadcnt -= 1
+        dyld_head.loadsize -= b_load_cmd.cmdsize
 
-        nd_hc = assemble_dyld_header([nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
-        nd_hc_raw = nd_hc.raw
+        self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
 
-        self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
-        self.macho_header.dyld_header = nd_hc
+    def insert_lc(self, lc, fields, index=-1):
+        lc_type = LOAD_COMMAND_MAP[lc]
 
-    def insert_lc(self, struct_t, lc, fields, index=-1):
-        load_cmd = assemble_lc(struct_t, lc, fields)
+        load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
 
-        off = sizeof(dyld_header_t)
+        off = dyld_header.SIZE
         off += self.macho_header.dyld_header.loadsize
         raw = load_cmd.raw
         size = len(load_cmd.raw)
@@ -350,28 +274,32 @@ class Library:
 
         self.macho_header.load_commands.append(load_cmd)
 
-        nd_header_magic = self.macho_header.dyld_header.header
-        nd_cputype = self.macho_header.dyld_header.cputype
-        nd_cpusub = self.macho_header.dyld_header.cpu_subtype
-        nd_filetype = self.macho_header.dyld_header.filetype
-        nd_loadcnt = self.macho_header.dyld_header.loadcnt + 1
-        nd_loadsize = self.macho_header.dyld_header.loadsize + size
-        nd_flags = self.macho_header.dyld_header.flags
-        nd_void = self.macho_header.dyld_header.void
+        dyld_head = self.macho_header.dyld_header
+        dyld_head.loadcnt += 1
+        dyld_head.loadsize += size
 
-        nd_hc = assemble_dyld_header([nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
-        nd_hc_raw = nd_hc.raw
+        self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
 
-        self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
-        self.macho_header.dyld_header = nd_hc
+    def insert_lc_with_suf(self, lc, fields, suffix, index=-1):
+        lc_type = LOAD_COMMAND_MAP[lc]
 
-    def insert_lc_with_suf(self, struct_t, lc, fields, suffix, index=-1):
-        load_cmd = assemble_lc_with_suffix(struct_t, lc, fields, suffix)
+        load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
+        #log.debug(f'Fabricated Load Command {str(load_cmd)}')
 
-        off = sizeof(dyld_header_t)
+        encoded = suffix.encode('utf-8') + b'\x00'
+
+        cmdsize = lc_type.SIZE
+        cmdsize += len(encoded)
+        cmdsize = 0x8 * math.ceil(cmdsize / 0x8)
+        log.debug(f'Computed Struct Size of {cmdsize}')
+
+        load_cmd.cmdsize = cmdsize
+
+        off = dyld_header.SIZE
         off += self.macho_header.dyld_header.loadsize
-        raw = load_cmd.raw
-        size = len(load_cmd.raw)
+        raw = load_cmd.raw + encoded + (b'\x00' * (cmdsize - (lc_type.SIZE + len(encoded))))
+        log.debug(f'Padding Size {(cmdsize - (lc_type.SIZE + len(encoded)))}')
+        size = len(raw)
 
         if index != -1:
             b_load_cmd = self.macho_header.load_commands[index-1]
@@ -384,20 +312,11 @@ class Library:
 
         self.macho_header.load_commands.append(load_cmd)
 
-        nd_header_magic = self.macho_header.dyld_header.header
-        nd_cputype = self.macho_header.dyld_header.cputype
-        nd_cpusub = self.macho_header.dyld_header.cpu_subtype
-        nd_filetype = self.macho_header.dyld_header.filetype
-        nd_loadcnt = self.macho_header.dyld_header.loadcnt + 1
-        nd_loadsize = self.macho_header.dyld_header.loadsize + size
-        nd_flags = self.macho_header.dyld_header.flags
-        nd_void = self.macho_header.dyld_header.void
+        dyld_head = self.macho_header.dyld_header
+        dyld_head.loadcnt += 1
+        dyld_head.loadsize += size
 
-        nd_hc = assemble_dyld_header([nd_header_magic, nd_cputype, nd_cpusub, nd_filetype, nd_loadcnt, nd_loadsize, nd_flags, nd_void])
-        nd_hc_raw = nd_hc.raw
-
-        self.slice.patch(self.macho_header.dyld_header.off, nd_hc_raw)
-        self.macho_header.dyld_header = nd_hc
+        self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
 
 
 class LibraryHeader:
@@ -416,7 +335,7 @@ class LibraryHeader:
         """
         offset = 0
         self.slice = macho_slice
-        self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header_t)
+        self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header)
         self.filetype = MH_FILETYPE(self.dyld_header.filetype)
         self.flags = []
         for flag in MH_FLAGS:
@@ -426,7 +345,7 @@ class LibraryHeader:
         self._process_load_commands(macho_slice)
 
     def raw_bytes(self):
-        size = sizeof(dyld_header_t)
+        size = dyld_header.SIZE
         size += self.dyld_header.loadsize
         read_addr = self.dyld_header.off
         return self.slice.get_bytes_at(read_addr, size)
@@ -449,12 +368,12 @@ class LibraryHeader:
         for i in range(1, self.dyld_header.loadcnt+1):
             cmd = macho_slice.get_at(read_address, 4)
             try:
-                load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_TYPEMAP[LOAD_COMMAND(cmd)])
+                load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)])
             except ValueError:
-                unk_lc = macho_slice.load_struct(read_address, unk_command_t)
+                unk_lc = macho_slice.load_struct(read_address, unk_command)
                 load_cmd = unk_lc
             except KeyError:
-                unk_lc = macho_slice.load_struct(read_address, unk_command_t)
+                unk_lc = macho_slice.load_struct(read_address, unk_command)
                 load_cmd = unk_lc
 
             self.load_commands.append(load_cmd)
@@ -470,7 +389,7 @@ class ExternalDylib:
         self.local = cmd.cmd == 0xD
 
     def _get_name(self, cmd):
-        read_address = cmd.off + sizeof(dylib_command_t)
+        read_address = cmd.off + dylib_command.SIZE
         return self.source_library.get_cstr_at(read_address)
 
 
@@ -571,7 +490,7 @@ class SymbolTable:
         symbol_table = []
         read_address = self.cmd.symoff
         for i in range(0, self.cmd.nsyms):
-            symbol_table.append(self.library.load_struct(read_address + sizeof(symtab_entry_t) * i, symtab_entry_t))
+            symbol_table.append(self.library.load_struct(read_address + symtab_entry.SIZE * i, symtab_entry))
 
         table = []
         for sym in symbol_table:
@@ -581,6 +500,27 @@ class SymbolTable:
             if sym.type == 0xf:
                 self.ext.append(symbol)
         return table
+
+
+class ExportTrie:
+    def __init__(self, library, export_start, export_size):
+        self.library = library
+
+    def read_export_trie(self, export_start, export_size):
+        read_address = export_start
+
+        while True:
+            if read_address - export_size >= export_start:
+                break
+
+            byte = self.library.get_bytes(read_address, 1)
+            if byte != 0:
+                size, read_address = self.library.decode_uleb128(read_address)
+                kt = self.library.get_bytes(read_address, 1)
+                kind_flag = kt & 0x3
+                type_flag = kt & ~0x3
+                name = self.library.get_cstr_at(read_address)
+                read_address += len(name) + 1
 
 
 action = namedtuple("action", ["vmaddr", "libname", "item"])
@@ -612,7 +552,7 @@ class BindingTable:
     .import_stack - contains a fairly raw unprocessed list of binding info commands
 
     """
-    def __init__(self, library):
+    def __init__(self, library, table_start, table_size):
         """
         Pass a library to be processed
 
@@ -620,12 +560,11 @@ class BindingTable:
         :type library: Library
         """
         self.library = library
-        self.import_stack = self._load_binding_info()
+        self.import_stack = self._load_binding_info(table_start, table_size)
         self.actions = self._create_action_list()
         self.lookup_table = {}
         self.link_table = {}
         self.symbol_table = self._load_symbol_table()
-        self.rebase_table = self._load_rebase_info()
 
     def _load_symbol_table(self):
         table = []
@@ -651,15 +590,12 @@ class BindingTable:
             actions.append(action(vm_address & 0xFFFFFFFFF, lib, item))
         return actions
 
-    def _load_rebase_info(self):
-        read_addr = self.library.info.rebase_off
-
-    def _load_binding_info(self):
+    def _load_binding_info(self, table_start, table_size):
         lib = self.library
-        read_address = lib.info.bind_off
+        read_address = table_start
         import_stack = []
         while True:
-            if read_address - lib.info.bind_size >= lib.info.bind_off:
+            if read_address - table_size >= table_start:
                 break
             seg_index = 0x0
             seg_offset = 0x0
@@ -739,30 +675,3 @@ class BindingTable:
 
         return import_stack
 
-
-class REBASE_OPCODE(IntEnum):
-    DONE = 0x0
-    SET_TYPE_IMM = 0x10
-    SET_SEGMENT_AND_OFFSET_ULEB = 0x20
-    ADD_ADDR_ULEB = 0x30
-    ADD_ADDR_IMM_SCALED = 0x40
-    DO_REBASE_IMM_TIMES = 0x50
-    DO_REBASE_ULEB_TIMES = 0x60
-    DO_REBASE_ADD_ADDR_ULEB = 0x70
-    DO_REBASE_ULEB_TIMES_SKIPPING_ULEB = 0x80
-
-
-class BINDING_OPCODE(IntEnum):
-    DONE = 0x0
-    SET_DYLIB_ORDINAL_IMM = 0x10
-    SET_DYLIB_ORDINAL_ULEB = 0x20
-    SET_DYLIB_SPECIAL_IMM = 0x30
-    SET_SYMBOL_TRAILING_FLAGS_IMM = 0x40
-    SET_TYPE_IMM = 0x50
-    SET_ADDEND_SLEB = 0x60
-    SET_SEGMENT_AND_OFFSET_ULEB = 0x70
-    ADD_ADDR_ULEB = 0x80
-    DO_BIND = 0x90
-    DO_BIND_ADD_ADDR_ULEB = 0xa0
-    DO_BIND_ADD_ADDR_IMM_SCALED = 0xb0
-    DO_BIND_ULEB_TIMES_SKIPPING_ULEB = 0xc0

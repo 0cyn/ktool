@@ -66,10 +66,6 @@ class FrameworksTestCase(unittest.TestCase):
         with open(scriptdir + '/bins/ExternalAccessory.dyldex', 'rb') as fd:
             HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))
 
-    def test_foundation(self):
-        with open(scriptdir + '/bins/Foundation', 'rb') as fd:
-            HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))
-
     def test_soundanalysis(self):
         with open(scriptdir + '/bins/SoundAnalysis', 'rb') as fd:
             HeaderGenerator(ObjCLibrary(Dyld.load(MachOFile(fd).slices[0])))

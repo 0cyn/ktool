@@ -17,8 +17,9 @@
 import os
 import pprint
 import threading
+from collections import namedtuple
 
-from kmacho import LOAD_COMMAND
+from kmacho import LOAD_COMMAND, dylib_command, dylib, Struct
 from ktool import (
     Dyld,
     TBDGenerator,
@@ -29,7 +30,7 @@ from ktool import (
     ObjCLibrary,
     TapiYAMLWriter,
     log,
-    LogLevel, dylib_command_t, dylib, dylib_command
+    LogLevel
 )
 
 from ktool.util import KTOOL_VERSION
@@ -69,6 +70,16 @@ def exit_with_error(error: KToolError, msg):
 
 
 def require_args(args, always=None, one_of=None):
+    """
+    This is a quick macro to enforce argument requirements for different commands.
+
+    If a check fails, it'll print usage for the subcommand and exit the program.
+
+    :param args: Parsed argument object
+    :param always: Arguments that *must* be passed
+    :param one_of: At least one of these arguments must be passed, and must evaluate as True
+    :return:
+    """
     if always:
         for i in always:
             if not hasattr(args, i):
@@ -115,6 +126,14 @@ def main():
     parser_edit.add_argument('--out', dest='out', help="Output file destination for patches")
     parser_edit.set_defaults(func=edit, out=None, iname=None, apad=None)
 
+    parser_lipo = subparsers.add_parser('lipo', help='Extract/Combine slices')
+    parser_lipo.add_argument('--extract', dest='extract', type=str, help='Extract a slice (--extract arm64)')
+    parser_lipo.add_argument('--out', dest='out', help="Output File")
+    parser_lipo.add_argument('--create', dest='combine', action='store_true',
+                             help="Combine files to create a fat mach-o library")
+    parser_lipo.add_argument('filename', nargs='*', default='')
+    parser_lipo.set_defaults(func=lipo, out="", combine=False)
+
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
 
     parser_img4.add_argument('filename', nargs='?', default='')
@@ -128,14 +147,6 @@ def main():
     parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
     parser_file.add_argument('filename', nargs='?', default='')
     parser_file.set_defaults(func=_file)
-
-    parser_lipo = subparsers.add_parser('lipo', help='Extract/Combine slices')
-    parser_lipo.add_argument('--extract', dest='extract', type=str, help='Extract a slice (--extract arm64)')
-    parser_lipo.add_argument('--out', dest='out', help="Output File")
-    parser_lipo.add_argument('--create', dest='combine', action='store_true',
-                             help="Combine files to create a fat mach-o library")
-    parser_lipo.add_argument('filename', nargs='*', default='')
-    parser_lipo.set_defaults(func=lipo, out="", combine=False)
 
     parser_info = subparsers.add_parser('info', help='Print Info about a MachO Library')
     parser_info.add_argument('--slice', dest='slice_index', type=int,
@@ -165,6 +176,14 @@ def main():
     parser_list.add_argument('filename', nargs='?', default='')
     parser_list.set_defaults(func=_list, get_syms=False, get_classes=False, get_protos=False, get_linked=False,
                              get_binding=False, get_bindact=False)
+
+    parser_symbols = subparsers.add_parser('symbols', help='Print various symbols')
+    parser_symbols.add_argument('--imports', dest='get_imports', action='store_true', help='Print Imports')
+    parser_symbols.add_argument('--imp-acts', dest='get_actions', action='store_true', help='Print Raw Binding Imports')
+    parser_symbols.add_argument('--symtab', dest='get_symtab', action='store_true', help='Print out the symtab')
+    # parser_symbols.add_argument('--exports', dest='get_exports', action='store_true', help='Print exports')
+    parser_symbols.add_argument('filename', nargs='?', default='')
+    parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False)
 
     args = parser.parse_args()
 
@@ -216,11 +235,12 @@ MachO Editing ---
 
 MachO Analysis ---
     dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
-    file - Print very basic info about the MachO
-    list - Dumps certain tables from MachOs
-    info - Dump misc info about the target mach-o
+    list - Print various lists (Classlist, etc.)
+    symbols - Print various tables (Symbols, binding info)
+    info - Print misc info about the target mach-o
 
 Misc Utilities ---
+    file - Print very basic info about the MachO
     img4 - IMG4 Utilities
 
 Run `ktool [command]`  for info/examples on using that command
@@ -234,9 +254,108 @@ def _open(args):
     screen.load_file(args.filename)
 
 
+def symbols(args):
+    """
+    ----------
+    List symbol imports/exports
+
+    Print the list of imported symbols
+
+        ktool symbols --imports [filename]
+
+    Print the symbol table
+
+        ktool symbols --symtab [filename]
+
+    Print full list of bound imported symbols and the addresses they're bound to
+
+        ktool symbols --imp-acts [filename]
+    """
+
+    require_args(args, one_of=['get_imports', 'get_actions', 'get_exports', 'get_symtab'])
+
+    if args.get_exports:
+        with open(args.filename, 'rb') as fd:
+            machofile = MachOFile(fd)
+            library = Dyld.load(machofile.slices[0])
+
+            syms = {}
+            symbol = namedtuple('symbol', ['name', 'library', 'from_table'])
+
+            for sym in library.exports:
+                try:
+                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Exports')
+                except:
+                    pass
+
+            for _, sym in syms.items():
+                print(f'{sym.name.ljust(20, " ")} | {sym.library} | {sym.from_table}')
+
+    if args.get_symtab:
+        with open(args.filename, 'rb') as fd:
+            machofile = MachOFile(fd)
+            library = Dyld.load(machofile.slices[0])
+
+            for sym in library.symbol_table.table:
+                print(f'Address: {sym.addr} | Name: {sym.fullname}')
+
+    if args.get_imports:
+        with open(args.filename, 'rb') as fd:
+            machofile = MachOFile(fd)
+            library = Dyld.load(machofile.slices[0])
+
+            syms = {}
+            symbol = namedtuple('symbol', ['name', 'library', 'from_table'])
+
+            for sym in library.binding_table.symbol_table:
+                try:
+                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Binding Info')
+                except:
+                    pass
+            for sym in library.weak_binding_table.symbol_table:
+                try:
+                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Weak Binding Info')
+                except:
+                    pass
+            for sym in library.lazy_binding_table.symbol_table:
+                try:
+                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Lazy Binding Info')
+                except:
+                    pass
+
+            for _, sym in syms.items():
+                print(f'{sym.name.ljust(20, " ")} | {sym.library} | {sym.from_table}')
+
+    elif args.get_actions:
+        with open(args.filename, 'rb') as fd:
+            machofile = MachOFile(fd)
+            library = Dyld.load(machofile.slices[0])
+            print('\nBinding Info'.ljust(60, '-') + '\n')
+            for sym in library.binding_table.symbol_table:
+                try:
+                    print(
+                        f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                except:
+                    pass
+            print('\nWeak Binding Info'.ljust(60, '-') + '\n')
+            for sym in library.weak_binding_table.symbol_table:
+                try:
+                    print(
+                        f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                except:
+                    pass
+            print('\nLazy Binding Info'.ljust(60, '-') + '\n')
+            for sym in library.lazy_binding_table.symbol_table:
+                try:
+                    print(
+                        f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                except:
+                    pass
+
+
 def insert(args):
     """
-    ktool insert
+    ----------
     Utils for inserting load commands into mach-o binaries
 
     insert a LOAD_DYLIB command
@@ -272,8 +391,8 @@ def insert(args):
             for i, cmd in enumerate(library.macho_header.load_commands):
                 if isinstance(cmd, dylib_command):
                     last_dylib_command_index = i+1
-            dylib_item = dylib.assemble()
-            library.insert_lc_with_suf(dylib_command_t, lc, [dylib_item.raw], args.payload, last_dylib_command_index)
+            dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
+            library.insert_lc_with_suf(lc, [dylib_item.raw], args.payload, last_dylib_command_index)
             library = Dyld.load(macho_slice)
             patched_libraries.append(library)
 
@@ -291,7 +410,7 @@ def insert(args):
 
 def edit(args):
     """
-    ktool edit
+    ----------
     Utils for editing MachO Binaries
 
     Modify the install name of a library
@@ -320,7 +439,7 @@ def edit(args):
                 dylib_item = dylib.assemble()
                 library.rm_load_command(id_dylib_index)
                 library = Dyld.load(macho_slice)
-                library.insert_lc_with_suf(dylib_command_t, LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
+                library.insert_lc_with_suf(LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
                 library = Dyld.load(macho_slice)
                 patched_libraries.append(library)
 
@@ -337,32 +456,11 @@ def edit(args):
 
     elif args.apad:
         add_padding = int(args.apad)
-        with open(args.filename, 'rb') as fp:
-            machofile = MachOFile(fp)
-            library = Dyld.load(machofile.slices[0])
-            library.increase_header_pad(add_padding)
-            patched_libraries.append(library)
-
-        with open(args.out, 'wb') as fd:
-            if len(patched_libraries) > 1:
-                slices = [library.slice for library in patched_libraries]
-                fat_generator = FatMachOGenerator(slices)
-                fd.write(fat_generator.fat_head)
-                for arch in fat_generator.fat_archs:
-                    fd.seek(arch.offset)
-                    fd.write(arch.slice.full_bytes_for_slice())
-            else:
-                if patched_libraries[0].slice.use_patched_bytes:
-                    print('using patched bytes')
-                    fd.seek(0)
-                    fd.write(patched_libraries[0].slice.patched_bytes)
-                else:
-                    fd.write(patched_libraries[0].slice.full_bytes_for_slice())
 
 
 def img4(args):
     """
-    ktool img4
+    ----------
     IMG4 Utilities
 
     Getting keybags
@@ -396,7 +494,7 @@ def img4(args):
 
 def lipo(args):
     """
-    ktool lipo
+    ----------
     Utilities for combining/separating slices in fat MachO files.
 
     Extract a slice from a fat binary
@@ -448,12 +546,8 @@ def lipo(args):
 
 def _list(args):
     """
-    ktool list
-    Outputs some lists of things
-
-    To print the symbol table of a file
-
-        ktool list --symbols [filename]
+    ----------
+    Tools for printing various lists
 
     To print the list of classes
 
@@ -467,32 +561,14 @@ def _list(args):
 
         ktool list --linked [filename]
 
-    To print binding actions for a file
-
-        ktool list [--slice n] --binding [filename]
-
     """
 
-    require_args(args, one_of=['get_syms', 'get_binding', 'get_classes', 'get_protos', 'get_linked', 'get_bindact'])
+    require_args(args, one_of=['get_classes', 'get_protos', 'get_linked'])
 
     with open(args.filename, 'rb') as fd:
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[0])
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
-        if args.get_syms:
-            for sym in library.symbol_table.table:
-                print(f'Address: {sym.addr} | Name: {sym.fullname}')
-        if args.get_binding:
-            filt = True
-            print('\nBinding Info Actions '.ljust(60, '-') + '\n')
-            for sym in library.binding_table.symbol_table:
-                try:
-                    print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
-                except:
-                    pass
-        if args.get_bindact:
-            pprint.pprint(library.binding_table.import_stack)
         if args.get_classes:
             objc_lib = ObjCLibrary(library)
             for obj_class in objc_lib.classlist:

@@ -356,6 +356,8 @@ class ScrollingDisplayBuffer:
                 while True:
                     slice_size = max_size if not indenting else max_size - indent_size
                     slice_size = min(slice_size, len(line.string) - curs)
+                    if len(line.string) + 10 - curs > max_size:
+                        slice_size = self.find_clean_breakpoint(line.string[curs:curs+slice_size], slice_size)
                     text = line.string[curs:curs+slice_size]
                     if indenting:
                         text = ' ' * 10 + text
@@ -1052,7 +1054,7 @@ class LoaderStatusView(View):
     def redraw(self):
         if not self.draw:
             return
-        box_width = 40
+        box_width = max(40, len(self.status_string) + 10)
         start_x = ceil(self.box.width / 2 - box_width / 2)
         height = 4
         start_y = ceil(self.box.height / 2 - height / 2)
@@ -1231,14 +1233,28 @@ class KToolMachOLoader:
         callback("Loading MachO Slice")
         slice_item = SidebarMenuItem(f'{slice_nick}', None, None)
         slice_item.content = KToolMachOLoader._file(loaded_library, slice_item, callback).content
-        slice_item.children = [KToolMachOLoader.linked(loaded_library, slice_item, callback),
+        slice_item.children = [KToolMachOLoader.load_cmds(loaded_library, slice_item, callback),
+                               KToolMachOLoader.segments(loaded_library, slice_item, callback),
+                               KToolMachOLoader.linked(loaded_library, slice_item, callback),
                                KToolMachOLoader.symtab(loaded_library, slice_item, callback),
-                               KToolMachOLoader.binding_items(loaded_library, slice_item, callback),
-                               KToolMachOLoader.vm_map(loaded_library, slice_item, callback),
-                               KToolMachOLoader.load_cmds(loaded_library, slice_item, callback)]
+                               KToolMachOLoader.binding_group(loaded_library, slice_item, callback),
+                               KToolMachOLoader.vm_map(loaded_library, slice_item, callback)]
         slice_item.children += KToolMachOLoader.objc_items(loaded_library, slice_item, callback)
         slice_item.show_children = True
         return slice_item
+
+    @staticmethod
+    def segments(lib, parent=None, callback=None):
+        smmci = MainMenuContentItem()
+        ssmi = SidebarMenuItem("Segments", smmci, parent)
+        for segname, segm in lib.segments.items():
+            mmci = MainMenuContentItem()
+            item = SidebarMenuItem(f'{segname} [{len(segm.sections.items())} Sections]', mmci, ssmi)
+            for secname, sect in segm.sections.items():
+                item.children.append(SidebarMenuItem(secname, mmci, item))
+            ssmi.children.append(item)
+        ssmi.parse_mmc()
+        return ssmi
 
     @staticmethod
     def _file(lib, parent=None, callback=None):
@@ -1259,6 +1275,9 @@ class KToolMachOLoader:
 
     @staticmethod
     def linked(lib, parent=None, callback=None):
+
+        callback("Loading Linked Libraries")
+
         linked_libs_item = MainMenuContentItem()
         for exlib in lib.linked:
             linked_libs_item.lines.append('§31m(Weak)§39m ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
@@ -1282,7 +1301,7 @@ class KToolMachOLoader:
 
         for cmd in lib.macho_header.load_commands:
             mmci = MainMenuContentItem()
-            mmci.lines = cmd.desc(lib).split('\n')
+            mmci.lines = str(cmd).split('\n')
             raw: bytes = cmd.raw
             raw_str = ""
             for i, byte in enumerate(raw):
@@ -1293,7 +1312,7 @@ class KToolMachOLoader:
             mmci.lines.append('Hex Data ---')
             mmci.lines.append('')
             mmci.lines.append(raw_str)
-            lc_menu_item = SidebarMenuItem(str(cmd), mmci, menuitem)
+            lc_menu_item = SidebarMenuItem(cmd.typename(), mmci, menuitem)
             menuitem.children.append(lc_menu_item)
 
         menuitem.parse_mmc()
@@ -1329,6 +1348,20 @@ class KToolMachOLoader:
         return [KToolMachOLoader.objc_headers(objc_lib, parent, callback)]
 
     @staticmethod
+    def binding_group(lib, parent=None, callback=None):
+
+        hnci = MainMenuContentItem
+        hnci.lines = ""
+        menuitem = SidebarMenuItem("Binding", hnci, parent)
+
+        menuitem.children = [KToolMachOLoader.binding_items(lib, menuitem, callback),
+                               KToolMachOLoader.weak_binding_items(lib, menuitem, callback),
+                               KToolMachOLoader.lazy_binding_items(lib, menuitem, callback)]
+
+        menuitem.parse_mmc()
+        return menuitem
+
+    @staticmethod
     def binding_items(lib, parent=None, callback=None):
 
         mmci = MainMenuContentItem()
@@ -1341,6 +1374,40 @@ class KToolMachOLoader:
                 pass
 
         menuitem = SidebarMenuItem("Binding Info", mmci, parent)
+
+        menuitem.parse_mmc()
+        return menuitem
+
+    @staticmethod
+    def weak_binding_items(lib, parent=None, callback=None):
+
+        mmci = MainMenuContentItem()
+
+        for sym in lib.weak_binding_table.symbol_table:
+            try:
+                mmci.lines.append(
+                    f'{sym.name.ljust(20, " ")} | {hex(sym.addr).ljust(15, " ")} | {lib.linked[int(sym.ordinal) - 1].install_name} | {sym.type}')
+            except IndexError:
+                pass
+
+        menuitem = SidebarMenuItem("Weak Binding Info", mmci, parent)
+
+        menuitem.parse_mmc()
+        return menuitem
+
+    @staticmethod
+    def lazy_binding_items(lib, parent=None, callback=None):
+
+        mmci = MainMenuContentItem()
+
+        for sym in lib.lazy_binding_table.symbol_table:
+            try:
+                mmci.lines.append(
+                    f'{sym.name.ljust(20, " ")} | {hex(sym.addr).ljust(15, " ")} | {lib.linked[int(sym.ordinal) - 1].install_name} | {sym.type}')
+            except IndexError:
+                pass
+
+        menuitem = SidebarMenuItem("Lazy Binding Info", mmci, parent)
 
         menuitem.parse_mmc()
         return menuitem
@@ -1359,12 +1426,12 @@ class KToolMachOLoader:
     @staticmethod
     def objc_headers(objc_lib, parent=None, callback=None):
         generator = HeaderGenerator(objc_lib)
-        hnci = MainMenuContentItem
+        hnci = MainMenuContentItem()
         hnci.lines = generator.headers.keys()
         menuitem = SidebarMenuItem("ObjC Headers", hnci, parent)
         count = len(generator.headers.keys())
         i = 1
-
+        callback(f'Processing {count} ObjC Headers')
         futures = []
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
@@ -1575,7 +1642,7 @@ class KToolScreen:
         self.file_browser.scroll_view_text_buffer = ScrollingDisplayBuffer(self.file_browser.scroll_view, 0, 0, curses.COLS - 10, curses.LINES - 10)
         self.file_browser.scroll_view_text_buffer.wrap = False
 
-        self.mainscreen.tabname = ""
+        self.mainscreen.currently_displayed_index = -1
         self.update_mainscreen_text()
 
         self.footerbar.box = Box(self.root, 0, curses.LINES - 1, curses.COLS, 1)
@@ -1637,8 +1704,7 @@ class KToolScreen:
         elif c == curses.KEY_RESIZE:
             # Curses passes this weird keypress whenever the window gets resized
             # So, rebuild our contexts here with the new screen size.
-            self.rebuild_all()
-            return
+            raise RebuildAllException
 
         if c == curses.KEY_MOUSE:
             _, mx, my, _, _ = curses.getmouse()
@@ -1688,7 +1754,6 @@ class KToolScreen:
 
             except RebuildAllException:
                 self.rebuild_all()
-                self.redraw_all()
 
             except PresentTitleMenuException:
                 self.handle_present_menu_exception(True)
