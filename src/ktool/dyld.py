@@ -156,14 +156,14 @@ class Library:
         self.dylib = None
         self.uuid = None
 
-        self.platform = None
+        self.platform = PlatformType.UNK
 
         self.allowed_clients = []
 
         self.rpath = None
 
-        self.minos = None
-        self.sdk_version = None
+        self.minos = os_version(0, 0, 0)
+        self.sdk_version = os_version(0, 0, 0)
 
         self.binding_table = None
         self.weak_binding_table = None
@@ -407,6 +407,7 @@ class PlatformType(Enum):
     TVOS_SIMULATOR = 8
     WATCHOS_SIMULATOR = 9
     DRIVER_KIT = 10
+    UNK = 64
 
 
 class ToolType(Enum):
