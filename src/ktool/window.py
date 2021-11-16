@@ -64,7 +64,6 @@ Backspace to exit (or click the X in the top right corner).
 
 PANIC_STRING = ""
 
-
 ATTR_STRING_DEBUG = False
 
 
@@ -206,6 +205,7 @@ class PresentDebugMenuException(Exception):
 class PresentTitleMenuException(Exception):
     """Raise this within the runloop to invoke the Title Bar Menu Rendering code
     """
+
 
 class FileBrowserOpenNewFileException(Exception):
     """
@@ -357,8 +357,8 @@ class ScrollingDisplayBuffer:
                     slice_size = max_size if not indenting else max_size - indent_size
                     slice_size = min(slice_size, len(line.string) - curs)
                     if len(line.string) + 10 - curs > max_size:
-                        slice_size = self.find_clean_breakpoint(line.string[curs:curs+slice_size], slice_size)
-                    text = line.string[curs:curs+slice_size]
+                        slice_size = self.find_clean_breakpoint(line.string[curs:curs + slice_size], slice_size)
+                    text = line.string[curs:curs + slice_size]
                     if indenting:
                         text = ' ' * 10 + text
                     lines.append(text)
@@ -411,7 +411,7 @@ class ScrollingDisplayBuffer:
                     line = AttributedString(line)
                 if len(line.string) > self.width:
                     slice_size = self.width
-                    line.string = line.string[0:slice_size-3] + "..."
+                    line.string = line.string[0:slice_size - 3] + "..."
                     trunc_lines.append(line)
                 else:
                     trunc_lines.append(line)
@@ -438,7 +438,7 @@ class ScrollingDisplayBuffer:
                     attr_end = max(attribute[0][1], self.box.width)
                     attr = attribute[1]
                     try:
-                        self.box.write(x + attr_start, y, text[attr_start:attr_end-1], attr)
+                        self.box.write(x + attr_start, y, text[attr_start:attr_end - 1], attr)
                     except PanicException:
                         pass
                 # DEBUG: self.box.write(x, y, str(line.attrs), self.render_attr)
@@ -981,7 +981,8 @@ class MainScreen(ScrollView):
         # Clear and Redraw the Info Box bar
         self.info_box.write(-1, 1, '╞' + ''.ljust(width, '═') + '╡', curses.color_pair(9))
         self.info_box.write(2, 1, f'╡ {self.tabname.strip()} ╞', curses.color_pair(9))
-        self.info_box.write(3, 1, f' {self.tabname.strip()} ', curses.A_NORMAL if not self.highlighted else curses.A_STANDOUT)
+        self.info_box.write(3, 1, f' {self.tabname.strip()} ',
+                            curses.A_NORMAL if not self.highlighted else curses.A_STANDOUT)
 
     def handle_key_press(self, key):
         if key == curses.KEY_UP:
@@ -1062,7 +1063,7 @@ class LoaderStatusView(View):
         for i in range(start_y, start_y + height + 1):
             self.box.write(start_x, i, ' ' * box_width, curses.A_STANDOUT)
 
-        self.box.write(start_x+1, start_y + 1, self.status_string, curses.A_STANDOUT)
+        self.box.write(start_x + 1, start_y + 1, self.status_string, curses.A_STANDOUT)
 
 
 class MenuOverlayRenderingView(View):
@@ -1138,12 +1139,12 @@ class FileSystemBrowserOverlayView(ScrollView):
 
         self.box.write(start_x, start_y, lc + ''.ljust(width - 2, div) + rc, bgcolor)
 
-        for line in range(start_y+1, start_y + height + 1):
+        for line in range(start_y + 1, start_y + height + 1):
             self.box.write(start_x, line, VERT_LINE + ''.ljust(width - 2, ' ') + VERT_LINE, bgcolor)
 
         self.box.write(start_x, start_y + height, bl + ''.ljust(width - 2, div) + br, bgcolor)
-        self.box.write(start_x, start_y + height-2, lj + ''.ljust(width - 2, div) + rj, bgcolor)
-        self.box.write(start_x+width-10, start_y+height-1, ' SELECT ', curses.A_STANDOUT)
+        self.box.write(start_x, start_y + height - 2, lj + ''.ljust(width - 2, div) + rj, bgcolor)
+        self.box.write(start_x + width - 10, start_y + height - 1, ' SELECT ', curses.A_STANDOUT)
 
         lines = ['..'] + [i for i in os.listdir(self.current_dir_path)]
         nlines = []
@@ -1236,13 +1237,21 @@ class KToolMachOLoader:
         callback("Loading MachO Slice")
         slice_item = SidebarMenuItem(f'{slice_nick}', None, None)
         slice_item.content = KToolMachOLoader._file(loaded_library, slice_item, callback).content
-        slice_item.children = [KToolMachOLoader.load_cmds(loaded_library, slice_item, callback),
-                               KToolMachOLoader.segments(loaded_library, slice_item, callback),
-                               KToolMachOLoader.linked(loaded_library, slice_item, callback),
-                               KToolMachOLoader.symtab(loaded_library, slice_item, callback),
-                               KToolMachOLoader.binding_group(loaded_library, slice_item, callback),
-                               KToolMachOLoader.vm_map(loaded_library, slice_item, callback)]
-        slice_item.children += KToolMachOLoader.objc_items(loaded_library, slice_item, callback)
+        items = [KToolMachOLoader.load_cmds,
+                 KToolMachOLoader.segments,
+                 KToolMachOLoader.linked,
+                 KToolMachOLoader.symtab,
+                 KToolMachOLoader.binding_group,
+                 KToolMachOLoader.vm_map]
+        for item in items:
+            try:
+                slice_item.children.append(item(loaded_library, slice_item, callback))
+            except Exception as ex:
+                pass
+        try:
+            slice_item.children += KToolMachOLoader.objc_items(loaded_library, slice_item, callback)
+        except Exception as ex:
+            pass
         slice_item.show_children = True
         return slice_item
 
@@ -1269,7 +1278,8 @@ class KToolMachOLoader:
         file_content_item.lines.append(f'UUID: §35m{lib.uuid.hex().upper()}§39m')
         file_content_item.lines.append(f'Platform: §35m{lib.platform.name}§39m')
         file_content_item.lines.append(f'Minimum OS: §35m{lib.minos.x}.{lib.minos.y}.{lib.minos.z}§39m')
-        file_content_item.lines.append(f'SDK Version: §35m{lib.sdk_version.x}.{lib.sdk_version.y}.{lib.sdk_version.z}§39m')
+        file_content_item.lines.append(
+            f'SDK Version: §35m{lib.sdk_version.x}.{lib.sdk_version.y}.{lib.sdk_version.z}§39m')
 
         menuitem = SidebarMenuItem("File Info", file_content_item, parent)
         menuitem.parse_mmc()
@@ -1283,7 +1293,8 @@ class KToolMachOLoader:
 
         linked_libs_item = MainMenuContentItem()
         for exlib in lib.linked:
-            linked_libs_item.lines.append('§31m(Weak)§39m ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
+            linked_libs_item.lines.append(
+                '§31m(Weak)§39m ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
 
         menuitem = SidebarMenuItem("Linked Libraries", linked_libs_item, parent)
         menuitem.parse_mmc()
@@ -1358,8 +1369,8 @@ class KToolMachOLoader:
         menuitem = SidebarMenuItem("Binding", hnci, parent)
 
         menuitem.children = [KToolMachOLoader.binding_items(lib, menuitem, callback),
-                               KToolMachOLoader.weak_binding_items(lib, menuitem, callback),
-                               KToolMachOLoader.lazy_binding_items(lib, menuitem, callback)]
+                             KToolMachOLoader.weak_binding_items(lib, menuitem, callback),
+                             KToolMachOLoader.lazy_binding_items(lib, menuitem, callback)]
 
         menuitem.parse_mmc()
         return menuitem
@@ -1642,7 +1653,8 @@ class KToolScreen:
 
         self.file_browser.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)
         self.file_browser.scroll_view = Box(self.root, 5, 4, curses.COLS - 10, curses.LINES - 8)
-        self.file_browser.scroll_view_text_buffer = ScrollingDisplayBuffer(self.file_browser.scroll_view, 0, 0, curses.COLS - 10, curses.LINES - 10)
+        self.file_browser.scroll_view_text_buffer = ScrollingDisplayBuffer(self.file_browser.scroll_view, 0, 0,
+                                                                           curses.COLS - 10, curses.LINES - 10)
         self.file_browser.scroll_view_text_buffer.wrap = False
 
         self.mainscreen.currently_displayed_index = -1
