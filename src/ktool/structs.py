@@ -20,8 +20,8 @@ class objc2_class(Struct):
     _SIZES = [8, 8, 8, 8, 8]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_class_ro(Struct):
@@ -30,8 +30,8 @@ class objc2_class_ro(Struct):
     _SIZES = [4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_meth(Struct):
@@ -39,8 +39,8 @@ class objc2_meth(Struct):
     _SIZES = [8, 8, 8]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_meth_list_entry(Struct):
@@ -48,8 +48,8 @@ class objc2_meth_list_entry(Struct):
     _SIZES = [4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_meth_list(Struct):
@@ -57,8 +57,8 @@ class objc2_meth_list(Struct):
     _SIZES = [4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_prop_list(Struct):
@@ -66,8 +66,8 @@ class objc2_prop_list(Struct):
     _SIZES = [4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_prop(Struct):
@@ -75,8 +75,8 @@ class objc2_prop(Struct):
     _SIZES = [8, 8]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_prot_list(Struct):
@@ -84,8 +84,8 @@ class objc2_prot_list(Struct):
     _SIZES = [8]
     SIZE = 8
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_prot(Struct):
@@ -94,8 +94,8 @@ class objc2_prot(Struct):
     _SIZES = [8, 8, 8, 8, 8, 8, 8, 8, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_ivar_list(Struct):
@@ -103,8 +103,8 @@ class objc2_ivar_list(Struct):
     _SIZES = [4, 4]
     SIZE = 8
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_ivar(Struct):
@@ -112,8 +112,8 @@ class objc2_ivar(Struct):
     _SIZES = [8, 8, 8, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class objc2_category(Struct):
@@ -121,5 +121,5 @@ class objc2_category(Struct):
     _SIZES = [8, 8, 8, 8, 8, 8]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)

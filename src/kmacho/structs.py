@@ -34,7 +34,7 @@ class Struct:
         :param byte_order: Little/Big Endian Struct Unpacking
         :return: struct_class Instance
         """
-        instance: Struct = struct_class()
+        instance: Struct = struct_class(byte_order)
         current_off = 0
         raw = bytearray(raw)
 
@@ -45,27 +45,29 @@ class Struct:
             instance._fields[field] = int.from_bytes(data, byte_order)
 
             instance.raw += data
+            instance.initialized = True
             current_off += size
 
         return instance
 
     @staticmethod
-    def create_with_values(struct_class, values):
+    def create_with_values(struct_class, values, byte_order="little"):
         """
         Pack/Create a struct given field values
 
+        :param byte_order:
         :param struct_class: Struct subclass
         :param values: List of values
         :return: struct_class Instance
         """
 
-        instance: Struct = struct_class()
+        instance: Struct = struct_class(byte_order)
 
         for i, field in enumerate(instance._field_list):
             instance._fields[field] = values[i]
 
         instance._rebuild_raw()
-
+        instance.initialized = True
         return instance
 
     def typename(self):
@@ -80,7 +82,7 @@ class Struct:
             text += f'{field}={hex(self._fields[field])}, '
         return text[:-2] + ')'
 
-    def __init__(self, fields=None, sizes=None):
+    def __init__(self, fields=None, sizes=None, byte_order="little"):
         if sizes is None:
             raise AssertionError(
                 "Do not use the bare Struct class; it must be implemented in an actual type; Missing Sizes")
@@ -89,7 +91,12 @@ class Struct:
             raise AssertionError(
                 "Do not use the bare Struct class; it must be implemented in an actual type; Missing Fields")
 
+        # Declare this first to avoid a recursion error
         self._fields = {}
+
+        self.byte_order = byte_order
+        self.initialized = False
+
         self._field_list = fields
         self._field_sizes = {}
         self._sizeof = sum(sizes)
@@ -105,8 +112,18 @@ class Struct:
         raw = bytearray()
         for field in self._field_list:
             size = self._field_sizes[field]
-            data = self._fields[field].to_bytes(size, byteorder='little') if isinstance(self._fields[field], int) else \
-            self._fields[field]
+
+            field_dat = self._fields[field]
+
+            data = None
+
+            if isinstance(field_dat, int):
+                data = field_dat.to_bytes(size, byteorder=self.byte_order)
+            elif isinstance(field_dat, bytearray) or isinstance(field_dat, bytes):
+                data = self._fields[field]
+
+            assert data is not None
+
             raw += bytearray(data)
 
         assert len(raw) == self._sizeof
@@ -126,27 +143,42 @@ class Struct:
     def __setattr__(self, key, value):
         if key in self._fields:
             self._fields[key] = value
-            self._rebuild_raw()
+            if self.initialized:
+                self._rebuild_raw()
         else:
             super().__setattr__(key, value)
 
 
 class fat_header(Struct):
+    """
+    First 8 Bytes of a FAT MachO File
+
+    Attributes:
+        self.magic: FAT MachO Magic
+
+        self.nfat_archs: Number of Fat Arch entries after these bytes
+    """
     _FIELDNAMES = ['magic', 'nfat_archs']
     _SIZES = [4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class fat_arch(Struct):
+    """
+    Struct representing a slice in a FAT MachO
+
+    Attribs:
+        cpu_type:
+    """
     _FIELDNAMES = ['cpu_type', 'cpu_subtype', 'offset', 'size', 'align']
     _SIZES = [4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class dyld_header(Struct):
@@ -154,8 +186,8 @@ class dyld_header(Struct):
     _SIZES = [4, 4, 4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class unk_command(Struct):
@@ -163,8 +195,8 @@ class unk_command(Struct):
     _SIZES = [4, 4]
     SIZE = 8
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class segment_command_64(Struct):
@@ -173,8 +205,8 @@ class segment_command_64(Struct):
     _SIZES = [4, 4, 16, 8, 8, 8, 8, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class section_64(Struct):
@@ -183,8 +215,8 @@ class section_64(Struct):
     _SIZES = [16, 16, 8, 8, 4, 4, 4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class symtab_command(Struct):
@@ -192,8 +224,8 @@ class symtab_command(Struct):
     _SIZES = [4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class dysymtab_command(Struct):
@@ -204,8 +236,8 @@ class dysymtab_command(Struct):
     _SIZES = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class dylib(Struct):
@@ -213,8 +245,8 @@ class dylib(Struct):
     _SIZES = [4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class dylib_command(Struct):
@@ -222,8 +254,8 @@ class dylib_command(Struct):
     _SIZES = [4, 4, 16]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class dylinker_command(Struct):
@@ -231,8 +263,8 @@ class dylinker_command(Struct):
     _SIZES = [4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class sub_client_command(Struct):
@@ -240,8 +272,8 @@ class sub_client_command(Struct):
     _SIZES = [4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class uuid_command(Struct):
@@ -249,8 +281,8 @@ class uuid_command(Struct):
     _SIZES = [4, 4, 16]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class build_version_command(Struct):
@@ -258,8 +290,8 @@ class build_version_command(Struct):
     _SIZES = [4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class entry_point_command(Struct):
@@ -267,8 +299,8 @@ class entry_point_command(Struct):
     _SIZES = [4, 4, 8, 8]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class rpath_command(Struct):
@@ -276,8 +308,8 @@ class rpath_command(Struct):
     _SIZES = [4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class source_version_command(Struct):
@@ -285,8 +317,8 @@ class source_version_command(Struct):
     _SIZES = [4, 4, 8]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class linkedit_data_command(Struct):
@@ -294,8 +326,8 @@ class linkedit_data_command(Struct):
     _SIZES = [4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class dyld_info_command(Struct):
@@ -305,8 +337,8 @@ class dyld_info_command(Struct):
     _SIZES = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
 class symtab_entry(Struct):
@@ -314,5 +346,5 @@ class symtab_entry(Struct):
     _SIZES = [4, 1, 1, 2, 8]
     SIZE = sum(_SIZES)
 
-    def __init__(self):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES)
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)

@@ -67,7 +67,10 @@ class ObjCLibrary:
         cats = []  # meow
         count = sect.size // 0x8
         for offset in range(0, count):
-            cats.append(Category(self, sect.vm_address + offset * 0x8))
+            try:
+                cats.append(Category(self, sect.vm_address + offset * 0x8))
+            except Exception as ex:
+                log.error(f'Failed to load a category! Ex: {str(ex)}')
 
         return cats
 
@@ -111,8 +114,8 @@ class ObjCLibrary:
         for i in range(0, cnt):
             ptr = sect.vm_address + i * 0x8
             loc = self.library.get_bytes(ptr, 0x8, vm=True)
-            proto = self.library.load_struct(loc, objc2_prot, vm=True)
             try:
+                proto = self.library.load_struct(loc, objc2_prot, vm=True)
                 protos.append(Protocol(self, proto, loc))
             except Exception as ex:
                 log.error("Failed to load a protocol with " + str(ex))
@@ -493,6 +496,9 @@ class Class:
             try:
                 symbol = self.library.library.binding_table.lookup_table[objc2_class_location + 8]
             except KeyError as ex:
+                self.superclass = "NSObject"
+                return objc2_class_item
+            except AttributeError as ex:
                 self.superclass = "NSObject"
                 return objc2_class_item
             self.superclass = symbol.name[1:]

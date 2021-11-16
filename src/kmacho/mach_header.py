@@ -241,6 +241,8 @@ class CPUSubTypeARM(IntEnum):
 
 class CPUSubTypeARM64(IntEnum):
     ALL = 0
+    ARM64E = 2
+    ARM64E2 = 2147483650
 
 
 class CPUSubTypeSPARC(IntEnum):

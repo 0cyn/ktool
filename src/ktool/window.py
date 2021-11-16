@@ -1220,7 +1220,10 @@ class KToolMachOLoader:
         machofile = MachOFile(fd)
         items = []
         for macho_slice in machofile.slices:
-            items.append(KToolMachOLoader.slice_item(macho_slice, callback))
+            try:
+                items.append(KToolMachOLoader.slice_item(macho_slice, callback))
+            except Exception:
+                pass
         return items
 
     @staticmethod

@@ -166,12 +166,14 @@ def main():
     parser_dump.set_defaults(func=dump, do_headers=False, sort_headers=False, do_tbd=False, slice_index=0)
 
     parser_list = subparsers.add_parser('list', help='Print various lists')
+    parser_list.add_argument('--slice', dest='slice_index', type=int,
+                             help="Specify Index of Slice (in FAT MachO) to examine")
     parser_list.add_argument('--classes', dest='get_classes', action='store_true', help='Print class list')
     parser_list.add_argument('--protocols', dest='get_protos', action='store_true', help='Print Protocol list')
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
     parser_list.add_argument('filename', nargs='?', default='')
-    parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False)
+    parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False, slice_index=0)
 
     parser_symbols = subparsers.add_parser('symbols', help='Print various symbols')
     parser_symbols.add_argument('--imports', dest='get_imports', action='store_true', help='Print Imports')
@@ -567,7 +569,7 @@ def _list(args):
 
     with open(args.filename, 'rb') as fd:
         machofile = MachOFile(fd)
-        library = Dyld.load(machofile.slices[0])
+        library = Dyld.load(machofile.slices[args.slice_index])
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
         if args.get_lcs:
             for lc in library.macho_header.load_commands:

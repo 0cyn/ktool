@@ -187,6 +187,7 @@ class _VirtualMemoryMap:
     def get_file_address(self, vm_address: int, segment_name=None):
         # This function gets called *a lot*
         # It needs to be fast as shit.
+        vm_address = 0x0000FFFFFFFFF & vm_address
         if vm_address in self.cache:
             return self.cache[vm_address]
         if segment_name is not None:
@@ -229,6 +230,7 @@ class _VirtualMemoryMap:
         if len(segment.sections) == 0:
             seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,
                              segment.name)
+            log.info(str(seg_obj))
             self.map[segment.name] = seg_obj
             self.stats[segment.name] = 0
         else:
@@ -236,6 +238,7 @@ class _VirtualMemoryMap:
                 name = section.name if section.name not in self.map.keys() else section.name + '2'
                 sect_obj = vm_obj(section.vm_address, section.vm_address + section.size, section.size,
                                   section.file_address, name)
+                log.info(str(sect_obj))
                 self.map[name] = sect_obj
                 self.sorted_map = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
                 self.stats[name] = 0
@@ -277,6 +280,8 @@ class Slice:
             f.seek(old_file_position)
         else:
             self.size = self.arch_struct.size
+
+        self.byte_order = "little" if self.get_at(0, 4, "little") == MH_MAGIC_64 else "big"
 
     def patch(self, address, raw):
         self.macho_file.file.seek(self.offset + address)
@@ -325,7 +330,11 @@ class Slice:
     def get_cstr_at(self, addr: int, limit: int = 0):
         addr = addr + self.offset
         self.macho_file.file.seek(addr)
-        text = self.macho_file.file[addr:self.macho_file.file.find(b"\x00")].decode()
+        try:
+            text = self.macho_file.file[addr:self.macho_file.file.find(b"\x00")].decode()
+        except Exception as ex:
+            log.debug(f'Failed to decode CString at raw {hex(addr)} off {hex(addr - self.offset)}')
+            raise ex
         self.macho_file.file.seek(0)
         return text
 

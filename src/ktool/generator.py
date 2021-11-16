@@ -21,6 +21,8 @@ from .dyld import Dyld, SymbolType
 
 from collections import namedtuple
 
+from kmacho.structs import *
+
 
 class TBDGenerator:
     def __init__(self, library, general=True, objc_lib=None):
@@ -109,16 +111,14 @@ class FatMachOGenerator:
             self.fat_archs.append(fat_arch_item)
 
         fat_head = bytearray()
-        fat_head.extend(b'\xCA\xFE\xBA\xBE')
 
-        fat_head.extend(len(self.fat_archs).to_bytes(0x4, 'big'))
+        fh = Struct.create_with_values(fat_header, [b'\xCA\xFE\xBA\xBE', len(self.fat_archs)], "big")
+
+        fat_head += fh.raw
 
         for fat_arch_item in self.fat_archs:
-            fat_head.extend(fat_arch_item.cputype.to_bytes(0x4, 'big'))
-            fat_head.extend(fat_arch_item.cpusubtype.to_bytes(0x4, 'big'))
-            fat_head.extend(fat_arch_item.offset.to_bytes(0x4, 'big'))
-            fat_head.extend(fat_arch_item.size.to_bytes(0x4, 'big'))
-            fat_head.extend(fat_arch_item.align.to_bytes(0x4, 'big'))
+            fa = Struct.create_with_values(fat_arch, [fat_arch_item.cputype, fat_arch_item.cpusubtype, fat_arch_item.offset, fat_arch_item.size, fat_arch_item.align], "big")
+            fat_head += fa.raw
 
         self.fat_head = fat_head
 
