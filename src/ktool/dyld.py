@@ -107,6 +107,22 @@ class Dyld:
                               f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
                               f'.{library.sdk_version.y}.{library.sdk_version.z}')
 
+            elif isinstance(cmd, version_min_command):
+                if library.platform == PlatformType.UNK:
+
+                    if LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_MACOSX:
+                        library.platform = PlatformType.MACOS
+                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_IPHONEOS:
+                        library.platform = PlatformType.IOS
+                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_TVOS:
+                        library.platform = PlatformType.TVOS
+                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_WATCHOS:
+                        library.platform = PlatformType.WATCHOS
+
+                    library.minos = os_version(x=library.get_bytes(cmd.off + 10, 2),
+                                               y=library.get_bytes(cmd.off + 9, 1),
+                                               z=library.get_bytes(cmd.off + 8, 1))
+
             elif isinstance(cmd, dylib_command):
                 if cmd.cmd == 0xD:  # local
                     library.dylib = ExternalDylib(library, cmd)

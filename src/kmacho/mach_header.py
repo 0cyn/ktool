@@ -146,6 +146,10 @@ LOAD_COMMAND_MAP = {
     LOAD_COMMAND.BUILD_VERSION: build_version_command,
     LOAD_COMMAND.MAIN: entry_point_command,
     LOAD_COMMAND.RPATH: rpath_command,
+    LOAD_COMMAND.VERSION_MIN_MACOSX: version_min_command,
+    LOAD_COMMAND.VERSION_MIN_IPHONEOS: version_min_command,
+    LOAD_COMMAND.VERSION_MIN_TVOS: version_min_command,
+    LOAD_COMMAND.VERSION_MIN_WATCHOS: version_min_command
 }
 
 

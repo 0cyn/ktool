@@ -348,3 +348,12 @@ class symtab_entry(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+
+
+class version_min_command(Struct):
+    _FIELDNAMES = ["cmd", "cmdsize", "version", "reserved"]
+    _SIZES = [4, 4, 4, 4]
+    SIZE = sum(_SIZES)
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
