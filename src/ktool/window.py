@@ -35,6 +35,7 @@ from threading import Thread
 
 import concurrent.futures
 
+from kmacho import LOAD_COMMAND
 from ktool import MachOFile, Dyld, ObjCLibrary, HeaderGenerator
 
 from pygments import highlight
@@ -224,6 +225,102 @@ class PanicException(Exception):
     """
 
 
+class Table:
+    """
+    Renderable Table
+    .titles = a list of titles for each column
+    .rows is a list of lists, each "sublist" representing each column, .e.g self.rows.append(['col1thing', 'col2thing'])
+    """
+    def __init__(self):
+        self.titles = []
+        self.rows = []
+
+    def render(self, width):
+        if len(self.rows) == 0:
+            return ""
+        column_maxes = [0 for i in self.rows[0]]
+        for row in self.rows:
+            for index, col in enumerate(row):
+                column_maxes[index] = max(len(col), column_maxes[index])
+        column_maxes = [i + 2 for i in column_maxes]
+        tit = ''
+        for i, title in enumerate(self.titles):
+            tit += title.ljust(column_maxes[i], ' ')
+
+        col_min = min(column_maxes)
+        while sum(column_maxes) >= width:
+            for index, i, in enumerate(column_maxes):
+                column_maxes[index] = max(col_min, column_maxes[index] - 2)
+
+        rows = []
+        for row_i, row in enumerate(self.rows):
+            cols = []
+            cline_max = 0
+            for col_i, col in enumerate(row):
+                lines = [col[i:i + column_maxes[col_i]] for i in range(0, len(col), column_maxes[col_i])]
+                cline_max = max(len(lines), cline_max)
+                cols.append(lines)
+            for col in cols:
+                while len(col) < cline_max:
+                    col.append('')
+            rows.append(cols)
+
+        lines = tit + '\n'
+
+        for row in rows:
+            rlines = []
+            llen = len(row[0])
+            for i in range(0, llen):
+                line = ""
+                for j, col in enumerate(row):
+                    line += col[i].ljust(column_maxes[j], ' ')
+                rlines.append(line)
+            lines += '\n'.join(rlines)
+            lines += '\n'
+
+        return lines
+
+
+class HexDumpTable(Table):
+    """
+    Subclass of table, just set the .hex value to a bytearray and it'll handle rendering it.
+
+    """
+    def __init__(self):
+        super().__init__()
+        self.titles = ['', '']
+        self.hex = bytearray(b'')
+
+    def render(self, width):
+        maxwid = width / 2
+        renwid = maxwid - (maxwid % 10)
+        col_count = renwid / 10
+        self.rows = []
+
+        stack = ""
+        decode_stack = ""
+        stack_div = ""
+        decode_stack_div = ""
+
+        for i, byte in enumerate(self.hex):
+            stack_div += hex(byte)[2:].rjust(2, '0')
+            decode_stack_div += byte.to_bytes(1, 'big').decode('ascii') if byte in range(32, 127) else '.'
+            if len(stack_div) >= 8:
+                stack += stack_div + '  '
+                decode_stack += decode_stack_div + ' '
+                stack_div = ""
+                decode_stack_div = ""
+            if len(stack) >= 10 * col_count:
+                self.rows.append([stack, decode_stack])
+                stack = ""
+                decode_stack = ""
+
+        self.rows.append([stack, decode_stack])
+
+        return super().render(width)
+
+
+
 # # # # #
 #
 # Lower Level Display Abstraction
@@ -345,6 +442,9 @@ class ScrollingDisplayBuffer:
         if self.wrap:
             wrapped_lines = []
             for line in self.lines:
+                if isinstance(line, Table):
+                    wrapped_lines += [i[0:self.width] for i in line.render(self.width).split('\n')]
+                    continue
                 if not isinstance(line, AttributedString):
                     line = AttributedString(line)
                 max_size = self.width
@@ -731,7 +831,10 @@ class SidebarMenuItem:
     def parse_mmc(self):
         attrib_content = []
         for item in self.content.lines:
-            attrib_content.append(AttributedString.ansi_to_attrstr(item))
+            if isinstance(item, str):
+                attrib_content.append(AttributedString.ansi_to_attrstr(item))
+            else:
+                attrib_content.append(item)
         self.content = MainMenuContentItem(attrib_content)
 
     @staticmethod
@@ -1223,8 +1326,8 @@ class KToolMachOLoader:
         for macho_slice in machofile.slices:
             try:
                 items.append(KToolMachOLoader.slice_item(macho_slice, callback))
-            except Exception:
-                pass
+            except Exception as ex:
+                raise ex
         return items
 
     @staticmethod
@@ -1257,14 +1360,37 @@ class KToolMachOLoader:
 
     @staticmethod
     def segments(lib, parent=None, callback=None):
+        callback("Loading Segments...")
         smmci = MainMenuContentItem()
         ssmi = SidebarMenuItem("Segments", smmci, parent)
+        table = Table()
+        table.titles = ['Segment Name', 'VM Address', 'Size', 'File Address']
+
         for segname, segm in lib.segments.items():
+
+            table.rows.append([segname, hex(segm.vm_address), hex(segm.size), hex(segm.file_address)])
+
+            segtable = Table()
+            segtable.titles = ['Section Name', 'VM Address', 'Size', 'File Address']
             mmci = MainMenuContentItem()
             item = SidebarMenuItem(f'{segname} [{len(segm.sections.items())} Sections]', mmci, ssmi)
             for secname, sect in segm.sections.items():
-                item.children.append(SidebarMenuItem(secname, mmci, item))
+                segtable.rows.append([secname, hex(sect.vm_address), hex(sect.size), hex(sect.file_address)])
+                hextab = HexDumpTable()
+                hextab.hex = lib.slice.get_bytes_at(sect.file_address, sect.size)
+                itm = MainMenuContentItem()
+                itm.lines.append(hextab)
+                item.children.append(SidebarMenuItem(secname, itm, item))
             ssmi.children.append(item)
+            mmci.lines.append(segtable)
+            if len(segm.sections.items()) == 0:
+                if 'PAGEZERO' not in segname:
+                    hextab = HexDumpTable()
+                    hextab.hex = lib.slice.get_bytes_at(segm.file_address, segm.size)
+                    mmci.lines.append(hextab)
+
+        smmci.lines.append(table)
+
         ssmi.parse_mmc()
         return ssmi
 
@@ -1316,17 +1442,13 @@ class KToolMachOLoader:
         for cmd in lib.macho_header.load_commands:
             mmci = MainMenuContentItem()
             mmci.lines = str(cmd).split('\n')
-            raw: bytes = cmd.raw
-            raw_str = ""
-            for i, byte in enumerate(raw):
-                raw_str += hex(byte)[2:].upper().rjust(2, '0') + ' '
-                if i % 4 == 3:
-                    raw_str += ' '
-            mmci.lines.append('')
-            mmci.lines.append('Hex Data ---')
-            mmci.lines.append('')
-            mmci.lines.append(raw_str)
-            lc_menu_item = SidebarMenuItem(cmd.typename(), mmci, menuitem)
+            raw: bytes = lib.slice.get_bytes_at(cmd.off, cmd.cmdsize)
+            hexdump = HexDumpTable()
+            hexdump.hex = bytearray(raw)
+
+            mmci.lines.append(hexdump)
+
+            lc_menu_item = SidebarMenuItem(LOAD_COMMAND(cmd.cmd).name, mmci, menuitem)
             menuitem.children.append(lc_menu_item)
 
         menuitem.parse_mmc()
@@ -1336,8 +1458,11 @@ class KToolMachOLoader:
     def symtab(lib, parent=None, callback=None):
         mmci = MainMenuContentItem()
 
+        tab = Table()
+        tab.titles = ['Address', 'Name']
         for sym in lib.symbol_table.table:
-            mmci.lines.append(f' Name: {sym.fullname} | Address: {hex(sym.addr)} ')
+            tab.rows.append([hex(sym.addr), sym.fullname])
+        mmci.lines.append(tab)
 
         menuitem = SidebarMenuItem("Symbol Table", mmci, parent)
 
@@ -1380,12 +1505,16 @@ class KToolMachOLoader:
 
         mmci = MainMenuContentItem()
 
+        table = Table()
+        table.titles = ['Symbol', 'Address', 'Library']
+
         for sym in lib.binding_table.symbol_table:
             try:
-                mmci.lines.append(
-                    f'{sym.name.ljust(20, " ")} | {hex(sym.addr).ljust(15, " ")} | {lib.linked[int(sym.ordinal) - 1].install_name} | {sym.type}')
+                table.rows.append([sym.name, hex(sym.addr), lib.linked[int(sym.ordinal) - 1].install_name])
             except IndexError:
-                pass
+                table.rows.append([sym.name, hex(sym.addr), 'ERR'])
+
+        mmci.lines.append(table)
 
         menuitem = SidebarMenuItem("Binding Info", mmci, parent)
 
@@ -1397,12 +1526,16 @@ class KToolMachOLoader:
 
         mmci = MainMenuContentItem()
 
+        table = Table()
+        table.titles = ['Symbol', 'Address', 'Library']
+
         for sym in lib.weak_binding_table.symbol_table:
             try:
-                mmci.lines.append(
-                    f'{sym.name.ljust(20, " ")} | {hex(sym.addr).ljust(15, " ")} | {lib.linked[int(sym.ordinal) - 1].install_name} | {sym.type}')
+                table.rows.append([sym.name, hex(sym.addr), lib.linked[int(sym.ordinal) - 1].install_name])
             except IndexError:
-                pass
+                table.rows.append([sym.name, hex(sym.addr), 'ERR'])
+
+        mmci.lines.append(table)
 
         menuitem = SidebarMenuItem("Weak Binding Info", mmci, parent)
 
@@ -1414,12 +1547,16 @@ class KToolMachOLoader:
 
         mmci = MainMenuContentItem()
 
+        table = Table()
+        table.titles = ['Symbol', 'Address', 'Library']
+
         for sym in lib.lazy_binding_table.symbol_table:
             try:
-                mmci.lines.append(
-                    f'{sym.name.ljust(20, " ")} | {hex(sym.addr).ljust(15, " ")} | {lib.linked[int(sym.ordinal) - 1].install_name} | {sym.type}')
+                table.rows.append([sym.name, hex(sym.addr), lib.linked[int(sym.ordinal) - 1].install_name])
             except IndexError:
-                pass
+                table.rows.append([sym.name, hex(sym.addr), 'ERR'])
+
+        mmci.lines.append(table)
 
         menuitem = SidebarMenuItem("Lazy Binding Info", mmci, parent)
 
@@ -1725,6 +1862,12 @@ class KToolScreen:
             _, mx, my, _, _ = curses.getmouse()
             self.handle_mouse(mx, my)
 
+        elif c == ord('d'):
+            if self.footerbar.show_debug:
+                self.footerbar.show_debug = False
+            else:
+                self.footerbar.show_debug = True
+
         # TAB
         elif c == 9:
             if self.active_key_handler == self.sidebar:
@@ -1803,3 +1946,17 @@ class KToolScreen:
                 raise ex
 
         self.teardown()
+
+
+def external_hard_fault_teardown():
+    """
+    Call this from outside of this file wherever the Screen is being loaded from, if it catches an Exception
+        (it should never do that, so something went very wrong, and we need to attempt to unfuck the terminal).
+
+    :return:
+    """
+    curses.echo()
+    curses.nocbreak()
+    curses.mousemask(0)
+    curses.curs_set(1)
+    curses.endwin()

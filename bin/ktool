@@ -37,7 +37,7 @@ from ktool.util import KTOOL_VERSION
 
 from kimg4.img4 import IM4P
 
-from ktool.window import KToolScreen
+from ktool.window import KToolScreen, external_hard_fault_teardown
 
 from enum import Enum
 from argparse import ArgumentParser
@@ -247,9 +247,14 @@ Run `ktool [command]`  for info/examples on using that command
 
 
 def _open(args):
-    log.LOG_LEVEL = LogLevel.NONE
-    screen = KToolScreen()
-    screen.load_file(args.filename)
+    try:
+        log.LOG_LEVEL = LogLevel.NONE
+        screen = KToolScreen()
+        screen.load_file(args.filename)
+    except KeyboardInterrupt:
+        external_hard_fault_teardown()
+        print('Hard Faulted. This was likely due to a curses error causing a freeze while rendering.')
+
 
 
 def symbols(args):

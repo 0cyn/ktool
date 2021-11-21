@@ -25,6 +25,7 @@ from kmacho import (
 )
 
 from kmacho.structs import *
+from kmacho.fixups import *
 
 from .util import log
 from .macho import _VirtualMemoryMap, Segment
@@ -58,6 +59,7 @@ class Dyld:
 
     @staticmethod
     def _parse_load_commands(library, load_symtab=True, load_binding=True):
+        fixups = None
         for cmd in library.macho_header.load_commands:
             if isinstance(cmd, segment_command_64):
                 log.debug("Loading segment_command_64")
@@ -77,6 +79,10 @@ class Dyld:
                     library.weak_binding_table = BindingTable(library, cmd.weak_bind_off, cmd.weak_bind_size)
                     library.lazy_binding_table = BindingTable(library, cmd.lazy_bind_off, cmd.lazy_bind_size)
                     #library.exports = BindingTable(library, cmd.export_off, cmd.export_size)
+
+            elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
+                # fixups = ChainedFixups(library, cmd.dataoff, cmd.datasize)
+                pass
 
             elif isinstance(cmd, symtab_command):
                 if load_symtab:
@@ -691,4 +697,6 @@ class BindingTable:
                     seg_offset += 8
 
         return import_stack
+
+
 

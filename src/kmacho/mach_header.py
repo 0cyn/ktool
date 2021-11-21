@@ -125,6 +125,8 @@ class LOAD_COMMAND(IntEnum):
     VERSION_MIN_WATCHOS = 0x30
     NOTE = 0x31
     BUILD_VERSION = 0x32
+    LC_DYLD_EXPORTS_TRIE = 0x33 | LC_REQ_DYLD
+    LC_DYLD_CHAINED_FIXUPS = 0x34 | LC_REQ_DYLD
 
 
 LOAD_COMMAND_MAP = {
@@ -149,7 +151,9 @@ LOAD_COMMAND_MAP = {
     LOAD_COMMAND.VERSION_MIN_MACOSX: version_min_command,
     LOAD_COMMAND.VERSION_MIN_IPHONEOS: version_min_command,
     LOAD_COMMAND.VERSION_MIN_TVOS: version_min_command,
-    LOAD_COMMAND.VERSION_MIN_WATCHOS: version_min_command
+    LOAD_COMMAND.VERSION_MIN_WATCHOS: version_min_command,
+    LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE: linkedit_data_command,
+    LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS: linkedit_data_command
 }
 
 
@@ -246,7 +250,7 @@ class CPUSubTypeARM(IntEnum):
 class CPUSubTypeARM64(IntEnum):
     ALL = 0
     ARM64E = 2
-    ARM64E2 = 2147483650
+    ARM64E2 = 0x80000002
 
 
 class CPUSubTypeSPARC(IntEnum):
