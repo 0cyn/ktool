@@ -25,7 +25,7 @@ from kmacho import (
 )
 
 from kmacho.structs import *
-from kmacho.fixups import *
+# from kmacho.fixups import *
 
 from .util import log
 from .macho import _VirtualMemoryMap, Segment
