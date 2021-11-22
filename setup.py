@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='k2l',
-      version='0.14.7',
+      version='0.14.8',
       description='Static mach-o/img4 analysis tool.',
       long_description='file: README.md',
       long_description_content_type='text/markdown',
