@@ -34,6 +34,7 @@ from ktool import (
 )
 
 from ktool.util import KTOOL_VERSION
+from ktool.exceptions import *
 
 from kimg4.img4 import IM4P
 
@@ -73,10 +74,11 @@ def check_for_update():
 
 class KToolError(Enum):
     ArgumentError = 1
+    FiletypeError = 2
 
 
 def exit_with_error(error: KToolError, msg):
-    print(f'Encountered an Error ({error.name})\n', f"{msg}")
+    print(f'Encountered an Error ({error.name}):\n', f"{msg}")
     exit(error.value)
 
 
@@ -220,7 +222,12 @@ def main():
         ps.sort_stats('time', 'cumtime')
         ps.print_stats(10)
     else:
-        args.func(args)
+        try:
+            args.func(args)
+        except UnsupportedFiletypeException:
+            exit_with_error(KToolError.FiletypeError, f'{args.filename} is not a valid MachO Binary')
+        except FileNotFoundError:
+            exit_with_error(KToolError.ArgumentError, f'{args.filename} doesn\'t exist')
 
     if UPDATE_AVAILABLE:
         print(f'\n\nUpdate Available ---')
@@ -265,7 +272,6 @@ def _open(args):
     except KeyboardInterrupt:
         external_hard_fault_teardown()
         print('Hard Faulted. This was likely due to a curses error causing a freeze while rendering.')
-
 
 
 def symbols(args):

@@ -20,6 +20,7 @@ from typing import Tuple
 from collections import namedtuple
 
 from .util import log
+from .exceptions import *
 
 from kmacho import *
 from kmacho.structs import *
@@ -52,6 +53,8 @@ class MachOFile:
             return MachOFileType.FAT
         elif self.magic == MH_MAGIC or self.magic == MH_FILETYPE or self.magic == MH_MAGIC_64 or self.magic == MH_CIGAM_64:
             return MachOFileType.THIN
+        else:
+            raise UnsupportedFiletypeException
 
     def _load_struct(self, addr: int, struct_type, endian="little"):
         size = struct_type.SIZE
