@@ -37,7 +37,7 @@ from ktool.util import KTOOL_VERSION
 
 from kimg4.img4 import IM4P
 
-from ktool.window import KToolScreen, external_hard_fault_teardown
+from ktool.window import KToolScreen, external_hard_fault_teardown, Table
 
 from enum import Enum
 from argparse import ArgumentParser
@@ -46,6 +46,17 @@ import urllib.request
 from packaging.version import Version
 
 UPDATE_AVAILABLE = False
+
+
+def get_terminal_size():
+    # We use this instead of shutil.get_terminal_size, because when output is being piped, it returns column width 80
+    # We want to make sure if output is being piped (for example, to grep), that no wrapping occurs, so greps will
+    #   always display all relavant info on a single line. This also helps if it's being piped into a file, for processing
+    #   purposes among everything else.
+    try:
+        return os.get_terminal_size()
+    except OSError:
+        return os.terminal_size((5000, 5000))
 
 
 def check_for_update():
@@ -299,8 +310,13 @@ def symbols(args):
             machofile = MachOFile(fd)
             library = Dyld.load(machofile.slices[0])
 
+            table = Table()
+            table.titles = ['Address', 'Name']
+
             for sym in library.symbol_table.table:
-                print(f'Address: {sym.addr} | Name: {sym.fullname}')
+                table.rows.append([hex(sym.addr), sym.fullname])
+
+            print(table.render(get_terminal_size().columns))
 
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
@@ -312,22 +328,27 @@ def symbols(args):
 
             for sym in library.binding_table.symbol_table:
                 try:
-                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Binding Info')
+                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, '')
                 except:
                     pass
             for sym in library.weak_binding_table.symbol_table:
                 try:
-                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Weak Binding Info')
+                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Weak')
                 except:
                     pass
             for sym in library.lazy_binding_table.symbol_table:
                 try:
-                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Lazy Binding Info')
+                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Lazy')
                 except:
                     pass
 
+            table = Table()
+            table.titles = ['Symbol', 'Library', 'Type']
+
             for _, sym in syms.items():
-                print(f'{sym.name.ljust(20, " ")} | {sym.library} | {sym.from_table}')
+                table.rows.append([sym.name, sym.library, sym.from_table])
+
+            print(table.render(get_terminal_size().columns))
 
     elif args.get_actions:
         with open(args.filename, 'rb') as fd:
