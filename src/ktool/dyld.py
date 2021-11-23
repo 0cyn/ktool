@@ -78,7 +78,7 @@ class Dyld:
                     library.binding_table = BindingTable(library, cmd.bind_off, cmd.bind_size)
                     library.weak_binding_table = BindingTable(library, cmd.weak_bind_off, cmd.weak_bind_size)
                     library.lazy_binding_table = BindingTable(library, cmd.lazy_bind_off, cmd.lazy_bind_size)
-                    #library.exports = BindingTable(library, cmd.export_off, cmd.export_size)
+                    library.exports = ExportTrie(library, cmd.export_off, cmd.export_size)
 
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
                 # fixups = ChainedFixups(library, cmd.dataoff, cmd.datasize)
@@ -525,25 +525,47 @@ class SymbolTable:
         return table
 
 
+export_node = namedtuple("export_node", ['text', 'offset'])
+
+
 class ExportTrie:
     def __init__(self, library, export_start, export_size):
         self.library = library
+        self.start = export_start
+        self.size = export_size
+        self.nodes = []
 
-    def read_export_trie(self, export_start, export_size):
-        read_address = export_start
+        self.read_export_trie()
 
-        while True:
-            if read_address - export_size >= export_start:
-                break
+    def read_export_trie(self):
+        cursor = self.start
+        self.nodes = self.read_node("", cursor)
 
-            byte = self.library.get_bytes(read_address, 1)
-            if byte != 0:
-                size, read_address = self.library.decode_uleb128(read_address)
-                kt = self.library.get_bytes(read_address, 1)
-                kind_flag = kt & 0x3
-                type_flag = kt & ~0x3
-                name = self.library.get_cstr_at(read_address)
-                read_address += len(name) + 1
+    def read_node(self, string, cursor):
+        start = cursor
+        byte = self.library.get_bytes(cursor, 1)
+        results = []
+        log.debug(f'@ {hex(start)} node: {hex(byte)} current_symbol: {string}')
+        if byte == 0:
+            cursor += 1
+            branches = self.library.get_bytes(cursor, 1)
+            log.debug(f'BRAN {branches}')
+            for i in range(0, branches):
+                if i == 0:
+                    cursor += 1
+                proc_str = self.library.get_cstr_at(cursor)
+                cursor += len(proc_str) + 1
+                offset, cursor = self.library.decode_uleb128(cursor)
+                log.debug(f'({i}) string: {string+proc_str} next_node: {hex(self.start+offset)}')
+                results += self.read_node(string + proc_str, self.start + offset)
+        else:
+            log.debug(f'TERM: 0')
+            size, cursor = self.library.decode_uleb128(cursor)
+            flags = self.library.get_bytes(cursor, 1)
+            cursor += 1
+            offset, cursor = self.library.decode_uleb128(cursor)
+            results.append(export_node(string, offset))
+        return results
 
 
 action = namedtuple("action", ["vmaddr", "libname", "item"])

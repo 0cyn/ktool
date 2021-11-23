@@ -192,7 +192,7 @@ def main():
     parser_symbols.add_argument('--imports', dest='get_imports', action='store_true', help='Print Imports')
     parser_symbols.add_argument('--imp-acts', dest='get_actions', action='store_true', help='Print Raw Binding Imports')
     parser_symbols.add_argument('--symtab', dest='get_symtab', action='store_true', help='Print out the symtab')
-    # parser_symbols.add_argument('--exports', dest='get_exports', action='store_true', help='Print exports')
+    parser_symbols.add_argument('--exports', dest='get_exports', action='store_true', help='Print exports')
     parser_symbols.add_argument('filename', nargs='?', default='')
     parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False)
 
@@ -299,17 +299,8 @@ def symbols(args):
             machofile = MachOFile(fd)
             library = Dyld.load(machofile.slices[0])
 
-            syms = {}
-            symbol = namedtuple('symbol', ['name', 'library', 'from_table'])
-
-            for sym in library.exports:
-                try:
-                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Exports')
-                except:
-                    pass
-
-            for _, sym in syms.items():
-                print(f'{sym.name.ljust(20, " ")} | {sym.library} | {sym.from_table}')
+            for i in library.exports.nodes:
+                print(f'{hex(i.offset)}  {i.text}')
 
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:

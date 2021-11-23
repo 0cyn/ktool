@@ -1587,10 +1587,29 @@ class KToolMachOLoader:
 
         menuitem.children = [KToolMachOLoader.binding_items(lib, menuitem, callback),
                              KToolMachOLoader.weak_binding_items(lib, menuitem, callback),
-                             KToolMachOLoader.lazy_binding_items(lib, menuitem, callback)]
+                             KToolMachOLoader.lazy_binding_items(lib, menuitem, callback),
+                             KToolMachOLoader.exports(lib, menuitem, callback)]
 
         menuitem.parse_mmc()
         return menuitem
+
+    @staticmethod
+    def exports(lib, parent=None, callback=None):
+        mmci = MainMenuContentItem()
+
+        table = Table()
+        table.titles = ['Address', 'Symbol']
+
+        for node in lib.exports.nodes:
+            table.rows.append([hex(node.offset), node.text])
+
+        mmci.lines.append(table)
+
+        menuitem = SidebarMenuItem("Exports", mmci, parent)
+
+        menuitem.parse_mmc()
+        return menuitem
+
 
     @staticmethod
     def binding_items(lib, parent=None, callback=None):
