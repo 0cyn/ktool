@@ -283,13 +283,13 @@ def symbols(args):
 
         ktool symbols --imports [filename]
 
+    Print the list of exported symbols
+
+        ktool symbols --exports [filename]
+
     Print the symbol table
 
         ktool symbols --symtab [filename]
-
-    Print full list of bound imported symbols and the addresses they're bound to
-
-        ktool symbols --imp-acts [filename]
     """
 
     require_args(args, one_of=['get_imports', 'get_actions', 'get_exports', 'get_symtab'])
@@ -299,8 +299,13 @@ def symbols(args):
             machofile = MachOFile(fd)
             library = Dyld.load(machofile.slices[0])
 
+            table = Table()
+            table.titles = ['Address', 'Symbol']
+
             for i in library.exports.nodes:
-                print(f'{hex(i.offset)}  {i.text}')
+                table.rows.append([hex(i.offset), i.text])
+
+            print(table.render(get_terminal_size().columns))
 
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:
