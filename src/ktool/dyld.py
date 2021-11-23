@@ -80,6 +80,9 @@ class Dyld:
                     library.lazy_binding_table = BindingTable(library, cmd.lazy_bind_off, cmd.lazy_bind_size)
                     library.exports = ExportTrie(library, cmd.export_off, cmd.export_size)
 
+            elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
+                library.exports = ExportTrie(library, cmd.dataoff, cmd.datasize)
+
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
                 # fixups = ChainedFixups(library, cmd.dataoff, cmd.datasize)
                 pass
@@ -565,6 +568,7 @@ class ExportTrie:
             cursor += 1
             offset, cursor = self.library.decode_uleb128(cursor)
             results.append(export_node(string, offset))
+
         return results
 
 
