@@ -65,6 +65,13 @@ Backspace to exit (or click the X in the top right corner).
 
 PANIC_STRING = ""
 
+
+def panic(msg):
+    global PANIC_STRING
+    PANIC_STRING = msg
+    raise PanicException
+
+
 ATTR_STRING_DEBUG = False
 
 
@@ -230,34 +237,59 @@ class Table:
     Renderable Table
     .titles = a list of titles for each column
     .rows is a list of lists, each "sublist" representing each column, .e.g self.rows.append(['col1thing', 'col2thing'])
+
+    This can be used with and without curses;
+        you just need to set the max width it can be rendered at on the render call.
+        (shutil.get_terminal_size)
     """
     def __init__(self):
         self.titles = []
         self.rows = []
 
     def render(self, width):
+
+        # This code is fucking cursed, horribly difficult to decipher, i am very sorry.
+        # Staring at it for too long may cause:
+        # * Permanet brain damage
+        # * Emotional Trauma
+        # * Seizures
+        #
+
         if len(self.rows) == 0:
             return ""
         column_maxes = [0 for i in self.rows[0]]
         for row in self.rows:
             for index, col in enumerate(row):
+                col = col
                 column_maxes[index] = max(len(col), column_maxes[index])
+
+        for i, title in enumerate(self.titles):
+            column_maxes[i] = max(column_maxes[i], len(title))
+
         column_maxes = [i + 2 for i in column_maxes]
+
+        col_min = min(column_maxes)
+        while sum(column_maxes) + (len(column_maxes) * 2) >= width:
+            for index, i, in enumerate(column_maxes):
+                column_maxes[index] = max(col_min, column_maxes[index] - 1)
+
         tit = ''
         for i, title in enumerate(self.titles):
             tit += title.ljust(column_maxes[i], ' ')
 
-        col_min = min(column_maxes)
-        while sum(column_maxes) >= width:
-            for index, i, in enumerate(column_maxes):
-                column_maxes[index] = max(col_min, column_maxes[index] - 2)
-
         rows = []
+
         for row_i, row in enumerate(self.rows):
             cols = []
             cline_max = 0
             for col_i, col in enumerate(row):
-                lines = [col[i:i + column_maxes[col_i]] for i in range(0, len(col), column_maxes[col_i])]
+                lines = []
+                maxwid = column_maxes[col_i] - 2
+                curs = 0
+                while len(col) - curs > maxwid:
+                    lines.append(col[curs:curs+maxwid])
+                    curs += maxwid
+                lines.append(col[curs:len(col)])
                 cline_max = max(len(lines), cline_max)
                 cols.append(lines)
             for col in cols:
@@ -400,6 +432,7 @@ class ScrollingDisplayBuffer:
 
         self.lines = []
         self.processed_lines = []
+        self.pinned_lines = []
 
         self.wrap = True
         self.clean_wrap = True
@@ -439,11 +472,13 @@ class ScrollingDisplayBuffer:
 
         :return:
         """
+        self.pinned_lines = []
         if self.wrap:
             wrapped_lines = []
             for line in self.lines:
                 if isinstance(line, Table):
                     wrapped_lines += [i[0:self.width] for i in line.render(self.width).split('\n')]
+                    self.pinned_lines = [0]
                     continue
                 if not isinstance(line, AttributedString):
                     line = AttributedString(line)
@@ -553,7 +588,12 @@ class ScrollingDisplayBuffer:
         :return: Slice of lines
         """
         end_line = start_line + self.height - 1
-        return lines[start_line:end_line]
+        pincount = 0
+        pins = []
+        for i in self.pinned_lines:
+            pincount += 1
+            pins.append(lines[i])
+        return pins + lines[start_line + pincount:end_line]
 
 
 # # # # #
@@ -1169,6 +1209,58 @@ class LoaderStatusView(View):
         self.box.write(start_x + 1, start_y + 1, self.status_string, curses.A_STANDOUT)
 
 
+class UserInputPrompt(View):
+    def __init__(self):
+        super().__init__()
+        self.draw = False
+        self.prompt_string = ""
+        self.user_input_is_string = False
+
+        self.active_render_subbox = None
+        self.response = None
+
+    def redraw(self):
+        if not self.draw:
+            return
+        box_width = max(40, len(self.prompt_string) + 10)
+        start_x = ceil(self.box.width / 2 - box_width / 2)
+        height = 4
+        start_y = ceil(self.box.height / 2 - height / 2)
+
+        self.active_render_subbox = Box(None, start_x, start_y, box_width, height)
+
+        for i in range(start_y, start_y + height + 1):
+            self.box.write(start_x, i, ' ' * box_width, curses.A_STANDOUT)
+
+        xof = 2
+        for msg in ['YES', 'NO', 'CANCEL']:
+            self.box.write(xof, height, msg, curses.A_STANDOUT)
+            xof += len(msg) + 2
+
+    def handle_mouse(self, x, y):
+        if not self.draw:
+            return False
+
+        if self.active_render_subbox.is_click_inbounds(x, y) and y - self.active_render_subbox.y == 4:
+            xof = 2
+            xp = x - self.active_render_subbox.x
+            height = 4
+            for msg in ['YES', 'NO', 'CANCEL']:
+                self.box.write(xof, height, msg, curses.A_STANDOUT)
+                wid = len(msg)
+                if xp in range(xof, xof + wid+1):
+                    if msg == 'YES':
+                        self.response = 'y'
+                    elif msg == 'NO':
+                        self.response = 'n'
+                    else:
+                        self.response = 'c'
+                    return True
+                xof += len(msg) + 2
+
+        return False
+
+
 class MenuOverlayRenderingView(View):
     def __init__(self):
         super().__init__()
@@ -1628,6 +1720,8 @@ class KToolScreen:
         self.title_menu_overlay = MenuOverlayRenderingView()
         self.loader_status = LoaderStatusView()
         self.file_browser = FileSystemBrowserOverlayView()
+        self.input_overlay = UserInputPrompt()
+
         self.is_showing_menu_overlay = False
 
         self.active_key_handler = self.sidebar
@@ -1636,7 +1730,7 @@ class KToolScreen:
         self.last_mouse_event = ""
 
         self.render_group = [self.titlebar, self.sidebar, self.mainscreen, self.footerbar, self.title_menu_overlay,
-                             self.debug_menu, self.loader_status, self.file_browser]
+                             self.debug_menu, self.loader_status, self.file_browser, self.input_overlay]
 
         self.rebuild_all()
 
@@ -1733,8 +1827,9 @@ class KToolScreen:
 
             self.active_key_handler = self.sidebar
             self.key_handlers = [self.sidebar, self.mainscreen, self.titlebar, self.file_browser]
-            self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu]
+            self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu, self.input_overlay]
             self.loader_status.draw = False
+            self.input_overlay.draw = False
 
             self.redraw_all()
 
