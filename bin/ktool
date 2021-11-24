@@ -694,7 +694,7 @@ def dump(args):
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[args.slice_index])
         if library.name == "":
-            library.name = args.filename
+            library.name = args.filename.split("/")[-1]
         objc_lib = ObjCLibrary(library)
 
         if args.sort_headers:
