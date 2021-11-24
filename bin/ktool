@@ -14,10 +14,16 @@
 #  Copyright (c) kat 2021.
 #
 
+import json
 import os
-import pprint
 import threading
+import urllib.request
+from argparse import ArgumentParser
 from collections import namedtuple
+from enum import Enum
+
+from kimg4.img4 import IM4P
+from packaging.version import Version
 
 from kmacho import LOAD_COMMAND, dylib_command, dylib, Struct
 from ktool import (
@@ -32,19 +38,9 @@ from ktool import (
     log,
     LogLevel
 )
-
-from ktool.util import KTOOL_VERSION
 from ktool.exceptions import *
-
-from kimg4.img4 import IM4P
-
+from ktool.util import KTOOL_VERSION
 from ktool.window import KToolScreen, external_hard_fault_teardown, Table
-
-from enum import Enum
-from argparse import ArgumentParser
-import json
-import urllib.request
-from packaging.version import Version
 
 UPDATE_AVAILABLE = False
 
@@ -135,7 +131,8 @@ def main():
     parser_edit = subparsers.add_parser('edit', help='Edit attributes of the MachO')
     parser_edit.add_argument('filename', nargs='?', default='')
     parser_edit.add_argument('--iname', dest='iname', help='Modify the Install Name of a library')
-    parser_edit.add_argument('--apad', dest='apad', help='Add MachO Header Padding (You probably dont want to do this manually)')
+    parser_edit.add_argument('--apad', dest='apad',
+                             help='Add MachO Header Padding (You probably dont want to do this manually)')
     parser_edit.add_argument('--out', dest='out', help="Output file destination for patches")
     parser_edit.set_defaults(func=edit, out=None, iname=None, apad=None)
 
@@ -186,7 +183,8 @@ def main():
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
     parser_list.add_argument('filename', nargs='?', default='')
-    parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False, slice_index=0)
+    parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False,
+                             slice_index=0)
 
     parser_symbols = subparsers.add_parser('symbols', help='Print various symbols')
     parser_symbols.add_argument('--imports', dest='get_imports', action='store_true', help='Print Imports')
@@ -416,7 +414,7 @@ def insert(args):
             last_dylib_command_index = -1
             for i, cmd in enumerate(library.macho_header.load_commands):
                 if isinstance(cmd, dylib_command):
-                    last_dylib_command_index = i+1
+                    last_dylib_command_index = i + 1
             dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
             library.insert_lc_with_suf(lc, [dylib_item.raw], args.payload, last_dylib_command_index)
             library = Dyld.load(macho_slice)

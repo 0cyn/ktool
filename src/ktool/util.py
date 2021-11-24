@@ -12,9 +12,8 @@
 #  Copyright (c) kat 2021.
 #
 
-import os
 import inspect
-
+import os
 from enum import Enum
 
 import pkg_resources

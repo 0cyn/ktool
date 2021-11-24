@@ -14,8 +14,8 @@
 from collections import namedtuple
 from enum import Enum
 
-from .util import log
 from .structs import *
+from .util import log
 
 type_encodings = {
     "c": "char",
@@ -150,7 +150,7 @@ class Struct_Representation:
 
         process_string = type_str[1:-1].split('=', 1)[1]
 
-        if process_string.startswith('"'): #  Named struct
+        if process_string.startswith('"'):  # Named struct
             output_string = ""
 
             in_field = False
@@ -369,11 +369,13 @@ class Method:
         if uses_rel_meth:
             if rms_are_direct:
                 self.sel = library.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
-                self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+                self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
+                                                       sectname="__objc_methtype")
             else:
                 selref = library.get_bytes(method.selector + vmaddr, 8, vm=True)
                 self.sel = library.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
-                self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True, sectname="__objc_methtype")
+                self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
+                                                       sectname="__objc_methtype")
         else:
             self.sel = library.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
             self.type_string = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
@@ -646,7 +648,8 @@ class Property:
             self.attr = self.decode_property_attributes(
                 self.library.get_cstr_at(property.attr, 0, True, "__objc_methname"))
         except IndexError:
-            log.warn(f'issue with property {self.name} in {self.library.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
+            log.warn(
+                f'issue with property {self.name} in {self.library.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
             return
         # property_attr = namedtuple("property_attr", ["type", "attributes", "ivar"])
         self.type = self._renderable_type(self.attr.type)

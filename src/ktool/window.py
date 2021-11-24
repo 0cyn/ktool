@@ -26,22 +26,19 @@
 #
 # # # # #
 
+import concurrent.futures
 import curses
 import os
+from datetime import datetime
 from math import ceil
 
-from datetime import datetime
-from threading import Thread
-
-import concurrent.futures
+from pygments import highlight
+from pygments.formatters.terminal import TerminalFormatter
+from pygments.formatters.terminal256 import Terminal256Formatter
+from pygments.lexers.objective import ObjectiveCLexer
 
 from kmacho import LOAD_COMMAND
 from ktool import MachOFile, Dyld, ObjCLibrary, HeaderGenerator
-
-from pygments import highlight
-from pygments.lexers.objective import ObjectiveCLexer
-from pygments.formatters.terminal import TerminalFormatter
-from pygments.formatters.terminal256 import Terminal256Formatter
 
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
@@ -242,6 +239,7 @@ class Table:
         you just need to set the max width it can be rendered at on the render call.
         (shutil.get_terminal_size)
     """
+
     def __init__(self):
         self.titles = []
         self.rows = []
@@ -287,7 +285,7 @@ class Table:
                 maxwid = column_maxes[col_i] - 2
                 curs = 0
                 while len(col) - curs > maxwid:
-                    lines.append(col[curs:curs+maxwid])
+                    lines.append(col[curs:curs + maxwid])
                     curs += maxwid
                 lines.append(col[curs:len(col)])
                 cline_max = max(len(lines), cline_max)
@@ -318,6 +316,7 @@ class HexDumpTable(Table):
     Subclass of table, just set the .hex value to a bytearray and it'll handle rendering it.
 
     """
+
     def __init__(self):
         super().__init__()
         self.titles = ['', '']
@@ -350,7 +349,6 @@ class HexDumpTable(Table):
         self.rows.append([stack, decode_stack])
 
         return super().render(width)
-
 
 
 # # # # #
@@ -1248,7 +1246,7 @@ class UserInputPrompt(View):
             for msg in ['YES', 'NO', 'CANCEL']:
                 self.box.write(xof, height, msg, curses.A_STANDOUT)
                 wid = len(msg)
-                if xp in range(xof, xof + wid+1):
+                if xp in range(xof, xof + wid + 1):
                     if msg == 'YES':
                         self.response = 'y'
                     elif msg == 'NO':
@@ -1610,7 +1608,6 @@ class KToolMachOLoader:
         menuitem.parse_mmc()
         return menuitem
 
-
     @staticmethod
     def binding_items(lib, parent=None, callback=None):
 
@@ -1846,7 +1843,8 @@ class KToolScreen:
 
             self.active_key_handler = self.sidebar
             self.key_handlers = [self.sidebar, self.mainscreen, self.titlebar, self.file_browser]
-            self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu, self.input_overlay]
+            self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu,
+                                   self.input_overlay]
             self.loader_status.draw = False
             self.input_overlay.draw = False
 

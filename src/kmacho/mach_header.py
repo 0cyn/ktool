@@ -281,5 +281,3 @@ CPU_SUBTYPES = {
     CPUType.ARM64: CPUSubTypeARM64,
     CPUType.SPARC: CPUSubTypeSPARC
 }
-
-

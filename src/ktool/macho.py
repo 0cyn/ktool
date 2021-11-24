@@ -12,18 +12,16 @@
 #  Copyright (c) kat 2021.
 #
 
-import os
 import mmap
-
+import os
+from collections import namedtuple
 from enum import Enum
 from typing import Tuple
-from collections import namedtuple
-
-from .util import log
-from .exceptions import *
 
 from kmacho import *
 from kmacho.structs import *
+from .exceptions import *
+from .util import log
 
 
 class MachOFileType(Enum):
@@ -324,7 +322,7 @@ class Slice:
 
     def get_bytes_at(self, addr, count):
         addr = addr + self.offset
-        return self.macho_file.file[addr:addr+count]
+        return self.macho_file.file[addr:addr + count]
 
     def get_str_at(self, addr: int, count: int):
         addr = addr + self.offset

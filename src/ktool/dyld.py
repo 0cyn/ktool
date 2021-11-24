@@ -13,22 +13,19 @@
 #  Copyright (c) kat 2021.
 #
 import math
-from enum import IntEnum, Enum
 from collections import namedtuple
+from enum import Enum
 
 from kmacho import (
     MH_FLAGS,
     MH_FILETYPE,
     LOAD_COMMAND,
     BINDING_OPCODE,
-    REBASE_OPCODE, LOAD_COMMAND_MAP
+    LOAD_COMMAND_MAP
 )
-
 from kmacho.structs import *
-# from kmacho.fixups import *
-
-from .util import log
 from .macho import _VirtualMemoryMap, Segment
+from .util import log
 
 
 class Dyld:
@@ -45,6 +42,8 @@ class Dyld:
         """
         Take a slice of a macho file and process it using the dyld functions
 
+        :param load_binding: Load Binding Info?
+        :param load_symtab: Load Symbol Table?
         :param macho_slice: Slice to load. If your library is not fat, that'll be MachOFile.slices[0]
         :type macho_slice: Slice
         :return: Processed Library object
@@ -59,6 +58,7 @@ class Dyld:
 
     @staticmethod
     def _parse_load_commands(library, load_symtab=True, load_binding=True):
+        # noinspection PyUnusedLocal
         fixups = None
         for cmd in library.macho_header.load_commands:
             if isinstance(cmd, segment_command_64):
@@ -112,9 +112,9 @@ class Dyld:
                                                  y=library.get_bytes(cmd.off + 17, 1),
                                                  z=library.get_bytes(cmd.off + 16, 1))
                 log.debug(f'Loaded platform {library.platform.name} | '
-                              f'Minimum OS {library.minos.x}.{library.minos.y}'
-                              f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
-                              f'.{library.sdk_version.y}.{library.sdk_version.z}')
+                          f'Minimum OS {library.minos.x}.{library.minos.y}'
+                          f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
+                          f'.{library.sdk_version.y}.{library.sdk_version.z}')
 
             elif isinstance(cmd, version_min_command):
                 if library.platform == PlatformType.UNK:
@@ -270,7 +270,7 @@ class Library:
         after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
 
         self.slice.patch(b_load_cmd.off, after_bytes)
-        self.slice.patch(self.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize, b'\x00'*b_load_cmd.cmdsize)
+        self.slice.patch(self.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize, b'\x00' * b_load_cmd.cmdsize)
 
         dyld_head = self.macho_header.dyld_header
         dyld_head.loadcnt -= 1
@@ -289,11 +289,11 @@ class Library:
         size = len(load_cmd.raw)
 
         if index != -1:
-            b_load_cmd = self.macho_header.load_commands[index-1]
+            b_load_cmd = self.macho_header.load_commands[index - 1]
             off = b_load_cmd.off + b_load_cmd.cmdsize
             after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
             self.slice.patch(off, raw)
-            self.slice.patch(off+size, after_bytes)
+            self.slice.patch(off + size, after_bytes)
         else:
             self.slice.patch(off, raw)
 
@@ -309,7 +309,7 @@ class Library:
         lc_type = LOAD_COMMAND_MAP[lc]
 
         load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
-        #log.debug(f'Fabricated Load Command {str(load_cmd)}')
+        # log.debug(f'Fabricated Load Command {str(load_cmd)}')
 
         encoded = suffix.encode('utf-8') + b'\x00'
 
@@ -327,11 +327,11 @@ class Library:
         size = len(raw)
 
         if index != -1:
-            b_load_cmd = self.macho_header.load_commands[index-1]
+            b_load_cmd = self.macho_header.load_commands[index - 1]
             off = b_load_cmd.off + b_load_cmd.cmdsize
             after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
             self.slice.patch(off, raw)
-            self.slice.patch(off+size, after_bytes)
+            self.slice.patch(off + size, after_bytes)
         else:
             self.slice.patch(off, raw)
 
@@ -390,7 +390,7 @@ class LibraryHeader:
         # possibly this could be modified to check for other load commands
         #       as a rare obfuscation technique involves fucking with these to screw with RE tools.
 
-        for i in range(1, self.dyld_header.loadcnt+1):
+        for i in range(1, self.dyld_header.loadcnt + 1):
             cmd = macho_slice.get_at(read_address, 4)
             try:
                 load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)])
@@ -467,6 +467,7 @@ class Symbol:
     .addr contains the address of the symbol in the image
 
     """
+
     def __init__(self, lib, cmd=None, entry=None, fullname=None, ordinal=None, addr=None):
         if fullname:
             self.fullname = fullname
@@ -506,6 +507,7 @@ class SymbolTable:
     This class is incomplete
 
     """
+
     def __init__(self, library, cmd: symtab_command):
         self.library = library
         self.cmd = cmd
@@ -559,7 +561,7 @@ class ExportTrie:
                 proc_str = self.library.get_cstr_at(cursor)
                 cursor += len(proc_str) + 1
                 offset, cursor = self.library.decode_uleb128(cursor)
-                log.debug(f'({i}) string: {string+proc_str} next_node: {hex(self.start+offset)}')
+                log.debug(f'({i}) string: {string + proc_str} next_node: {hex(self.start + offset)}')
                 results += self.read_node(string + proc_str, self.start + offset)
         else:
             log.debug(f'TERM: 0')
@@ -601,6 +603,7 @@ class BindingTable:
     .import_stack - contains a fairly raw unprocessed list of binding info commands
 
     """
+
     def __init__(self, library, table_start, table_size):
         """
         Pass a library to be processed
@@ -640,7 +643,6 @@ class BindingTable:
         return actions
 
     def _load_binding_info(self, table_start, table_size):
-        lib = self.library
         read_address = table_start
         import_stack = []
         while True:
@@ -664,7 +666,8 @@ class BindingTable:
 
                 if binding_opcode == BINDING_OPCODE.DONE:
                     import_stack.append(
-                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
+                               special_dylib))
                     break
 
                 elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_IMM:
@@ -698,14 +701,16 @@ class BindingTable:
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_ULEB:
                     import_stack.append(
-                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
+                               special_dylib))
                     seg_offset += 8
                     o, read_address = self.library.decode_uleb128(read_address)
                     seg_offset += o
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_IMM_SCALED:
                     import_stack.append(
-                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
+                               special_dylib))
                     seg_offset = seg_offset + (value * 8) + 8
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
@@ -714,15 +719,14 @@ class BindingTable:
 
                     for i in range(0, count):
                         import_stack.append(
-                            record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                            record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
+                                   special_dylib))
                         seg_offset += skip + 8
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND:
                     import_stack.append(
-                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend, special_dylib))
+                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
+                               special_dylib))
                     seg_offset += 8
 
         return import_stack
-
-
-

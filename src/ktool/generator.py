@@ -13,15 +13,13 @@
 #
 
 import os
-
-from . import log
-from .macho import Slice
-from .objc import ObjCLibrary
-from .dyld import Dyld, SymbolType
-
 from collections import namedtuple
 
 from kmacho.structs import *
+from . import log
+from .dyld import Dyld, SymbolType
+from .macho import Slice
+from .objc import ObjCLibrary
 
 
 class TBDGenerator:
@@ -101,6 +99,7 @@ class FatMachOGenerator:
     """
 
     """
+
     def __init__(self, slices):
         self.slices = slices
         self.fat_archs = []
@@ -117,7 +116,9 @@ class FatMachOGenerator:
         fat_head += fh.raw
 
         for fat_arch_item in self.fat_archs:
-            fa = Struct.create_with_values(fat_arch, [fat_arch_item.cputype, fat_arch_item.cpusubtype, fat_arch_item.offset, fat_arch_item.size, fat_arch_item.align], "big")
+            fa = Struct.create_with_values(fat_arch,
+                                           [fat_arch_item.cputype, fat_arch_item.cpusubtype, fat_arch_item.offset,
+                                            fat_arch_item.size, fat_arch_item.align], "big")
             fat_head += fa.raw
 
         self.fat_head = fat_head
