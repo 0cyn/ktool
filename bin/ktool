@@ -16,6 +16,7 @@
 
 import json
 import os
+import os.path
 import threading
 import urllib.request
 from argparse import ArgumentParser
@@ -694,7 +695,7 @@ def dump(args):
         machofile = MachOFile(fd)
         library = Dyld.load(machofile.slices[args.slice_index])
         if library.name == "":
-            library.name = args.filename.split("/")[-1]
+            library.name = os.path.basename(args.filename)
         objc_lib = ObjCLibrary(library)
 
         if args.sort_headers:
