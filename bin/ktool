@@ -193,7 +193,8 @@ def main():
     parser_symbols.add_argument('--symtab', dest='get_symtab', action='store_true', help='Print out the symtab')
     parser_symbols.add_argument('--exports', dest='get_exports', action='store_true', help='Print exports')
     parser_symbols.add_argument('filename', nargs='?', default='')
-    parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False)
+    parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False,
+                                slice_index=0)
 
     args = parser.parse_args()
 
@@ -296,7 +297,7 @@ def symbols(args):
     if args.get_exports:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[0])
+            library = Dyld.load(machofile.slices[args.slice_index])
 
             table = Table()
             table.titles = ['Address', 'Symbol']
@@ -309,7 +310,7 @@ def symbols(args):
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[0])
+            library = Dyld.load(machofile.slices[args.slice_index])
 
             table = Table()
             table.titles = ['Address', 'Name']
@@ -322,7 +323,7 @@ def symbols(args):
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[0])
+            library = Dyld.load(machofile.slices[args.slice_index])
 
             syms = {}
             symbol = namedtuple('symbol', ['name', 'library', 'from_table'])
@@ -354,7 +355,7 @@ def symbols(args):
     elif args.get_actions:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[0])
+            library = Dyld.load(machofile.slices[args.slice_index])
             print('\nBinding Info'.ljust(60, '-') + '\n')
             for sym in library.binding_table.symbol_table:
                 try:
