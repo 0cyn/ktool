@@ -115,7 +115,7 @@ def main():
     parser = ArgumentParser(description="ktool")
     parser.add_argument('--bench', dest='bench', action='store_true')
     parser.add_argument('-v', dest='logging_level', type=int)
-    parser.set_defaults(func=help_prompt, bench=False, logging_level=0)
+    parser.set_defaults(func=help_prompt, bench=False, logging_level=1)
     subparsers = parser.add_subparsers(help='sub-command help')
 
     parser_open = subparsers.add_parser('open', help='open ktool GUI and browse file')
@@ -602,15 +602,15 @@ def _list(args):
         if args.get_lcs:
             for lc in library.macho_header.load_commands:
                 print(str(lc))
-        if args.get_classes:
+        elif args.get_classes:
             objc_lib = ObjCLibrary(library)
             for obj_class in objc_lib.classlist:
                 print(f'{obj_class.name}')
-        if args.get_protos:
+        elif args.get_protos:
             objc_lib = ObjCLibrary(library)
             for objc_proto in objc_lib.protolist:
                 print(f'{objc_proto.name}')
-        if args.get_linked:
+        elif args.get_linked:
             for exlib in library.linked:
                 print('(Weak) ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
 

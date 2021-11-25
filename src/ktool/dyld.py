@@ -84,6 +84,7 @@ class Dyld:
                 library.exports = ExportTrie(library, cmd.dataoff, cmd.datasize)
 
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
+                log.warning("library uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
                 # fixups = ChainedFixups(library, cmd.dataoff, cmd.datasize)
                 pass
 
