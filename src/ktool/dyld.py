@@ -535,40 +535,37 @@ export_node = namedtuple("export_node", ['text', 'offset'])
 
 class ExportTrie:
     def __init__(self, library, export_start, export_size):
-        self.library = library
-        self.start = export_start
-        self.size = export_size
-        self.nodes = []
+        self._endpoint = export_start + export_size
+        self._start = export_start
 
-        self.read_export_trie()
+        self.nodes = self.read_node(library, "", export_start)
+        self.symbols = []
+        for node in self.nodes:
+            self.symbols.append(Symbol(library, fullname=node.text, addr=node.offset))
 
-    def read_export_trie(self):
-        cursor = self.start
-        self.nodes = self.read_node("", cursor)
-
-    def read_node(self, string, cursor):
+    def read_node(self, library, string, cursor):
         start = cursor
-        byte = self.library.get_bytes(cursor, 1)
+        byte = library.get_bytes(cursor, 1)
         results = []
         log.debug(f'@ {hex(start)} node: {hex(byte)} current_symbol: {string}')
         if byte == 0:
             cursor += 1
-            branches = self.library.get_bytes(cursor, 1)
+            branches = library.get_bytes(cursor, 1)
             log.debug(f'BRAN {branches}')
             for i in range(0, branches):
                 if i == 0:
                     cursor += 1
-                proc_str = self.library.get_cstr_at(cursor)
+                proc_str = library.get_cstr_at(cursor)
                 cursor += len(proc_str) + 1
-                offset, cursor = self.library.decode_uleb128(cursor)
-                log.debug(f'({i}) string: {string + proc_str} next_node: {hex(self.start + offset)}')
-                results += self.read_node(string + proc_str, self.start + offset)
+                offset, cursor = library.decode_uleb128(cursor)
+                log.debug(f'({i}) string: {string + proc_str} next_node: {hex(self._start + offset)}')
+                results += self.read_node(library, string + proc_str, self._start + offset)
         else:
             log.debug(f'TERM: 0')
-            size, cursor = self.library.decode_uleb128(cursor)
-            flags = self.library.get_bytes(cursor, 1)
+            size, cursor = library.decode_uleb128(cursor)
+            flags = library.get_bytes(cursor, 1)
             cursor += 1
-            offset, cursor = self.library.decode_uleb128(cursor)
+            offset, cursor = library.decode_uleb128(cursor)
             results.append(export_node(string, offset))
 
         return results

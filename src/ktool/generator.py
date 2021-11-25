@@ -66,17 +66,14 @@ class TBDGenerator:
             classes = []
             ivars = []
 
-            for item in self.library.symbol_table.ext:
-                if item.type == SymbolType.FUNC:
-                    symbols.append(item.name)
-            if self.objc_lib:
-                objc_library = self.objc_lib
-            else:
-                objc_library = ObjCLibrary(self.library)
-            for objc_class in objc_library.classlist:
-                classes.append('_' + objc_class.name)
-                for ivar in objc_class.ivars:
-                    ivars.append('_' + objc_class.name + '.' + ivar.name)
+            for sym in self.library.exports.symbols:
+                if sym.type == SymbolType.FUNC:
+                    symbols.append(sym.name)
+                elif sym.type == SymbolType.CLASS:
+                    classes.append(sym.name)
+                elif sym.type == SymbolType.IVAR:
+                    ivars.append(sym.name)
+
             export_dict['symbols'] = symbols
             export_dict['objc-classes'] = classes
             export_dict['objc-ivars'] = ivars
