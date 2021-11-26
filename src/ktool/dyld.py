@@ -24,6 +24,7 @@ from kmacho import (
     LOAD_COMMAND_MAP
 )
 from kmacho.structs import *
+from kmacho.base import Constructable
 from .macho import _VirtualMemoryMap, Segment
 from .util import log
 
@@ -107,11 +108,11 @@ class Dyld:
 
             elif isinstance(cmd, build_version_command):
                 library.platform = PlatformType(cmd.platform)
-                library.minos = os_version(x=library.get_bytes(cmd.off + 14, 2), y=library.get_bytes(cmd.off + 13, 1),
-                                           z=library.get_bytes(cmd.off + 12, 1))
-                library.sdk_version = os_version(x=library.get_bytes(cmd.off + 18, 2),
-                                                 y=library.get_bytes(cmd.off + 17, 1),
-                                                 z=library.get_bytes(cmd.off + 16, 1))
+                library.minos = os_version(x=library.get_int_at(cmd.off + 14, 2), y=library.get_int_at(cmd.off + 13, 1),
+                                           z=library.get_int_at(cmd.off + 12, 1))
+                library.sdk_version = os_version(x=library.get_int_at(cmd.off + 18, 2),
+                                                 y=library.get_int_at(cmd.off + 17, 1),
+                                                 z=library.get_int_at(cmd.off + 16, 1))
                 log.debug(f'Loaded platform {library.platform.name} | '
                           f'Minimum OS {library.minos.x}.{library.minos.y}'
                           f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
@@ -129,9 +130,9 @@ class Dyld:
                     elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_WATCHOS:
                         library.platform = PlatformType.WATCHOS
 
-                    library.minos = os_version(x=library.get_bytes(cmd.off + 10, 2),
-                                               y=library.get_bytes(cmd.off + 9, 1),
-                                               z=library.get_bytes(cmd.off + 8, 1))
+                    library.minos = os_version(x=library.get_int_at(cmd.off + 10, 2),
+                                               y=library.get_int_at(cmd.off + 9, 1),
+                                               z=library.get_int_at(cmd.off + 8, 1))
 
             elif isinstance(cmd, dylib_command):
                 if cmd.cmd == 0xD:  # local
@@ -168,7 +169,8 @@ class Library:
         :param macho_slice: MachO Slice being processed
         :type macho_slice: MachO Slice
         """
-        self.macho_header = LibraryHeader(macho_slice)
+        self.macho_header = LibraryHeader.from_bytes(macho_slice=macho_slice)
+
         self.slice = macho_slice
 
         self.linked = []
@@ -198,7 +200,7 @@ class Library:
 
         self.symbol_table = None
 
-    def get_bytes(self, offset: int, length: int, vm=False, section_name=None):
+    def get_int_at(self, offset: int, length: int, vm=False, section_name=None):
         """
         Get a sequence of bytes (as an int) from a location
 
@@ -210,7 +212,21 @@ class Library:
         """
         if vm:
             offset = self.vm.get_file_address(offset, section_name)
-        return self.slice.get_at(offset, length)
+        return self.slice.get_int_at(offset, length)
+
+    def get_bytes_at(self, offset: int, length: int, vm=False, section_name=None):
+        """
+        Get a sequence of bytes from a location
+
+        :param offset: Offset within the library
+        :param length: Amount of bytes to get
+        :param vm: Is `offset` a VM address
+        :param section_name: Section Name if vm==True (improves translation time slightly)
+        :return: `length` Bytes at `offset`
+        """
+        if vm:
+            offset = self.vm.get_file_address(offset, section_name)
+        return self.slice.get_bytes_at(offset, length)
 
     def load_struct(self, address: int, struct_type, vm=False, section_name=None, endian="little"):
         """
@@ -345,7 +361,7 @@ class Library:
         self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
 
 
-class LibraryHeader:
+class LibraryHeader(Constructable):
     """
     This class represents the Mach-O Header
     It contains the basic header info along with all load commands within it.
@@ -353,57 +369,63 @@ class LibraryHeader:
     It doesn't handle complex abstraction logic, it simply loads in the load commands as their raw structs
     """
 
-    def __init__(self, macho_slice):
-        """
+    @staticmethod
+    def from_bytes(macho_slice):
 
-        :param macho_slice: MachO Slice object being loaded
-        :type macho_slice: Slice
-        """
+        library_header = LibraryHeader()
+
         offset = 0
-        self.slice = macho_slice
-        self.dyld_header: dyld_header = macho_slice.load_struct(offset, dyld_header)
-        self.filetype = MH_FILETYPE(self.dyld_header.filetype)
-        self.flags = []
+        header: dyld_header = macho_slice.load_struct(offset, dyld_header)
+        raw = header.raw
+
+        library_header.filetype = MH_FILETYPE(header.filetype)
+
         for flag in MH_FLAGS:
-            if self.dyld_header.flags & flag.value:
-                self.flags.append(flag)
-        self.load_commands = []
-        self._process_load_commands(macho_slice)
+            if header.flags & flag.value:
+                library_header.flags.append(flag)
 
-    def raw_bytes(self):
-        size = dyld_header.SIZE
-        size += self.dyld_header.loadsize
-        read_addr = self.dyld_header.off
-        return self.slice.get_bytes_at(read_addr, size)
+        offset += header.SIZE
 
-    def _process_load_commands(self, macho_slice):
-        """
-        This function takes the raw slice and parses through its load commands
+        load_commands = []
 
-        :param macho_slice: MachO Library Slice
-        :return:
-        """
+        for i in range(1, header.loadcnt + 1):
+            cmd = macho_slice.get_int_at(offset, 4)
+            cmd_size = macho_slice.get_int_at(offset+4, 4)
 
-        # Start address of the load commands.
-        read_address = self.dyld_header.off + 0x20
-
-        # Loop through the dyld_header by load command count
-        # possibly this could be modified to check for other load commands
-        #       as a rare obfuscation technique involves fucking with these to screw with RE tools.
-
-        for i in range(1, self.dyld_header.loadcnt + 1):
-            cmd = macho_slice.get_at(read_address, 4)
+            cmd_raw = macho_slice.get_bytes_at(offset, cmd_size)
             try:
-                load_cmd = macho_slice.load_struct(read_address, LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)])
+                load_cmd = Struct.create_with_bytes(LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)], cmd_raw)
+                load_cmd.off = offset
             except ValueError:
-                unk_lc = macho_slice.load_struct(read_address, unk_command)
+                unk_lc = macho_slice.load_struct(offset, unk_command)
                 load_cmd = unk_lc
             except KeyError:
-                unk_lc = macho_slice.load_struct(read_address, unk_command)
+                unk_lc = macho_slice.load_struct(offset, unk_command)
                 load_cmd = unk_lc
 
-            self.load_commands.append(load_cmd)
-            read_address += load_cmd.cmdsize
+            load_commands.append(load_cmd)
+            raw += cmd_raw
+            offset += load_cmd.cmdsize
+
+        library_header.raw = raw
+        library_header.dyld_header = header
+        library_header.load_commands = load_commands
+
+        return library_header
+
+    @staticmethod
+    def from_values(*args, **kwargs):
+        pass
+
+    def __init__(self):
+        self.dyld_header = None
+        self.filetype = MH_FILETYPE(0)
+        self.flags = []
+        self.load_commands = []
+        self.raw = bytearray()
+
+    def raw_bytes(self):
+        return self.raw
 
 
 class ExternalDylib:
@@ -541,17 +563,18 @@ class ExportTrie:
 
         self.nodes = self.read_node(library, "", export_start)
         self.symbols = []
+
         for node in self.nodes:
             self.symbols.append(Symbol(library, fullname=node.text, addr=node.offset))
 
     def read_node(self, library, string, cursor):
         start = cursor
-        byte = library.get_bytes(cursor, 1)
+        byte = library.get_int_at(cursor, 1)
         results = []
         log.debug(f'@ {hex(start)} node: {hex(byte)} current_symbol: {string}')
         if byte == 0:
             cursor += 1
-            branches = library.get_bytes(cursor, 1)
+            branches = library.get_int_at(cursor, 1)
             log.debug(f'BRAN {branches}')
             for i in range(0, branches):
                 if i == 0:
@@ -564,7 +587,7 @@ class ExportTrie:
         else:
             log.debug(f'TERM: 0')
             size, cursor = library.decode_uleb128(cursor)
-            flags = library.get_bytes(cursor, 1)
+            flags = library.get_int_at(cursor, 1)
             cursor += 1
             offset, cursor = library.decode_uleb128(cursor)
             results.append(export_node(string, offset))
@@ -657,8 +680,8 @@ class BindingTable:
             while True:
                 # There are 0xc opcodes total
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
-                binding_opcode = self.library.get_bytes(read_address, 1) & 0xF0
-                value = self.library.get_bytes(read_address, 1) & 0x0F
+                binding_opcode = self.library.get_int_at(read_address, 1) & 0xF0
+                value = self.library.get_int_at(read_address, 1) & 0x0F
                 cmd_start_addr = read_address
                 read_address += 1
 

@@ -113,7 +113,7 @@ class ObjCLibrary:
         cnt = sect.size // 0x8
         for i in range(0, cnt):
             ptr = sect.vm_address + i * 0x8
-            loc = self.library.get_bytes(ptr, 0x8, vm=True)
+            loc = self.library.get_int_at(ptr, 0x8, vm=True)
             try:
                 proto = self.library.load_struct(loc, objc2_prot, vm=True)
                 protos.append(Protocol(self, proto, loc))
@@ -122,8 +122,8 @@ class ObjCLibrary:
 
         return protos
 
-    def get_bytes(self, offset: int, length: int, vm=False, sectname=None):
-        return self.library.get_bytes(offset, length, vm, sectname)
+    def get_int_at(self, offset: int, length: int, vm=False, sectname=None):
+        return self.library.get_int_at(offset, length, vm, sectname)
 
     def load_struct(self, addr: int, struct_type, vm=True, sectname=None, endian="little"):
         return self.library.load_struct(addr, struct_type, vm, sectname, endian)
@@ -372,7 +372,7 @@ class Method:
                 self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
                                                        sectname="__objc_methtype")
             else:
-                selref = library.get_bytes(method.selector + vmaddr, 8, vm=True)
+                selref = library.get_int_at(method.selector + vmaddr, 8, vm=True)
                 self.sel = library.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
                 self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
                                                        sectname="__objc_methtype")
@@ -480,7 +480,7 @@ class Class:
 
     def _load_objc2_class(self, ptr):
 
-        objc2_class_location = self.library.get_bytes(ptr, 8, vm=True)
+        objc2_class_location = self.library.get_int_at(ptr, 8, vm=True)
         objc2_class_item: objc2_class = self.library.load_struct(objc2_class_location, objc2_class, vm=True)
 
         bad_addr = False
@@ -601,7 +601,7 @@ class Class:
         protlist: objc2_prot_list = self.library.load_struct(self.objc2_class_ro.base_prots, objc2_prot_list)
         ea = protlist.off
         for i in range(1, protlist.cnt + 1):
-            prot_loc = self.library.get_bytes(ea + i * 8, 8, vm=False)
+            prot_loc = self.library.get_int_at(ea + i * 8, 8, vm=False)
             prot = self.library.load_struct(prot_loc, objc2_prot, vm=True)
             try:
                 prots.append(Protocol(self.library, prot, prot_loc))
@@ -716,7 +716,7 @@ class Category:
     def __init__(self, library, ptr):
         self.library = library
         self.ptr = ptr
-        loc = self.library.get_bytes(ptr, 8, vm=True)
+        loc = self.library.get_int_at(ptr, 8, vm=True)
 
         self.struct: objc2_category = self.library.load_struct(loc, objc2_category, vm=True)
         self.name = self.library.get_cstr_at(self.struct.name, vm=True)

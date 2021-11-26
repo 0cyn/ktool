@@ -282,7 +282,7 @@ class Slice:
         else:
             self.size = self.arch_struct.size
 
-        self.byte_order = "little" if self.get_at(0, 4, "little") == MH_MAGIC_64 else "big"
+        self.byte_order = "little" if self.get_int_at(0, 4, "little") == MH_MAGIC_64 else "big"
 
     def patch(self, address, raw):
         self.macho_file.file.seek(self.offset + address)
@@ -316,7 +316,7 @@ class Slice:
 
         return struct
 
-    def get_at(self, addr, count, endian="little"):
+    def get_int_at(self, addr, count, endian="little"):
         addr = addr + self.offset
         return int.from_bytes(self.macho_file.file[addr:addr + count], endian)
 
@@ -346,7 +346,7 @@ class Slice:
 
         while True:
 
-            byte = self.get_at(readHead, 1)
+            byte = self.get_int_at(readHead, 1)
 
             value |= (byte & 0x7f) << shift
 
