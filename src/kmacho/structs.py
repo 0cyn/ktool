@@ -45,9 +45,9 @@ class Struct:
             instance._fields[field] = int.from_bytes(data, byte_order)
 
             instance.raw += data
-            instance.initialized = True
             current_off += size
 
+        instance.initialized = True
         return instance
 
     @staticmethod
