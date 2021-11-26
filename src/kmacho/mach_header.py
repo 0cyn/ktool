@@ -57,6 +57,7 @@ class MH_FLAGS(IntEnum):
 
 
 class MH_FILETYPE(IntEnum):
+    UNK = 0
     OBJECT = 0x1
     EXECUTE = 0x2
     FVMLIB = 0x3
