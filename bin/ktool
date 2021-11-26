@@ -670,7 +670,6 @@ def info(args):
             print(f'SDK Version: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')
 
 
-
 def dump(args):
     """
     ktool dump
@@ -717,6 +716,8 @@ def dump(args):
                     print(header_name)
                     print()
                     print(header)
+                elif args.outdir == 'ndbg':
+                    pass
                 else:
                     os.makedirs(args.outdir, exist_ok=True)
                     with open(args.outdir + '/' + header_name, 'w') as out:
