@@ -101,9 +101,24 @@ class log:
     LOG_LEVEL = LogLevel.ERROR
 
     @staticmethod
+    def get_class_from_frame(fr):
+        fr: inspect.FrameInfo = fr
+        if 'self' in fr.frame.f_locals:
+            return type(fr.frame.f_locals["self"]).__name__
+        elif 'cls' in fr.frame.f_locals:
+            return fr.frame.f_locals['cls'].__name__
+
+        return None
+
+    @staticmethod
     def line():
-        return 'ktool.' + os.path.basename(inspect.stack()[2][1]).split('.')[0] + ":" + str(inspect.stack()[2][2]) \
-               + ":" + inspect.stack()[2][3] + '()'
+        stack_frame = inspect.stack()[2]
+        filename = os.path.basename(stack_frame[1]).split('.')[0]
+        line_name = f'L#{stack_frame[2]}'
+        cn = log.get_class_from_frame(stack_frame)
+        call_from = cn + ':' if cn is not None else ""
+        call_from += stack_frame[3]
+        return 'ktool.' + filename + ":" + line_name + ":" + call_from + '()'
 
     @staticmethod
     def debug(msg: str):
@@ -112,12 +127,12 @@ class log:
 
     @staticmethod
     def debug_more(msg: str):
-        if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
+        if log.LOG_LEVEL.value >= LogLevel.DEBUG_MORE.value:
             print(f'DEBUG-2 - {log.line()} - {msg}')
 
     @staticmethod
     def debug_tm(msg: str):
-        if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
+        if log.LOG_LEVEL.value >= LogLevel.DEBUG_TOO_MUCH.value:
             print(f'DEBUG-3 - {log.line()} - {msg}')
 
     @staticmethod

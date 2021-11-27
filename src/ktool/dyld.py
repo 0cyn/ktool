@@ -39,8 +39,8 @@ class Dyld:
 
     """
 
-    @staticmethod
-    def load(macho_slice, load_symtab=True, load_binding=True):
+    @classmethod
+    def load(cls, macho_slice, load_symtab=True, load_imports=True, load_exports=True):
         """
         Take a slice of a macho file and process it using the dyld functions
 
@@ -55,19 +55,20 @@ class Dyld:
         library = Library(macho_slice)
 
         log.info("Processing Load Commands")
-        Dyld._parse_load_commands(library, load_symtab, load_binding)
+        Dyld._parse_load_commands(library, load_symtab, load_imports, load_exports)
         return library
 
-    @staticmethod
-    def _parse_load_commands(library, load_symtab=True, load_binding=True):
+    @classmethod
+    def _parse_load_commands(cls, library, load_symtab=True, load_imports=True, load_exports=True):
         # noinspection PyUnusedLocal
         fixups = None
+        log.info(f'registered {len(library.macho_header.load_commands)} Load Commands')
         for cmd in library.macho_header.load_commands:
             if isinstance(cmd, segment_command_64):
                 log.debug("Loading segment_command_64")
                 segment = Segment(library, cmd)
 
-                log.debug(f'Loaded Segment {segment.name}')
+                log.info(f'Loaded Segment {segment.name}')
                 library.vm.add_segment(segment)
                 library.segments[segment.name] = segment
 
@@ -75,14 +76,17 @@ class Dyld:
 
             elif isinstance(cmd, dyld_info_command):
                 library.info = cmd
-                if load_binding:
+                if load_imports:
                     log.info("Loading Binding Info")
                     library.binding_table = BindingTable(library, cmd.bind_off, cmd.bind_size)
                     library.weak_binding_table = BindingTable(library, cmd.weak_bind_off, cmd.weak_bind_size)
                     library.lazy_binding_table = BindingTable(library, cmd.lazy_bind_off, cmd.lazy_bind_size)
+                if load_exports:
+                    log.info("Loading Export Trie")
                     library.exports = ExportTrie.from_bytes(library, cmd.export_off, cmd.export_size)
 
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
+                log.info("Loading Export Trie")
                 library.exports = ExportTrie.from_bytes(library, cmd.dataoff, cmd.datasize)
 
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
@@ -97,6 +101,7 @@ class Dyld:
 
             elif isinstance(cmd, uuid_command):
                 library.uuid = cmd.uuid.to_bytes(16, "little")
+                log.info(f'Library UUID: {library.uuid}')
 
             elif isinstance(cmd, sub_client_command):
                 string = library.get_cstr_at(cmd.off + cmd.offset)
@@ -106,6 +111,7 @@ class Dyld:
             elif isinstance(cmd, rpath_command):
                 string = library.get_cstr_at(cmd.off + cmd.path)
                 library.rpath = string
+                log.info(f'Library Resource Path: {string}')
 
             elif isinstance(cmd, build_version_command):
                 library.platform = PlatformType(cmd.platform)
@@ -114,14 +120,14 @@ class Dyld:
                 library.sdk_version = os_version(x=library.get_int_at(cmd.off + 18, 2),
                                                  y=library.get_int_at(cmd.off + 17, 1),
                                                  z=library.get_int_at(cmd.off + 16, 1))
-                log.debug(f'Loaded platform {library.platform.name} | '
+                log.info(f'Loaded platform {library.platform.name} | '
                           f'Minimum OS {library.minos.x}.{library.minos.y}'
                           f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
                           f'.{library.sdk_version.y}.{library.sdk_version.z}')
 
             elif isinstance(cmd, version_min_command):
+                # Only override this if it wasn't set by build_version
                 if library.platform == PlatformType.UNK:
-
                     if LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_MACOSX:
                         library.platform = PlatformType.MACOS
                     elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_IPHONEOS:
@@ -138,11 +144,11 @@ class Dyld:
             elif isinstance(cmd, dylib_command):
                 if cmd.cmd == 0xD:  # local
                     library.dylib = ExternalDylib(library, cmd)
-                    log.debug(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
+                    log.info(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
                 else:
                     external_dylib = ExternalDylib(library, cmd)
                     library.linked.append(external_dylib)
-                    log.debug(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
+                    log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
         if library.dylib is not None:
             library.name = library.dylib.install_name.split('/')[-1]
@@ -587,8 +593,8 @@ class ExportTrie(Constructable):
         self.nodes = []
         self.symbols = []
 
-    @staticmethod
-    def read_node(library, trie_start, string, cursor, endpoint):
+    @classmethod
+    def read_node(cls, library, trie_start, string, cursor, endpoint):
 
         if cursor > endpoint:
             macho_is_malformed()
@@ -707,6 +713,7 @@ class BindingTable:
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
                 binding_opcode = self.library.get_int_at(read_address, 1) & 0xF0
                 value = self.library.get_int_at(read_address, 1) & 0x0F
+                log.debug_tm(f'{BINDING_OPCODE(binding_opcode).name}: {hex(value)}')
                 cmd_start_addr = read_address
                 read_address += 1
 

@@ -310,7 +310,7 @@ def symbols(args):
     if args.get_exports:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[args.slice_index])
+            library = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_imports=False)
 
             table = Table()
             table.titles = ['Address', 'Symbol']
@@ -323,7 +323,7 @@ def symbols(args):
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[args.slice_index])
+            library = Dyld.load(machofile.slices[args.slice_index], load_imports=False, load_exports=False)
 
             table = Table()
             table.titles = ['Address', 'Name']
@@ -336,7 +336,7 @@ def symbols(args):
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[args.slice_index])
+            library = Dyld.load(machofile.slices[args.slice_index], load_exports=False, load_symtab=False)
 
             syms = {}
             symbol = namedtuple('symbol', ['name', 'library', 'from_table'])
