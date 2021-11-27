@@ -279,8 +279,9 @@ Global Flags:
 
 def _open(args):
     try:
-        log.LOG_LEVEL = LogLevel.NONE
+        log.LOG_LEVEL = LogLevel.DEBUG
         screen = KToolScreen()
+        log.LOG_FUNC = screen.ktool_dbg_print_func
         screen.load_file(args.filename)
     except KeyboardInterrupt:
         external_hard_fault_teardown()
