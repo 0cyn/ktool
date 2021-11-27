@@ -245,67 +245,77 @@ class Table:
         self.rows = []
 
     def render(self, width):
-
-        # This code is fucking cursed, horribly difficult to decipher, i am very sorry.
-        # Staring at it for too long may cause:
-        # * Permanet brain damage
-        # * Emotional Trauma
-        # * Seizures
-        #
-
         if len(self.rows) == 0:
             return ""
+
+        # Initialize an array with zero for each column
         column_maxes = [0 for i in self.rows[0]]
+
+        # Iterate through each row,
         for row in self.rows:
+            # And in each row, iterate through each column
             for index, col in enumerate(row):
-                col = col
+                # Check the length of this column; if it's larger than the length in the array,
+                #   set the max to the new one
                 column_maxes[index] = max(len(col), column_maxes[index])
 
+        # If the titles are longer than any of the items in that column, account for those too
         for i, title in enumerate(self.titles):
             column_maxes[i] = max(column_maxes[i], len(title))
 
+        # Add two to the column maxes, to account for padding
         column_maxes = [i + 2 for i in column_maxes]
 
+        # Minimum Column Size
         col_min = min(column_maxes)
+
+        # Iterate through column maxes, subtracting one from each until they fit within the passed width arg
         while sum(column_maxes) + (len(column_maxes) * 2) >= width:
             for index, i, in enumerate(column_maxes):
                 column_maxes[index] = max(col_min, column_maxes[index] - 1)
 
-        tit = ''
+        title_row = ''
         for i, title in enumerate(self.titles):
-            tit += title.ljust(column_maxes[i], ' ')
+            title_row += title.ljust(column_maxes[i], ' ')
 
         rows = []
 
+        # bit complex, this just wraps strings within their columns, to create the illusion of 'cells'
         for row_i, row in enumerate(self.rows):
+            # cols is going to be an array of columns in this row
+            # each column is going to be an array of lines
             cols = []
-            cline_max = 0
+
+            max_line_count_in_row = 0
             for col_i, col in enumerate(row):
                 lines = []
-                maxwid = column_maxes[col_i] - 2
-                curs = 0
-                while len(col) - curs > maxwid:
-                    lines.append(col[curs:curs + maxwid])
-                    curs += maxwid
-                lines.append(col[curs:len(col)])
-                cline_max = max(len(lines), cline_max)
+                column_width = column_maxes[col_i] - 2
+                string_cursor = 0
+                while len(col) - string_cursor > column_width:
+                    lines.append(col[string_cursor:string_cursor + column_width])
+                    string_cursor += column_width
+                lines.append(col[string_cursor:len(col)])
+                max_line_count_in_row = max(len(lines), max_line_count_in_row)
                 cols.append(lines)
+
+            # if any other columns in this row have more than one line,
+            #   add empty lines to this column to even them out
             for col in cols:
-                while len(col) < cline_max:
+                while len(col) < max_line_count_in_row:
                     col.append('')
             rows.append(cols)
 
-        lines = tit + '\n'
+        lines = title_row + '\n'
 
         for row in rows:
-            rlines = []
-            llen = len(row[0])
-            for i in range(0, llen):
+            row_lines = []
+            column_count = len(row[0])
+            for i in range(0, column_count):
                 line = ""
                 for j, col in enumerate(row):
                     line += col[i].ljust(column_maxes[j], ' ')
-                rlines.append(line)
-            lines += '\n'.join(rlines)
+                row_lines.append(line)
+            lines += '\n'.join(row_lines)
             lines += '\n'
 
         return lines
