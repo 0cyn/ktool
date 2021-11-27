@@ -99,6 +99,7 @@ class log:
     so we use this.
     """
     LOG_LEVEL = LogLevel.ERROR
+    LOG_FUNC = print
 
     @staticmethod
     def get_class_from_frame(fr):
@@ -123,34 +124,34 @@ class log:
     @staticmethod
     def debug(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
-            print(f'DEBUG - {log.line()} - {msg}')
+            log.LOG_FUNC(f'DEBUG - {log.line()} - {msg}')
 
     @staticmethod
     def debug_more(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG_MORE.value:
-            print(f'DEBUG-2 - {log.line()} - {msg}')
+            log.LOG_FUNC(f'DEBUG-2 - {log.line()} - {msg}')
 
     @staticmethod
     def debug_tm(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG_TOO_MUCH.value:
-            print(f'DEBUG-3 - {log.line()} - {msg}')
+            log.LOG_FUNC(f'DEBUG-3 - {log.line()} - {msg}')
 
     @staticmethod
     def info(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.INFO.value:
-            print(f'INFO - {log.line()} - {msg}')
+            log.LOG_FUNC(f'INFO - {log.line()} - {msg}')
 
     @staticmethod
     def warn(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.WARN.value:
-            print(f'WARN - {log.line()} - {msg}')
+            log.LOG_FUNC(f'WARN - {log.line()} - {msg}')
 
     @staticmethod
     def warning(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.WARN.value:
-            print(f'WARN - {log.line()} - {msg}')
+            log.LOG_FUNC(f'WARN - {log.line()} - {msg}')
 
     @staticmethod
     def error(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.ERROR.value:
-            print(f'ERROR - {log.line()} - {msg}')
+            log.LOG_FUNC(f'ERROR - {log.line()} - {msg}')
