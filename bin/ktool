@@ -212,7 +212,8 @@ def main():
         print(args.func.__doc__)
         exit()
 
-    log.LOG_LEVEL = LogLevel(args.logging_level)
+    # we minmax to -1 (show absolutely nothing) and 5 (print so much it slows down by 10x)
+    log.LOG_LEVEL = LogLevel(max(min(args.logging_level, 5), -1))
 
     if args.force_load:
         ignore.MALFORMED = True
@@ -270,8 +271,7 @@ Run `ktool [command]`  for info/examples on using that command
 
 Global Flags:
     -f - Force Load
-    -v - [-1 through 5]; -1 will even hide errors, 5 will output so much data you need to pipe it to a file. 1 is default,
-                            and i'd recommend that.
+    -v [-1 through 5] - -1 will even hide errors, 5 is labeled internally as "TOO_MUCH"
     --bench - Run benchmarks. useful for developing/contributing.
         """
     print(help_prompt.__doc__)
