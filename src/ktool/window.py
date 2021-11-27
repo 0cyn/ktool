@@ -1180,6 +1180,19 @@ class DebugMenu(ScrollView):
         self.scroll_view_text_buffer.process_lines()
         self.scroll_view_text_buffer.draw_lines()
 
+    def handle_key_press(self, key):
+        if key == curses.KEY_UP:
+            self.scroll_view_text_buffer.scrollcursor = max(0, self.scroll_view_text_buffer.scrollcursor - 1)
+            self.scroll_view_text_buffer.draw_lines()
+            return True
+        elif key == curses.KEY_DOWN:
+            self.scroll_view_text_buffer.scrollcursor = min(
+                self.scroll_view_text_buffer.filled_line_count - self.scroll_view_text_buffer.height + 1,
+                self.scroll_view_text_buffer.scrollcursor + 1)
+            self.scroll_view_text_buffer.draw_lines()
+            return True
+        return False
+
     def handle_mouse(self, x, y):
 
         x = x - self.box.x
@@ -1214,7 +1227,10 @@ class LoaderStatusView(View):
         for i in range(start_y, start_y + height + 1):
             self.box.write(start_x, i, ' ' * box_width, curses.A_STANDOUT)
 
-        self.box.write(start_x + 1, start_y + 1, self.status_string, curses.A_STANDOUT)
+        i = 0
+        for line in self.status_string.split('\n'):
+            self.box.write(start_x + 1, start_y + 1 + i, line, curses.A_STANDOUT)
+            i += 1
 
 
 class UserInputPrompt(View):
@@ -1409,6 +1425,9 @@ class FileSystemBrowserOverlayView(ScrollView):
 
 class KToolMachOLoader:
     SUPPORTS_256 = False
+    SUPPORTS_COLOR = True
+    CUR_SL = 0
+    SL_CNT = 0
 
     @staticmethod
     def parent_count(item):
@@ -1423,7 +1442,9 @@ class KToolMachOLoader:
     def contents_for_file(fd, callback):
         machofile = MachOFile(fd)
         items = []
+        KToolMachOLoader.SL_CNT = len(machofile.slices)
         for macho_slice in machofile.slices:
+            KToolMachOLoader.CUR_SL += 1
             try:
                 items.append(KToolMachOLoader.slice_item(macho_slice, callback))
             except Exception as ex:
@@ -1437,7 +1458,7 @@ class KToolMachOLoader:
             slice_nick = macho_slice.type.name + " Slice"
         else:
             slice_nick = "Thin MachO"
-        callback("Loading MachO Slice")
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nLoading MachO Image')
         slice_item = SidebarMenuItem(f'{slice_nick}', None, None)
         slice_item.content = KToolMachOLoader._file(loaded_library, slice_item, callback).content
         items = [KToolMachOLoader.load_cmds,
@@ -1460,7 +1481,7 @@ class KToolMachOLoader:
 
     @staticmethod
     def segments(lib, parent=None, callback=None):
-        callback("Loading Segments...")
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nLoading Segments & Generating Hexdumps')
         smmci = MainMenuContentItem()
         ssmi = SidebarMenuItem("Segments", smmci, parent)
         table = Table()
@@ -1515,7 +1536,7 @@ class KToolMachOLoader:
     @staticmethod
     def linked(lib, parent=None, callback=None):
 
-        callback("Loading Linked Libraries")
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nLoading Linked Libs')
 
         linked_libs_item = MainMenuContentItem()
         for exlib in lib.linked:
@@ -1529,7 +1550,7 @@ class KToolMachOLoader:
     @staticmethod
     def load_cmds(lib, parent=None, callback=None):
 
-        callback("Processing Load Commands")
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Load Commands')
 
         load_cmds = MainMenuContentItem()
 
@@ -1557,7 +1578,7 @@ class KToolMachOLoader:
     @staticmethod
     def symtab(lib, parent=None, callback=None):
         mmci = MainMenuContentItem()
-
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Symtab')
         tab = Table()
         tab.titles = ['Address', 'Name']
         for sym in lib.symbol_table.table:
@@ -1603,6 +1624,7 @@ class KToolMachOLoader:
 
     @staticmethod
     def exports(lib, parent=None, callback=None):
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Exports')
         mmci = MainMenuContentItem()
 
         table = Table()
@@ -1700,7 +1722,7 @@ class KToolMachOLoader:
         menuitem = SidebarMenuItem("ObjC Headers", hnci, parent)
         count = len(generator.headers.keys())
         i = 1
-        callback(f'Processing {count} ObjC Headers')
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers')
         futures = []
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
@@ -1761,6 +1783,9 @@ class KToolScreen:
         self.rebuild_all()
 
         self.stdscr.refresh()
+
+    def ktool_dbg_print_func(self, msg):
+        self.debug_menu.scroll_view_text_buffer.lines.append(msg)
 
     def setup(self):
         """
@@ -1906,9 +1931,12 @@ class KToolScreen:
 
         self.debug_menu.box = Box(self.root, 5, 5, curses.COLS - 10, curses.LINES - 10)
         self.debug_menu.scroll_view = Box(self.root, 6, 6, curses.COLS - 12, curses.LINES - 12)
+
+        ls = self.debug_menu.scroll_view_text_buffer.lines if  self.debug_menu.scroll_view_text_buffer else []
         self.debug_menu.scroll_view_text_buffer = ScrollingDisplayBuffer(self.debug_menu.scroll_view, 0, 0,
                                                                          curses.COLS - 22, curses.LINES - 12)
         self.debug_menu.scroll_view_text_buffer.render_attr = curses.color_pair(1)
+        self.debug_menu.scroll_view_text_buffer.lines = ls # ?? We shouldn't need to do this
 
         self.file_browser.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)
         self.file_browser.scroll_view = Box(self.root, 5, 4, curses.COLS - 10, curses.LINES - 8)
@@ -1972,6 +2000,10 @@ class KToolScreen:
         :param c:
         :return:
         """
+
+        if not self.active_key_handler.draw:
+            self.active_key_handler = self.sidebar
+
         if c == curses.KEY_EXIT or c == curses.KEY_BACKSPACE:
             raise ExitProgramException
 
@@ -2045,6 +2077,7 @@ class KToolScreen:
 
             except PresentDebugMenuException:
                 self.debug_menu.draw = True
+                self.active_key_handler = self.debug_menu
                 try:
                     self.redraw_all()
                 except PanicException:
