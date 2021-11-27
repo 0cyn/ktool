@@ -671,7 +671,7 @@ def info(args):
     """
     with open(args.filename, 'rb') as fp:
         machofile = MachOFile(fp)
-        library = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_binding=False)
+        library = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_imports=False, load_exports=False)
         if args.get_vm:
             print(library.vm)
         else:
