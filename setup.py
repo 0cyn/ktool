@@ -1,9 +1,13 @@
 from setuptools import setup
 
+from pathlib import Path
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
+
 setup(name='k2l',
-      version='0.15.4',
+      version='0.15.5',
       description='Static mach-o/img4 analysis tool.',
-      long_description='file: README.md',
+      long_description=long_description,
       long_description_content_type='text/markdown',
       python_requires='>=3.6',
       author='kritanta',
