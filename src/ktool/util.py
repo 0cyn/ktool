@@ -16,9 +16,24 @@ import inspect
 import os
 from enum import Enum
 
+from .exceptions import *
+
 import pkg_resources
 
 KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
+
+
+class ignore:
+    MALFORMED = False
+
+
+def macho_is_malformed():
+    """Raise MalformedMachOException *if* we dont want to ignore bad mach-os
+
+    :return:
+    """
+    if not ignore.MALFORMED:
+        raise MalformedMachOException
 
 
 class TapiYAMLWriter:
@@ -72,6 +87,9 @@ class LogLevel(Enum):
     WARN = 1
     INFO = 2
     DEBUG = 3
+    DEBUG_MORE = 4
+    # if this isn't being piped to a file it will be ridiculous
+    DEBUG_TOO_MUCH = 5
 
 
 class log:
@@ -91,6 +109,16 @@ class log:
     def debug(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
             print(f'DEBUG - {log.line()} - {msg}')
+
+    @staticmethod
+    def debug_more(msg: str):
+        if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
+            print(f'DEBUG-2 - {log.line()} - {msg}')
+
+    @staticmethod
+    def debug_tm(msg: str):
+        if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
+            print(f'DEBUG-3 - {log.line()} - {msg}')
 
     @staticmethod
     def info(msg: str):

@@ -26,7 +26,8 @@ from kmacho import (
 from kmacho.structs import *
 from kmacho.base import Constructable
 from .macho import _VirtualMemoryMap, Segment
-from .util import log
+from .util import log, macho_is_malformed
+from .exceptions import *
 
 
 class Dyld:
@@ -79,10 +80,10 @@ class Dyld:
                     library.binding_table = BindingTable(library, cmd.bind_off, cmd.bind_size)
                     library.weak_binding_table = BindingTable(library, cmd.weak_bind_off, cmd.weak_bind_size)
                     library.lazy_binding_table = BindingTable(library, cmd.lazy_bind_off, cmd.lazy_bind_size)
-                    library.exports = ExportTrie(library, cmd.export_off, cmd.export_size)
+                    library.exports = ExportTrie.from_bytes(library, cmd.export_off, cmd.export_size)
 
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
-                library.exports = ExportTrie(library, cmd.dataoff, cmd.datasize)
+                library.exports = ExportTrie.from_bytes(library, cmd.dataoff, cmd.datasize)
 
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
                 log.warning("library uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
@@ -556,36 +557,60 @@ class SymbolTable:
 export_node = namedtuple("export_node", ['text', 'offset'])
 
 
-class ExportTrie:
-    def __init__(self, library, export_start, export_size):
-        self._endpoint = export_start + export_size
-        self._start = export_start
+class ExportTrie(Constructable):
+    @staticmethod
+    def from_bytes(library, export_start, export_size):
+        trie = ExportTrie()
 
-        self.nodes = self.read_node(library, "", export_start)
+        endpoint = export_start + export_size
+        nodes = ExportTrie.read_node(library, export_start, '', export_start, endpoint)
+        symbols = []
+
+        for node in nodes:
+            symbols.append(Symbol(library, fullname=node.text, addr=node.offset))
+
+        trie.nodes = nodes
+        trie.symbols = symbols
+        trie.raw = library.get_bytes_at(export_start, export_size)
+
+        return trie
+
+    @staticmethod
+    def from_values(*args, **kwargs):
+        pass
+
+    def raw_bytes(self):
+        return self.raw
+
+    def __init__(self):
+        self.raw = bytearray()
+        self.nodes = []
         self.symbols = []
 
-        for node in self.nodes:
-            self.symbols.append(Symbol(library, fullname=node.text, addr=node.offset))
+    @staticmethod
+    def read_node(library, trie_start, string, cursor, endpoint):
 
-    def read_node(self, library, string, cursor):
+        if cursor > endpoint:
+            macho_is_malformed()
+
         start = cursor
         byte = library.get_int_at(cursor, 1)
         results = []
-        log.debug(f'@ {hex(start)} node: {hex(byte)} current_symbol: {string}')
+        log.debug_tm(f'@ {hex(start)} node: {hex(byte)} current_symbol: {string}')
         if byte == 0:
             cursor += 1
             branches = library.get_int_at(cursor, 1)
-            log.debug(f'BRAN {branches}')
+            log.debug_tm(f'BRAN {branches}')
             for i in range(0, branches):
                 if i == 0:
                     cursor += 1
                 proc_str = library.get_cstr_at(cursor)
                 cursor += len(proc_str) + 1
                 offset, cursor = library.decode_uleb128(cursor)
-                log.debug(f'({i}) string: {string + proc_str} next_node: {hex(self._start + offset)}')
-                results += self.read_node(library, string + proc_str, self._start + offset)
+                log.debug_tm(f'({i}) string: {string + proc_str} next_node: {hex(trie_start + offset)}')
+                results += ExportTrie.read_node(library, trie_start, string + proc_str, trie_start + offset, endpoint)
         else:
-            log.debug(f'TERM: 0')
+            log.debug_tm(f'TERM: 0')
             size, cursor = library.decode_uleb128(cursor)
             flags = library.get_int_at(cursor, 1)
             cursor += 1

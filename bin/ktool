@@ -40,7 +40,7 @@ from ktool import (
     LogLevel
 )
 from ktool.exceptions import *
-from ktool.util import KTOOL_VERSION
+from ktool.util import KTOOL_VERSION, ignore
 from ktool.window import KToolScreen, external_hard_fault_teardown, Table
 
 UPDATE_AVAILABLE = False
@@ -72,6 +72,7 @@ def check_for_update():
 class KToolError(Enum):
     ArgumentError = 1
     FiletypeError = 2
+    MalformedMachOError = 3
 
 
 def exit_with_error(error: KToolError, msg):
@@ -115,7 +116,8 @@ def main():
     parser = ArgumentParser(description="ktool")
     parser.add_argument('--bench', dest='bench', action='store_true')
     parser.add_argument('-v', dest='logging_level', type=int)
-    parser.set_defaults(func=help_prompt, bench=False, logging_level=1)
+    parser.add_argument('-f', dest='force_load', action='store_true')
+    parser.set_defaults(func=help_prompt, bench=False, force_load=False, logging_level=1)
     subparsers = parser.add_subparsers(help='sub-command help')
 
     parser_open = subparsers.add_parser('open', help='open ktool GUI and browse file')
@@ -212,6 +214,9 @@ def main():
 
     log.LOG_LEVEL = LogLevel(args.logging_level)
 
+    if args.force_load:
+        ignore.MALFORMED = True
+
     if args.bench:
         import cProfile
         import pstats
@@ -228,6 +233,8 @@ def main():
             exit_with_error(KToolError.FiletypeError, f'{args.filename} is not a valid MachO Binary')
         except FileNotFoundError:
             exit_with_error(KToolError.ArgumentError, f'{args.filename} doesn\'t exist')
+        except MalformedMachOException:
+            exit_with_error(KToolError.MalformedMachOError, f'Malformed MachO. Pass -f to force loading whatever possible')
 
     if UPDATE_AVAILABLE:
         print(f'\n\nUpdate Available ---')
@@ -260,6 +267,12 @@ Misc Utilities ---
     img4 - IMG4 Utilities
 
 Run `ktool [command]`  for info/examples on using that command
+
+Global Flags:
+    -f - Force Load
+    -v - [-1 through 5]; -1 will even hide errors, 5 will output so much data you need to pipe it to a file. 1 is default,
+                            and i'd recommend that.
+    --bench - Run benchmarks. useful for developing/contributing.
         """
     print(help_prompt.__doc__)
 
