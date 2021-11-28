@@ -749,7 +749,8 @@ class Category:
         RELATIVE_METHOD_FLAG = 0x80000000
         METHOD_LIST_FLAGS_MASK = 0xFFFF0000
 
-        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK != 0
+        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
+        rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
 
         ea += 8
         vm_ea += 8
@@ -759,7 +760,7 @@ class Category:
             else:
                 meth = self.image.load_struct(ea, objc2_meth, vm=False)
             try:
-                methods.append(Method(self.image, meta, meth, vm_ea))
+                methods.append(Method(self.image, meta, meth, vm_ea, uses_relative_methods, rms_are_direct))
             except Exception as ex:
                 log.warning(f'Failed to load method with {str(ex)}')
             if uses_relative_methods:
@@ -828,7 +829,8 @@ class Protocol:
         RELATIVE_METHOD_FLAG = 0x80000000
         METHOD_LIST_FLAGS_MASK = 0xFFFF0000
 
-        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK != 0
+        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
+        rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
 
         ea += 8
         vm_ea += 8
@@ -838,7 +840,7 @@ class Protocol:
             else:
                 meth = self.image.load_struct(ea, objc2_meth, vm=False)
             try:
-                methods.append(Method(self.image, meta, meth, vm_ea))
+                methods.append(Method(self.image, meta, meth, vm_ea, uses_relative_methods, rms_are_direct))
             except Exception as ex:
                 log.warning(f'Failed to load method with {str(ex)}')
             if uses_relative_methods:
