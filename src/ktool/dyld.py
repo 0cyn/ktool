@@ -715,7 +715,11 @@ class BindingTable:
                 value = self.image.get_int_at(read_address, 1) & 0x0F
                 log.debug_tm(f'{BINDING_OPCODE(binding_opcode).name}: {hex(value)}')
                 cmd_start_addr = read_address
+                is_beginning_stream = read_address == table_start
                 read_address += 1
+
+                if is_beginning_stream and binding_opcode == BINDING_OPCODE.SUBCODE_THREAED_APPLY:
+                    o, read_address = self.image.decode_uleb128(read_address)
 
                 if binding_opcode == BINDING_OPCODE.DONE:
                     import_stack.append(
