@@ -42,13 +42,13 @@ type_encodings = {
 }
 
 
-class ObjCLibrary:
+class ObjCImage:
 
-    def __init__(self, library, safe=False):
-        self.library = library
+    def __init__(self, image, safe=False):
+        self.image = image
         self.safe = safe
         self.tp = TypeProcessor()
-        self.name = library.name
+        self.name = image.name
 
         self.classlist = self._generate_class_list(None)
         self.catlist = self._generate_category_list()
@@ -56,10 +56,10 @@ class ObjCLibrary:
 
     def _generate_category_list(self):
         sect = None
-        for seg in self.library.segments:
-            for sec in self.library.segments[seg].sections:
+        for seg in self.image.segments:
+            for sec in self.image.segments[seg].sections:
                 if sec == "__objc_catlist":
-                    sect = self.library.segments[seg].sections[sec]
+                    sect = self.image.segments[seg].sections[sec]
 
         if not sect:
             return []
@@ -76,11 +76,11 @@ class ObjCLibrary:
 
     def _generate_class_list(self, classlimit):
         sect = None
-        for seg in self.library.segments:
-            for sec in self.library.segments[seg].sections:
+        for seg in self.image.segments:
+            for sec in self.image.segments[seg].sections:
                 if sec == "__objc_classlist":
-                    sect = self.library.segments[seg].sections[sec]
-        # sect: Section = self.library.segments['__DATA_CONST'].sections['__objc_classlist']
+                    sect = self.image.segments[seg].sections[sec]
+        # sect: Section = self.image.segments['__DATA_CONST'].sections['__objc_classlist']
         if not sect:
             return []
         classes = []
@@ -100,11 +100,11 @@ class ObjCLibrary:
     def _generate_protocol_list(self):
 
         sect = None
-        for seg in self.library.segments:
-            for sec in self.library.segments[seg].sections:
+        for seg in self.image.segments:
+            for sec in self.image.segments[seg].sections:
                 if sec == "__objc_protolist":
-                    sect = self.library.segments[seg].sections[sec]
-        # sect: Section = self.library.segments['__DATA_CONST'].sections['__objc_classlist']
+                    sect = self.image.segments[seg].sections[sec]
+        # sect: Section = self.image.segments['__DATA_CONST'].sections['__objc_classlist']
         if not sect:
             return []
 
@@ -113,9 +113,9 @@ class ObjCLibrary:
         cnt = sect.size // 0x8
         for i in range(0, cnt):
             ptr = sect.vm_address + i * 0x8
-            loc = self.library.get_int_at(ptr, 0x8, vm=True)
+            loc = self.image.get_int_at(ptr, 0x8, vm=True)
             try:
-                proto = self.library.load_struct(loc, objc2_prot, vm=True)
+                proto = self.image.load_struct(loc, objc2_prot, vm=True)
                 protos.append(Protocol(self, proto, loc))
             except Exception as ex:
                 log.error("Failed to load a protocol with " + str(ex))
@@ -123,16 +123,16 @@ class ObjCLibrary:
         return protos
 
     def get_int_at(self, offset: int, length: int, vm=False, sectname=None):
-        return self.library.get_int_at(offset, length, vm, sectname)
+        return self.image.get_int_at(offset, length, vm, sectname)
 
     def load_struct(self, addr: int, struct_type, vm=True, sectname=None, endian="little"):
-        return self.library.load_struct(addr, struct_type, vm, sectname, endian)
+        return self.image.load_struct(addr, struct_type, vm, sectname, endian)
 
     def get_str_at(self, addr: int, count: int, vm=True, sectname=None):
-        return self.library.get_str_at(addr, count, vm, sectname)
+        return self.image.get_str_at(addr, count, vm, sectname)
 
     def get_cstr_at(self, addr: int, limit: int = 0, vm=True, sectname=None):
-        return self.library.get_cstr_at(addr, limit, vm, sectname)
+        return self.image.get_cstr_at(addr, limit, vm, sectname)
 
 
 class Struct_Representation:
@@ -334,11 +334,11 @@ class TypeProcessor:
 
 
 class Ivar:
-    def __init__(self, library, objc_class, ivar: objc2_ivar, vmaddr: int):
-        self.name = library.get_cstr_at(ivar.name, 0, True, "__objc_methname")
-        type_string = library.get_cstr_at(ivar.type, 0, True, "__objc_methtype")
+    def __init__(self, image, objc_class, ivar: objc2_ivar, vmaddr: int):
+        self.name = image.get_cstr_at(ivar.name, 0, True, "__objc_methname")
+        type_string = image.get_cstr_at(ivar.type, 0, True, "__objc_methtype")
         self.is_id = type_string[0] == "@"
-        self.type = self._renderable_type(library.tp.process(type_string)[0])
+        self.type = self._renderable_type(image.tp.process(type_string)[0])
 
     def __str__(self):
         ret = ""
@@ -363,24 +363,24 @@ class Ivar:
 
 
 class Method:
-    def __init__(self, library, meta, method: objc2_meth, vmaddr: int, uses_rel_meth=False, rms_are_direct=False):
+    def __init__(self, image, meta, method: objc2_meth, vmaddr: int, uses_rel_meth=False, rms_are_direct=False):
         self.meta = meta
 
         if uses_rel_meth:
             if rms_are_direct:
-                self.sel = library.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
-                self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
+                self.sel = image.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
+                self.type_string = image.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
                                                        sectname="__objc_methtype")
             else:
-                selref = library.get_int_at(method.selector + vmaddr, 8, vm=True)
-                self.sel = library.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
-                self.type_string = library.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
+                selref = image.get_int_at(method.selector + vmaddr, 8, vm=True)
+                self.sel = image.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
+                self.type_string = image.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
                                                        sectname="__objc_methtype")
         else:
-            self.sel = library.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
-            self.type_string = library.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
+            self.sel = image.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
+            self.type_string = image.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
 
-        self.types = library.tp.process(self.type_string)
+        self.types = image.tp.process(self.type_string)
 
         self.return_string = self._renderable_type(self.types[0])
         self.arguments = [self._renderable_type(i) for i in self.types[1:]]
@@ -443,8 +443,8 @@ class Class:
     objc2_class_ro = ["off", "flags", "ivar_base_start", "ivar_base_size", "reserved", "ivar_lyt", "name", "base_meths", "base_prots", "ivars", "weak_ivar_lyt", "base_props"]
     """
 
-    def __init__(self, library, ptr: int, meta=False, objc2class=None):
-        self.library = library
+    def __init__(self, image, ptr: int, meta=False, objc2class=None):
+        self.image = image
         self.ptr = ptr
         self.meta = meta
         self.metaclass = None
@@ -460,7 +460,7 @@ class Class:
         else:
             self.objc2_class = objc2class
 
-        self.objc2_class_ro = self.library.load_struct(self.objc2_class.info, objc2_class_ro, vm=True)
+        self.objc2_class_ro = self.image.load_struct(self.objc2_class.info, objc2_class_ro, vm=True)
 
         self._process_structs()
 
@@ -480,13 +480,13 @@ class Class:
 
     def _load_objc2_class(self, ptr):
 
-        objc2_class_location = self.library.get_int_at(ptr, 8, vm=True)
-        objc2_class_item: objc2_class = self.library.load_struct(objc2_class_location, objc2_class, vm=True)
+        objc2_class_location = self.image.get_int_at(ptr, 8, vm=True)
+        objc2_class_item: objc2_class = self.image.load_struct(objc2_class_location, objc2_class, vm=True)
 
         bad_addr = False
         try:
-            objc2_superclass: objc2_class = self.library.load_struct(objc2_class_item.superclass, objc2_class)
-            superclass = Class(self.library, objc2_superclass.off, False, objc2_superclass)
+            objc2_superclass: objc2_class = self.image.load_struct(objc2_class_item.superclass, objc2_class)
+            superclass = Class(self.image, objc2_superclass.off, False, objc2_superclass)
             self.superclass = superclass.name
         except:
             bad_addr = True
@@ -496,7 +496,7 @@ class Class:
             struct_size = objc2_class.SIZE
             struct_location = objc2_class_item.off
             try:
-                symbol = self.library.library.binding_table.lookup_table[objc2_class_location + 8]
+                symbol = self.image.image.binding_table.lookup_table[objc2_class_location + 8]
             except KeyError as ex:
                 self.superclass = "NSObject"
                 return objc2_class_item
@@ -505,21 +505,21 @@ class Class:
                 return objc2_class_item
             self.superclass = symbol.name[1:]
             try:
-                self.linked_classes.append(LinkedClass(symbol.name[1:], self.library.library.linked[
+                self.linked_classes.append(LinkedClass(symbol.name[1:], self.image.image.linked[
                     int(symbol.ordinal) - 1].install_name))
             except IndexError:
                 pass
         if objc2_class_item.isa != 0 and objc2_class_item.isa <= 0xFFFFFFFFFF and not self.meta:
             try:
-                metaclass_item: objc2_class = self.library.load_struct(objc2_class_item.isa, objc2_class)
-                self.metaclass = Class(self.library, metaclass_item.off, True, metaclass_item)
+                metaclass_item: objc2_class = self.image.load_struct(objc2_class_item.isa, objc2_class)
+                self.metaclass = Class(self.image, metaclass_item.off, True, metaclass_item)
             except ValueError:
                 pass
         return objc2_class_item
 
     def _process_structs(self):
         try:
-            self.name = self.library.get_cstr_at(self.objc2_class_ro.name, 0, vm=True)
+            self.name = self.image.get_cstr_at(self.objc2_class_ro.name, 0, vm=True)
         except ValueError as ex:
             pass
 
@@ -530,7 +530,7 @@ class Class:
             return methods  # Useless Subclass
 
         vm_ea = self.objc2_class_ro.base_meths
-        methlist_head = self.library.load_struct(self.objc2_class_ro.base_meths, objc2_meth_list)
+        methlist_head = self.image.load_struct(self.objc2_class_ro.base_meths, objc2_meth_list)
         ea = methlist_head.off
 
         # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
@@ -545,11 +545,11 @@ class Class:
         vm_ea += 8
         for i in range(1, methlist_head.count + 1):
             if uses_relative_methods:
-                meth = self.library.load_struct(ea, objc2_meth_list_entry, vm=False)
+                meth = self.image.load_struct(ea, objc2_meth_list_entry, vm=False)
             else:
-                meth = self.library.load_struct(ea, objc2_meth, vm=False)
+                meth = self.image.load_struct(ea, objc2_meth, vm=False)
             try:
-                method = Method(self.library, self.meta, meth, vm_ea, uses_relative_methods, rms_are_direct)
+                method = Method(self.image, self.meta, meth, vm_ea, uses_relative_methods, rms_are_direct)
                 methods.append(method)
                 for type in method.types:
                     if type.type == EncodedType.STRUCT:
@@ -573,16 +573,16 @@ class Class:
             return properties
 
         vm_ea = self.objc2_class_ro.base_props
-        proplist_head = self.library.load_struct(self.objc2_class_ro.base_props, objc2_prop_list)
+        proplist_head = self.image.load_struct(self.objc2_class_ro.base_props, objc2_prop_list)
 
         ea = proplist_head.off
         ea += 8
         vm_ea += 8
 
         for i in range(1, proplist_head.count + 1):
-            prop = self.library.load_struct(ea, objc2_prop, vm=False)
+            prop = self.image.load_struct(ea, objc2_prop, vm=False)
             try:
-                property = Property(self.library, prop, vm_ea)
+                property = Property(self.image, prop, vm_ea)
                 properties.append(property)
                 if hasattr(property, 'attr'):
                     if property.attr.type.type == EncodedType.STRUCT:
@@ -598,13 +598,13 @@ class Class:
         prots = []
         if self.objc2_class_ro.base_prots == 0:
             return prots
-        protlist: objc2_prot_list = self.library.load_struct(self.objc2_class_ro.base_prots, objc2_prot_list)
+        protlist: objc2_prot_list = self.image.load_struct(self.objc2_class_ro.base_prots, objc2_prot_list)
         ea = protlist.off
         for i in range(1, protlist.cnt + 1):
-            prot_loc = self.library.get_int_at(ea + i * 8, 8, vm=False)
-            prot = self.library.load_struct(prot_loc, objc2_prot, vm=True)
+            prot_loc = self.image.get_int_at(ea + i * 8, 8, vm=False)
+            prot = self.image.load_struct(prot_loc, objc2_prot, vm=True)
             try:
-                prots.append(Protocol(self.library, prot, prot_loc))
+                prots.append(Protocol(self.image, prot, prot_loc))
             except Exception as ex:
                 log.warning(f'Failed to load protocol with {str(ex)}')
         return prots
@@ -613,13 +613,13 @@ class Class:
         ivars = []
         if self.objc2_class_ro.ivars == 0:
             return ivars
-        ivarlist: objc2_ivar_list = self.library.load_struct(self.objc2_class_ro.ivars, objc2_ivar_list)
+        ivarlist: objc2_ivar_list = self.image.load_struct(self.objc2_class_ro.ivars, objc2_ivar_list)
         ea = ivarlist.off + 8
         for i in range(1, ivarlist.cnt + 1):
             ivar_loc = ea + objc2_ivar.SIZE * (i - 1)
-            ivar = self.library.load_struct(ivar_loc, objc2_ivar, vm=False)
+            ivar = self.image.load_struct(ivar_loc, objc2_ivar, vm=False)
             try:
-                ivar_object = Ivar(self.library, self, ivar, ivar_loc)
+                ivar_object = Ivar(self.image, self, ivar, ivar_loc)
                 ivars.append(ivar_object)
             except Exception as ex:
                 log.warning(f'Failed to load ivar with {str(ex)}')
@@ -638,18 +638,18 @@ property_attr = namedtuple("property_attr", ["type", "attributes", "ivar", "is_i
 
 
 class Property:
-    def __init__(self, library, property: objc2_prop, vmaddr: int):
-        self.library = library
+    def __init__(self, image, property: objc2_prop, vmaddr: int):
+        self.image = image
         self.property = property
 
-        self.name = library.get_cstr_at(property.name, 0, True, "__objc_methname")
+        self.name = image.get_cstr_at(property.name, 0, True, "__objc_methname")
 
         try:
             self.attr = self.decode_property_attributes(
-                self.library.get_cstr_at(property.attr, 0, True, "__objc_methname"))
+                self.image.get_cstr_at(property.attr, 0, True, "__objc_methname"))
         except IndexError:
             log.warn(
-                f'issue with property {self.name} in {self.library.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
+                f'issue with property {self.name} in {self.image.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
             return
         # property_attr = namedtuple("property_attr", ["type", "attributes", "ivar"])
         self.type = self._renderable_type(self.attr.type)
@@ -699,7 +699,7 @@ class Property:
         for attribute in attribute_strings:
             indicator = attribute[0]
             if indicator == "T":
-                ptype = self.library.tp.process(attribute[1:])[0]
+                ptype = self.image.tp.process(attribute[1:])[0]
                 if ptype == "{":
                     print(attribute)
                 is_id = attribute[1] == "@"
@@ -713,16 +713,16 @@ class Property:
 
 
 class Category:
-    def __init__(self, library, ptr):
-        self.library = library
+    def __init__(self, image, ptr):
+        self.image = image
         self.ptr = ptr
-        loc = self.library.get_int_at(ptr, 8, vm=True)
+        loc = self.image.get_int_at(ptr, 8, vm=True)
 
-        self.struct: objc2_category = self.library.load_struct(loc, objc2_category, vm=True)
-        self.name = self.library.get_cstr_at(self.struct.name, vm=True)
+        self.struct: objc2_category = self.image.load_struct(loc, objc2_category, vm=True)
+        self.name = self.image.get_cstr_at(self.struct.name, vm=True)
         self.classname = ""
         try:
-            sym = self.library.library.binding_table.lookup_table[loc + 8]
+            sym = self.image.image.binding_table.lookup_table[loc + 8]
             self.classname = sym.name[1:]
         except:
             pass
@@ -741,7 +741,7 @@ class Category:
             return methods  # Useless Subclass
 
         vm_ea = loc
-        methlist_head = self.library.load_struct(loc, objc2_meth_list)
+        methlist_head = self.image.load_struct(loc, objc2_meth_list)
         ea = methlist_head.off
 
         # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
@@ -755,11 +755,11 @@ class Category:
         vm_ea += 8
         for i in range(1, methlist_head.count + 1):
             if uses_relative_methods:
-                meth = self.library.load_struct(ea, objc2_meth_list_entry, vm=False)
+                meth = self.image.load_struct(ea, objc2_meth_list_entry, vm=False)
             else:
-                meth = self.library.load_struct(ea, objc2_meth, vm=False)
+                meth = self.image.load_struct(ea, objc2_meth, vm=False)
             try:
-                methods.append(Method(self.library, meta, meth, vm_ea))
+                methods.append(Method(self.image, meta, meth, vm_ea))
             except Exception as ex:
                 log.warning(f'Failed to load method with {str(ex)}')
             if uses_relative_methods:
@@ -778,16 +778,16 @@ class Category:
             return properties
 
         vm_ea = location
-        proplist_head = self.library.load_struct(location, objc2_prop_list)
+        proplist_head = self.image.load_struct(location, objc2_prop_list)
 
         ea = proplist_head.off
         ea += 8
         vm_ea += 8
 
         for i in range(1, proplist_head.count + 1):
-            prop = self.library.load_struct(ea, objc2_prop, vm=False)
+            prop = self.image.load_struct(ea, objc2_prop, vm=False)
             try:
-                properties.append(Property(self.library, prop, vm_ea))
+                properties.append(Property(self.image, prop, vm_ea))
             except Exception as ex:
                 log.warning(f'Failed to load property with {str(ex)}')
             ea += objc2_prop.SIZE
@@ -801,9 +801,9 @@ class Category:
 # objc2_prot_t = struct(objc2_prot, [8, 8, 8, 8, 8, 8, 8, 8, 4, 4])
 
 class Protocol:
-    def __init__(self, library, protocol: objc2_prot, vmaddr: int):
-        self.library = library
-        self.name = library.get_cstr_at(protocol.name, 0, vm=True)
+    def __init__(self, image, protocol: objc2_prot, vmaddr: int):
+        self.image = image
+        self.name = image.get_cstr_at(protocol.name, 0, vm=True)
 
         self.methods = self._process_methods(protocol.inst_meths)
         self.methods += self._process_methods(protocol.class_meths, True)
@@ -820,7 +820,7 @@ class Protocol:
             return methods  # Useless Subclass
 
         vm_ea = loc
-        methlist_head = self.library.load_struct(loc, objc2_meth_list)
+        methlist_head = self.image.load_struct(loc, objc2_meth_list)
         ea = methlist_head.off
 
         # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
@@ -834,11 +834,11 @@ class Protocol:
         vm_ea += 8
         for i in range(1, methlist_head.count + 1):
             if uses_relative_methods:
-                meth = self.library.load_struct(ea, objc2_meth_list_entry, vm=False)
+                meth = self.image.load_struct(ea, objc2_meth_list_entry, vm=False)
             else:
-                meth = self.library.load_struct(ea, objc2_meth, vm=False)
+                meth = self.image.load_struct(ea, objc2_meth, vm=False)
             try:
-                methods.append(Method(self.library, meta, meth, vm_ea))
+                methods.append(Method(self.image, meta, meth, vm_ea))
             except Exception as ex:
                 log.warning(f'Failed to load method with {str(ex)}')
             if uses_relative_methods:
@@ -857,16 +857,16 @@ class Protocol:
             return properties
 
         vm_ea = location
-        proplist_head = self.library.load_struct(location, objc2_prop_list)
+        proplist_head = self.image.load_struct(location, objc2_prop_list)
 
         ea = proplist_head.off
         ea += 8
         vm_ea += 8
 
         for i in range(1, proplist_head.count + 1):
-            prop = self.library.load_struct(ea, objc2_prop, vm=False)
+            prop = self.image.load_struct(ea, objc2_prop, vm=False)
             try:
-                properties.append(Property(self.library, prop, vm_ea))
+                properties.append(Property(self.image, prop, vm_ea))
             except Exception as ex:
                 log.warning(f'Failed to load property with {str(ex)}')
             ea += objc2_prop.SIZE

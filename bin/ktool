@@ -34,7 +34,7 @@ from ktool import (
     HeaderGenerator,
     MachOFileType,
     MachOFile,
-    ObjCLibrary,
+    ObjCImage,
     TapiYAMLWriter,
     log,
     LogLevel
@@ -133,7 +133,7 @@ def main():
 
     parser_edit = subparsers.add_parser('edit', help='Edit attributes of the MachO')
     parser_edit.add_argument('filename', nargs='?', default='')
-    parser_edit.add_argument('--iname', dest='iname', help='Modify the Install Name of a library')
+    parser_edit.add_argument('--iname', dest='iname', help='Modify the Install Name of a image')
     parser_edit.add_argument('--apad', dest='apad',
                              help='Add MachO Header Padding (You probably dont want to do this manually)')
     parser_edit.add_argument('--out', dest='out', help="Output file destination for patches")
@@ -143,7 +143,7 @@ def main():
     parser_lipo.add_argument('--extract', dest='extract', type=str, help='Extract a slice (--extract arm64)')
     parser_lipo.add_argument('--out', dest='out', help="Output File")
     parser_lipo.add_argument('--create', dest='combine', action='store_true',
-                             help="Combine files to create a fat mach-o library")
+                             help="Combine files to create a fat mach-o image")
     parser_lipo.add_argument('filename', nargs='*', default='')
     parser_lipo.set_defaults(func=lipo, out="", combine=False)
 
@@ -161,10 +161,10 @@ def main():
     parser_file.add_argument('filename', nargs='?', default='')
     parser_file.set_defaults(func=_file)
 
-    parser_info = subparsers.add_parser('info', help='Print Info about a MachO Library')
+    parser_info = subparsers.add_parser('info', help='Print Info about a MachO image')
     parser_info.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
-    parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO Library")
+    parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO image")
     parser_info.add_argument('filename', nargs='?', default='')
     parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, slice_index=0)
 
@@ -311,12 +311,12 @@ def symbols(args):
     if args.get_exports:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_imports=False)
+            image = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_imports=False)
 
             table = Table()
             table.titles = ['Address', 'Symbol']
 
-            for i in library.exports.nodes:
+            for i in image.exports.nodes:
                 table.rows.append([hex(i.offset), i.text])
 
             print(table.render(get_terminal_size().columns))
@@ -324,12 +324,12 @@ def symbols(args):
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[args.slice_index], load_imports=False, load_exports=False)
+            image = Dyld.load(machofile.slices[args.slice_index], load_imports=False, load_exports=False)
 
             table = Table()
             table.titles = ['Address', 'Name']
 
-            for sym in library.symbol_table.table:
+            for sym in image.symbol_table.table:
                 table.rows.append([hex(sym.addr), sym.fullname])
 
             print(table.render(get_terminal_size().columns))
@@ -337,58 +337,58 @@ def symbols(args):
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[args.slice_index], load_exports=False, load_symtab=False)
+            image = Dyld.load(machofile.slices[args.slice_index], load_exports=False, load_symtab=False)
 
             syms = {}
-            symbol = namedtuple('symbol', ['name', 'library', 'from_table'])
+            symbol = namedtuple('symbol', ['name', 'image', 'from_table'])
 
-            for sym in library.binding_table.symbol_table:
+            for sym in image.binding_table.symbol_table:
                 try:
-                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, '')
+                    syms[sym.fullname] = symbol(sym.fullname, image.linked[int(sym.ordinal) - 1].install_name, '')
                 except:
                     pass
-            for sym in library.weak_binding_table.symbol_table:
+            for sym in image.weak_binding_table.symbol_table:
                 try:
-                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Weak')
+                    syms[sym.fullname] = symbol(sym.fullname, image.linked[int(sym.ordinal) - 1].install_name, 'Weak')
                 except:
                     pass
-            for sym in library.lazy_binding_table.symbol_table:
+            for sym in image.lazy_binding_table.symbol_table:
                 try:
-                    syms[sym.fullname] = symbol(sym.fullname, library.linked[int(sym.ordinal) - 1].install_name, 'Lazy')
+                    syms[sym.fullname] = symbol(sym.fullname, image.linked[int(sym.ordinal) - 1].install_name, 'Lazy')
                 except:
                     pass
 
             table = Table()
-            table.titles = ['Symbol', 'Library', 'Type']
+            table.titles = ['Symbol', 'image', 'Type']
 
             for _, sym in syms.items():
-                table.rows.append([sym.name, sym.library, sym.from_table])
+                table.rows.append([sym.name, sym.image, sym.from_table])
 
             print(table.render(get_terminal_size().columns))
 
     elif args.get_actions:
         with open(args.filename, 'rb') as fd:
             machofile = MachOFile(fd)
-            library = Dyld.load(machofile.slices[args.slice_index])
+            image = Dyld.load(machofile.slices[args.slice_index])
             print('\nBinding Info'.ljust(60, '-') + '\n')
-            for sym in library.binding_table.symbol_table:
+            for sym in image.binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
                 except:
                     pass
             print('\nWeak Binding Info'.ljust(60, '-') + '\n')
-            for sym in library.weak_binding_table.symbol_table:
+            for sym in image.weak_binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
                 except:
                     pass
             print('\nLazy Binding Info'.ljust(60, '-') + '\n')
-            for sym in library.lazy_binding_table.symbol_table:
+            for sym in image.lazy_binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {library.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
                 except:
                     pass
 
@@ -426,19 +426,19 @@ def insert(args):
     with open(args.filename, 'rb') as fp:
         machofile = MachOFile(fp)
         for macho_slice in machofile.slices:
-            library = Dyld.load(macho_slice)
+            image = Dyld.load(macho_slice)
             last_dylib_command_index = -1
-            for i, cmd in enumerate(library.macho_header.load_commands):
+            for i, cmd in enumerate(image.macho_header.load_commands):
                 if isinstance(cmd, dylib_command):
                     last_dylib_command_index = i + 1
             dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
-            library.insert_lc_with_suf(lc, [dylib_item.raw], args.payload, last_dylib_command_index)
-            library = Dyld.load(macho_slice)
-            patched_libraries.append(library)
+            image.insert_lc_with_suf(lc, [dylib_item.raw], args.payload, last_dylib_command_index)
+            image = Dyld.load(macho_slice)
+            patched_libraries.append(image)
 
     with open(args.out, 'wb') as fd:
         if len(patched_libraries) > 1:
-            slices = [library.slice for library in patched_libraries]
+            slices = [image.slice for image in patched_libraries]
             fat_generator = FatMachOGenerator(slices)
             fd.write(fat_generator.fat_head)
             for arch in fat_generator.fat_archs:
@@ -453,7 +453,7 @@ def edit(args):
     ----------
     Utils for editing MachO Binaries
 
-    Modify the install name of a library
+    Modify the install name of a image
 
         ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
 
@@ -470,22 +470,22 @@ def edit(args):
         with open(args.filename, 'rb') as fp:
             machofile = MachOFile(fp)
             for macho_slice in machofile.slices:
-                library = Dyld.load(macho_slice)
+                image = Dyld.load(macho_slice)
                 id_dylib_index = -1
-                for i, cmd in enumerate(library.macho_header.load_commands):
+                for i, cmd in enumerate(image.macho_header.load_commands):
                     if cmd.cmd == 0xD:
                         id_dylib_index = i
                         break
                 dylib_item = dylib.assemble()
-                library.rm_load_command(id_dylib_index)
-                library = Dyld.load(macho_slice)
-                library.insert_lc_with_suf(LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
-                library = Dyld.load(macho_slice)
-                patched_libraries.append(library)
+                image.rm_load_command(id_dylib_index)
+                image = Dyld.load(macho_slice)
+                image.insert_lc_with_suf(LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
+                image = Dyld.load(macho_slice)
+                patched_libraries.append(image)
 
         with open(args.out, 'wb') as fd:
             if len(patched_libraries) > 1:
-                slices = [library.slice for library in patched_libraries]
+                slices = [image.slice for image in patched_libraries]
                 fat_generator = FatMachOGenerator(slices)
                 fd.write(fat_generator.fat_head)
                 for arch in fat_generator.fat_archs:
@@ -611,21 +611,21 @@ def _list(args):
 
     with open(args.filename, 'rb') as fd:
         machofile = MachOFile(fd)
-        library = Dyld.load(machofile.slices[args.slice_index])
+        image = Dyld.load(machofile.slices[args.slice_index])
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
         if args.get_lcs:
-            for lc in library.macho_header.load_commands:
+            for lc in image.macho_header.load_commands:
                 print(str(lc))
         elif args.get_classes:
-            objc_lib = ObjCLibrary(library)
+            objc_lib = ObjCImage(image)
             for obj_class in objc_lib.classlist:
                 print(f'{obj_class.name}')
         elif args.get_protos:
-            objc_lib = ObjCLibrary(library)
+            objc_lib = ObjCImage(image)
             for objc_proto in objc_lib.protolist:
                 print(f'{objc_proto.name}')
         elif args.get_linked:
-            for exlib in library.linked:
+            for exlib in image.linked:
                 print('(Weak) ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
 
 
@@ -671,17 +671,17 @@ def info(args):
     """
     with open(args.filename, 'rb') as fp:
         machofile = MachOFile(fp)
-        library = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_imports=False, load_exports=False)
+        image = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_imports=False, load_exports=False)
         if args.get_vm:
-            print(library.vm)
+            print(image.vm)
         else:
-            print(f'Name: {library.name}')
-            print(f'Filetype: {library.macho_header.filetype.name}')
-            print(f'Flags: {", ".join([i.name for i in library.macho_header.flags])}')
-            print(f'UUID: {library.uuid.hex().upper()}')
-            print(f'Platform: {library.platform.name}')
-            print(f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z}')
-            print(f'SDK Version: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}')
+            print(f'Name: {image.name}')
+            print(f'Filetype: {image.macho_header.filetype.name}')
+            print(f'Flags: {", ".join([i.name for i in image.macho_header.flags])}')
+            print(f'UUID: {image.uuid.hex().upper()}')
+            print(f'Platform: {image.platform.name}')
+            print(f'Minimum OS: {image.minos.x}.{image.minos.y}.{image.minos.z}')
+            print(f'SDK Version: {image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}')
 
 
 def dump(args):
@@ -703,10 +703,10 @@ def dump(args):
     if args.do_headers:
         with open(args.filename, 'rb') as fp:
             macho_file = MachOFile(fp)
-            library = Dyld.load(macho_file.slices[args.slice_index])
-            if library.name == "":
-                library.name = os.path.basename(args.filename)
-            objc_lib = ObjCLibrary(library)
+            image = Dyld.load(macho_file.slices[args.slice_index])
+            if image.name == "":
+                image.name = os.path.basename(args.filename)
+            objc_lib = ObjCImage(image)
 
             if args.sort_headers:
                 for objc_class in objc_lib.classlist:
@@ -740,9 +740,9 @@ def dump(args):
     elif args.do_tbd:
         with open(args.filename, 'rb') as fp:
             macho_file = MachOFile(fp)
-            library = Dyld.load(macho_file.slices[args.slice_index])
-            tbdgen = TBDGenerator(library, True)
-            with open(library.name + '.tbd', 'w') as filen:
+            image = Dyld.load(macho_file.slices[args.slice_index])
+            tbdgen = TBDGenerator(image, True)
+            with open(image.name + '.tbd', 'w') as filen:
                 filen.write(TapiYAMLWriter.write_out(tbdgen.dict))
 
 

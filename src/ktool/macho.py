@@ -79,8 +79,8 @@ class Segment:
 
     """
 
-    def __init__(self, library, cmd):
-        self.library = library
+    def __init__(self, image, cmd):
+        self.image = image
         self.cmd = cmd
         self.vm_address = cmd.vmaddr
         self.file_address = cmd.fileoff
@@ -99,7 +99,7 @@ class Segment:
         ea = self.cmd.off + segment_command_64.SIZE
 
         for section in range(0, self.cmd.nsects):
-            sect = self.library.load_struct(ea, section_64)
+            sect = self.image.load_struct(ea, section_64)
             section = Section(self, sect)
             sections[section.name] = section
             ea += section_64.SIZE
@@ -116,7 +116,7 @@ class Section:
     def __init__(self, segment, cmd):
         self.cmd = cmd
         self.segment = segment
-        self.name = segment.library.get_str_at(cmd.off, 16)
+        self.name = segment.image.get_str_at(cmd.off, 16)
         self.vm_address = cmd.addr
         self.file_address = cmd.offset
         self.size = cmd.size
@@ -127,7 +127,7 @@ vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr", "name"])
 
 class _VirtualMemoryMap:
     """
-    Virtual Memory is the location "in memory" where the library/bin, etc will be accessed when ran This is not where
+    Virtual Memory is the location "in memory" where the image/bin, etc will be accessed when ran This is not where
     it actually sits in memory at runtime; it will be slid, but the program doesnt know and doesnt care The slid
     address doesnt matter to us either, we only care about the addresses the rest of the file cares about
 

@@ -94,7 +94,7 @@ class LogLevel(Enum):
 
 class log:
     """
-    Python's default logging library is absolute garbage
+    Python's default logging image is absolute garbage
 
     so we use this.
     """

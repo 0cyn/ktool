@@ -19,11 +19,11 @@ from kmacho.structs import *
 from . import log
 from .dyld import Dyld, SymbolType
 from .macho import Slice
-from .objc import ObjCLibrary
+from .objc import ObjCImage
 
 
 class TBDGenerator:
-    def __init__(self, library, general=True, objc_lib=None):
+    def __init__(self, image, general=True, objc_lib=None):
         """
         The TBD Generator is a generator that creates TAPI formatted text based stubs for libraries.
 
@@ -32,20 +32,20 @@ class TBDGenerator:
         After processing, its .dict attribute can be dumped by a TAPI YAML serializer (located in ktool.util) to
             produce a functional .tbd
 
-        :param library: Library being processed
-        :type library: Library
+        :param image: image being processed
+        :type image: image
         :param general: Should the generator create a .tbd for usage in SDKs?
         :type general: bool
-        :param objc_lib: Pass an objc library to the generator. If none is passed it will generate its own
+        :param objc_lib: Pass an objc image to the generator. If none is passed it will generate its own
         """
-        self.library = library
+        self.image = image
         self.objc_lib = objc_lib
         self.general = general
         self.dict = self._generate_dict()
 
     def _generate_dict(self):
         """
-        This function simply parses through the library and creates the tbd dict
+        This function simply parses through the image and creates the tbd dict
 
         :return: The text-based-stub dictionary representation
         """
@@ -53,20 +53,20 @@ class TBDGenerator:
         if self.general:
             tbd['archs'] = ['armv7', 'armv7s', 'arm64', 'arm64e']
             tbd['platform'] = '(null)'
-            tbd['install-name'] = self.library.dylib.install_name
+            tbd['install-name'] = self.image.dylib.install_name
             tbd['current-version'] = 1
             tbd['compatibility-version'] = 1
 
             export_dict = {'archs': ['armv7', 'armv7s', 'arm64', 'arm64e']}
 
-            if len(self.library.allowed_clients) > 0:
-                export_dict['allowed-clients'] = self.library.allowed_clients
+            if len(self.image.allowed_clients) > 0:
+                export_dict['allowed-clients'] = self.image.allowed_clients
 
             symbols = []
             classes = []
             ivars = []
 
-            for sym in self.library.exports.symbols:
+            for sym in self.image.exports.symbols:
                 if sym.type == SymbolType.FUNC:
                     symbols.append(sym.name)
                 elif sym.type == SymbolType.CLASS:

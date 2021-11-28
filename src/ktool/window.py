@@ -38,7 +38,7 @@ from pygments.formatters.terminal256 import Terminal256Formatter
 from pygments.lexers.objective import ObjectiveCLexer
 
 from kmacho import LOAD_COMMAND
-from ktool import MachOFile, Dyld, ObjCLibrary, HeaderGenerator
+from ktool import MachOFile, Dyld, ObjCImage, HeaderGenerator
 
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
@@ -1453,14 +1453,14 @@ class KToolMachOLoader:
 
     @staticmethod
     def slice_item(macho_slice, callback):
-        loaded_library = Dyld.load(macho_slice)
+        loaded_image = Dyld.load(macho_slice)
         if hasattr(macho_slice, 'type'):
             slice_nick = macho_slice.type.name + " Slice"
         else:
             slice_nick = "Thin MachO"
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nLoading MachO Image')
         slice_item = SidebarMenuItem(f'{slice_nick}', None, None)
-        slice_item.content = KToolMachOLoader._file(loaded_library, slice_item, callback).content
+        slice_item.content = KToolMachOLoader._file(loaded_image, slice_item, callback).content
         items = [KToolMachOLoader.load_cmds,
                  KToolMachOLoader.segments,
                  KToolMachOLoader.linked,
@@ -1469,11 +1469,11 @@ class KToolMachOLoader:
                  KToolMachOLoader.vm_map]
         for item in items:
             try:
-                slice_item.children.append(item(loaded_library, slice_item, callback))
+                slice_item.children.append(item(loaded_image, slice_item, callback))
             except Exception as ex:
                 pass
         try:
-            slice_item.children += KToolMachOLoader.objc_items(loaded_library, slice_item, callback)
+            slice_item.children += KToolMachOLoader.objc_items(loaded_image, slice_item, callback)
         except Exception as ex:
             pass
         slice_item.show_children = True
@@ -1603,7 +1603,7 @@ class KToolMachOLoader:
 
     @staticmethod
     def objc_items(lib, parent=None, callback=None):
-        objc_lib = ObjCLibrary(lib)
+        objc_lib = ObjCImage(lib)
 
         return [KToolMachOLoader.objc_headers(objc_lib, parent, callback)]
 
@@ -1646,7 +1646,7 @@ class KToolMachOLoader:
         mmci = MainMenuContentItem()
 
         table = Table()
-        table.titles = ['Symbol', 'Address', 'Library']
+        table.titles = ['Symbol', 'Address', 'image']
 
         for sym in lib.binding_table.symbol_table:
             try:
@@ -1667,7 +1667,7 @@ class KToolMachOLoader:
         mmci = MainMenuContentItem()
 
         table = Table()
-        table.titles = ['Symbol', 'Address', 'Library']
+        table.titles = ['Symbol', 'Address', 'image']
 
         for sym in lib.weak_binding_table.symbol_table:
             try:
@@ -1688,7 +1688,7 @@ class KToolMachOLoader:
         mmci = MainMenuContentItem()
 
         table = Table()
-        table.titles = ['Symbol', 'Address', 'Library']
+        table.titles = ['Symbol', 'Address', 'image']
 
         for sym in lib.lazy_binding_table.symbol_table:
             try:

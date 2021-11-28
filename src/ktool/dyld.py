@@ -46,117 +46,117 @@ class Dyld:
 
         :param load_binding: Load Binding Info?
         :param load_symtab: Load Symbol Table?
-        :param macho_slice: Slice to load. If your library is not fat, that'll be MachOFile.slices[0]
+        :param macho_slice: Slice to load. If your image is not fat, that'll be MachOFile.slices[0]
         :type macho_slice: Slice
-        :return: Processed Library object
-        :rtype: Library
+        :return: Processed image object
+        :rtype: Image
         """
-        log.info("Loading Library")
-        library = Library(macho_slice)
+        log.info("Loading image")
+        image = Image(macho_slice)
 
         log.info("Processing Load Commands")
-        Dyld._parse_load_commands(library, load_symtab, load_imports, load_exports)
-        return library
+        Dyld._parse_load_commands(image, load_symtab, load_imports, load_exports)
+        return image
 
     @classmethod
-    def _parse_load_commands(cls, library, load_symtab=True, load_imports=True, load_exports=True):
+    def _parse_load_commands(cls, image, load_symtab=True, load_imports=True, load_exports=True):
         # noinspection PyUnusedLocal
         fixups = None
-        log.info(f'registered {len(library.macho_header.load_commands)} Load Commands')
-        for cmd in library.macho_header.load_commands:
+        log.info(f'registered {len(image.macho_header.load_commands)} Load Commands')
+        for cmd in image.macho_header.load_commands:
             if isinstance(cmd, segment_command_64):
                 log.debug("Loading segment_command_64")
-                segment = Segment(library, cmd)
+                segment = Segment(image, cmd)
 
                 log.info(f'Loaded Segment {segment.name}')
-                library.vm.add_segment(segment)
-                library.segments[segment.name] = segment
+                image.vm.add_segment(segment)
+                image.segments[segment.name] = segment
 
                 log.debug(f'Added {segment.name} to VM Map')
 
             elif isinstance(cmd, dyld_info_command):
-                library.info = cmd
+                image.info = cmd
                 if load_imports:
                     log.info("Loading Binding Info")
-                    library.binding_table = BindingTable(library, cmd.bind_off, cmd.bind_size)
-                    library.weak_binding_table = BindingTable(library, cmd.weak_bind_off, cmd.weak_bind_size)
-                    library.lazy_binding_table = BindingTable(library, cmd.lazy_bind_off, cmd.lazy_bind_size)
+                    image.binding_table = BindingTable(image, cmd.bind_off, cmd.bind_size)
+                    image.weak_binding_table = BindingTable(image, cmd.weak_bind_off, cmd.weak_bind_size)
+                    image.lazy_binding_table = BindingTable(image, cmd.lazy_bind_off, cmd.lazy_bind_size)
                 if load_exports:
                     log.info("Loading Export Trie")
-                    library.exports = ExportTrie.from_bytes(library, cmd.export_off, cmd.export_size)
+                    image.exports = ExportTrie.from_bytes(image, cmd.export_off, cmd.export_size)
 
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
                 log.info("Loading Export Trie")
-                library.exports = ExportTrie.from_bytes(library, cmd.dataoff, cmd.datasize)
+                image.exports = ExportTrie.from_bytes(image, cmd.dataoff, cmd.datasize)
 
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
-                log.warning("library uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
-                # fixups = ChainedFixups(library, cmd.dataoff, cmd.datasize)
+                log.warning("image uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
+                # fixups = ChainedFixups(image, cmd.dataoff, cmd.datasize)
                 pass
 
             elif isinstance(cmd, symtab_command):
                 if load_symtab:
                     log.info("Loading Symbol Table")
-                    library.symbol_table = SymbolTable(library, cmd)
+                    image.symbol_table = SymbolTable(image, cmd)
 
             elif isinstance(cmd, uuid_command):
-                library.uuid = cmd.uuid.to_bytes(16, "little")
-                log.info(f'Library UUID: {library.uuid}')
+                image.uuid = cmd.uuid.to_bytes(16, "little")
+                log.info(f'image UUID: {image.uuid}')
 
             elif isinstance(cmd, sub_client_command):
-                string = library.get_cstr_at(cmd.off + cmd.offset)
-                library.allowed_clients.append(string)
+                string = image.get_cstr_at(cmd.off + cmd.offset)
+                image.allowed_clients.append(string)
                 log.debug(f'Loaded Subclient "{string}"')
 
             elif isinstance(cmd, rpath_command):
-                string = library.get_cstr_at(cmd.off + cmd.path)
-                library.rpath = string
-                log.info(f'Library Resource Path: {string}')
+                string = image.get_cstr_at(cmd.off + cmd.path)
+                image.rpath = string
+                log.info(f'image Resource Path: {string}')
 
             elif isinstance(cmd, build_version_command):
-                library.platform = PlatformType(cmd.platform)
-                library.minos = os_version(x=library.get_int_at(cmd.off + 14, 2), y=library.get_int_at(cmd.off + 13, 1),
-                                           z=library.get_int_at(cmd.off + 12, 1))
-                library.sdk_version = os_version(x=library.get_int_at(cmd.off + 18, 2),
-                                                 y=library.get_int_at(cmd.off + 17, 1),
-                                                 z=library.get_int_at(cmd.off + 16, 1))
-                log.info(f'Loaded platform {library.platform.name} | '
-                          f'Minimum OS {library.minos.x}.{library.minos.y}'
-                          f'.{library.minos.z} | SDK Version {library.sdk_version.x}'
-                          f'.{library.sdk_version.y}.{library.sdk_version.z}')
+                image.platform = PlatformType(cmd.platform)
+                image.minos = os_version(x=image.get_int_at(cmd.off + 14, 2), y=image.get_int_at(cmd.off + 13, 1),
+                                         z=image.get_int_at(cmd.off + 12, 1))
+                image.sdk_version = os_version(x=image.get_int_at(cmd.off + 18, 2),
+                                               y=image.get_int_at(cmd.off + 17, 1),
+                                               z=image.get_int_at(cmd.off + 16, 1))
+                log.info(f'Loaded platform {image.platform.name} | '
+                          f'Minimum OS {image.minos.x}.{image.minos.y}'
+                          f'.{image.minos.z} | SDK Version {image.sdk_version.x}'
+                          f'.{image.sdk_version.y}.{image.sdk_version.z}')
 
             elif isinstance(cmd, version_min_command):
                 # Only override this if it wasn't set by build_version
-                if library.platform == PlatformType.UNK:
+                if image.platform == PlatformType.UNK:
                     if LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_MACOSX:
-                        library.platform = PlatformType.MACOS
+                        image.platform = PlatformType.MACOS
                     elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_IPHONEOS:
-                        library.platform = PlatformType.IOS
+                        image.platform = PlatformType.IOS
                     elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_TVOS:
-                        library.platform = PlatformType.TVOS
+                        image.platform = PlatformType.TVOS
                     elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_WATCHOS:
-                        library.platform = PlatformType.WATCHOS
+                        image.platform = PlatformType.WATCHOS
 
-                    library.minos = os_version(x=library.get_int_at(cmd.off + 10, 2),
-                                               y=library.get_int_at(cmd.off + 9, 1),
-                                               z=library.get_int_at(cmd.off + 8, 1))
+                    image.minos = os_version(x=image.get_int_at(cmd.off + 10, 2),
+                                             y=image.get_int_at(cmd.off + 9, 1),
+                                             z=image.get_int_at(cmd.off + 8, 1))
 
             elif isinstance(cmd, dylib_command):
                 if cmd.cmd == 0xD:  # local
-                    library.dylib = ExternalDylib(library, cmd)
-                    log.info(f'Loaded local dylib_command with install_name {library.dylib.install_name}')
+                    image.dylib = ExternalDylib(image, cmd)
+                    log.info(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
                 else:
-                    external_dylib = ExternalDylib(library, cmd)
-                    library.linked.append(external_dylib)
+                    external_dylib = ExternalDylib(image, cmd)
+                    image.linked.append(external_dylib)
                     log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
-        if library.dylib is not None:
-            library.name = library.dylib.install_name.split('/')[-1]
+        if image.dylib is not None:
+            image.name = image.dylib.install_name.split('/')[-1]
         else:
-            library.name = ""
+            image.name = ""
 
 
-class Library:
+class Image:
     """
     This class represents the Mach-O Binary as a whole.
 
@@ -171,12 +171,12 @@ class Library:
 
     def __init__(self, macho_slice):
         """
-        Create a MachO Library
+        Create a MachO image
 
         :param macho_slice: MachO Slice being processed
         :type macho_slice: MachO Slice
         """
-        self.macho_header = LibraryHeader.from_bytes(macho_slice=macho_slice)
+        self.macho_header = ImageHeader.from_bytes(macho_slice=macho_slice)
 
         self.slice = macho_slice
 
@@ -211,7 +211,7 @@ class Library:
         """
         Get a sequence of bytes (as an int) from a location
 
-        :param offset: Offset within the library
+        :param offset: Offset within the image
         :param length: Amount of bytes to get
         :param vm: Is `offset` a VM address
         :param section_name: Section Name if vm==True (improves translation time slightly)
@@ -225,7 +225,7 @@ class Library:
         """
         Get a sequence of bytes from a location
 
-        :param offset: Offset within the library
+        :param offset: Offset within the image
         :param length: Amount of bytes to get
         :param vm: Is `offset` a VM address
         :param section_name: Section Name if vm==True (improves translation time slightly)
@@ -368,7 +368,7 @@ class Library:
         self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
 
 
-class LibraryHeader(Constructable):
+class ImageHeader(Constructable):
     """
     This class represents the Mach-O Header
     It contains the basic header info along with all load commands within it.
@@ -379,17 +379,17 @@ class LibraryHeader(Constructable):
     @staticmethod
     def from_bytes(macho_slice):
 
-        library_header = LibraryHeader()
+        image_header = ImageHeader()
 
         offset = 0
         header: dyld_header = macho_slice.load_struct(offset, dyld_header)
         raw = header.raw
 
-        library_header.filetype = MH_FILETYPE(header.filetype)
+        image_header.filetype = MH_FILETYPE(header.filetype)
 
         for flag in MH_FLAGS:
             if header.flags & flag.value:
-                library_header.flags.append(flag)
+                image_header.flags.append(flag)
 
         offset += header.SIZE
 
@@ -414,11 +414,11 @@ class LibraryHeader(Constructable):
             raw += cmd_raw
             offset += load_cmd.cmdsize
 
-        library_header.raw = raw
-        library_header.dyld_header = header
-        library_header.load_commands = load_commands
+        image_header.raw = raw
+        image_header.dyld_header = header
+        image_header.load_commands = load_commands
 
-        return library_header
+        return image_header
 
     @staticmethod
     def from_values(*args, **kwargs):
@@ -436,16 +436,16 @@ class LibraryHeader(Constructable):
 
 
 class ExternalDylib:
-    def __init__(self, source_library, cmd):
+    def __init__(self, source_image, cmd):
         self.cmd = cmd
-        self.source_library = source_library
+        self.source_image = source_image
         self.install_name = self._get_name(cmd)
         self.weak = cmd.cmd == 0x18 | 0x80000000
         self.local = cmd.cmd == 0xD
 
     def _get_name(self, cmd):
         read_address = cmd.off + dylib_command.SIZE
-        return self.source_library.get_cstr_at(read_address)
+        return self.source_image.get_cstr_at(read_address)
 
 
 os_version = namedtuple("os_version", ["x", "y", "z"])
@@ -483,7 +483,7 @@ class Symbol:
     """
     This class can represent several types of symbols.
 
-    It can represent an external or internal symbol declaration and is used for both across the library
+    It can represent an external or internal symbol declaration and is used for both across the image
 
     .external is a BOOL that can be used to check whether it's an external or internal declaration
 
@@ -538,8 +538,8 @@ class SymbolTable:
 
     """
 
-    def __init__(self, library, cmd: symtab_command):
-        self.library = library
+    def __init__(self, image, cmd: symtab_command):
+        self.image = image
         self.cmd = cmd
         self.ext = []
         self.table = self._load_symbol_table()
@@ -548,11 +548,11 @@ class SymbolTable:
         symbol_table = []
         read_address = self.cmd.symoff
         for i in range(0, self.cmd.nsyms):
-            symbol_table.append(self.library.load_struct(read_address + symtab_entry.SIZE * i, symtab_entry))
+            symbol_table.append(self.image.load_struct(read_address + symtab_entry.SIZE * i, symtab_entry))
 
         table = []
         for sym in symbol_table:
-            symbol = Symbol(self.library, self.cmd, sym)
+            symbol = Symbol(self.image, self.cmd, sym)
             # log.debug(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
             table.append(symbol)
             if sym.type == 0xf:
@@ -565,19 +565,19 @@ export_node = namedtuple("export_node", ['text', 'offset'])
 
 class ExportTrie(Constructable):
     @staticmethod
-    def from_bytes(library, export_start, export_size):
+    def from_bytes(image, export_start, export_size):
         trie = ExportTrie()
 
         endpoint = export_start + export_size
-        nodes = ExportTrie.read_node(library, export_start, '', export_start, endpoint)
+        nodes = ExportTrie.read_node(image, export_start, '', export_start, endpoint)
         symbols = []
 
         for node in nodes:
-            symbols.append(Symbol(library, fullname=node.text, addr=node.offset))
+            symbols.append(Symbol(image, fullname=node.text, addr=node.offset))
 
         trie.nodes = nodes
         trie.symbols = symbols
-        trie.raw = library.get_bytes_at(export_start, export_size)
+        trie.raw = image.get_bytes_at(export_start, export_size)
 
         return trie
 
@@ -594,33 +594,33 @@ class ExportTrie(Constructable):
         self.symbols = []
 
     @classmethod
-    def read_node(cls, library, trie_start, string, cursor, endpoint):
+    def read_node(cls, image, trie_start, string, cursor, endpoint):
 
         if cursor > endpoint:
             macho_is_malformed()
 
         start = cursor
-        byte = library.get_int_at(cursor, 1)
+        byte = image.get_int_at(cursor, 1)
         results = []
         log.debug_tm(f'@ {hex(start)} node: {hex(byte)} current_symbol: {string}')
         if byte == 0:
             cursor += 1
-            branches = library.get_int_at(cursor, 1)
+            branches = image.get_int_at(cursor, 1)
             log.debug_tm(f'BRAN {branches}')
             for i in range(0, branches):
                 if i == 0:
                     cursor += 1
-                proc_str = library.get_cstr_at(cursor)
+                proc_str = image.get_cstr_at(cursor)
                 cursor += len(proc_str) + 1
-                offset, cursor = library.decode_uleb128(cursor)
+                offset, cursor = image.decode_uleb128(cursor)
                 log.debug_tm(f'({i}) string: {string + proc_str} next_node: {hex(trie_start + offset)}')
-                results += ExportTrie.read_node(library, trie_start, string + proc_str, trie_start + offset, endpoint)
+                results += ExportTrie.read_node(image, trie_start, string + proc_str, trie_start + offset, endpoint)
         else:
             log.debug_tm(f'TERM: 0')
-            size, cursor = library.decode_uleb128(cursor)
-            flags = library.get_int_at(cursor, 1)
+            size, cursor = image.decode_uleb128(cursor)
+            flags = image.get_int_at(cursor, 1)
             cursor += 1
-            offset, cursor = library.decode_uleb128(cursor)
+            offset, cursor = image.decode_uleb128(cursor)
             results.append(export_node(string, offset))
 
         return results
@@ -642,7 +642,7 @@ record = namedtuple("record", [
 
 class BindingTable:
     """
-    The binding table contains a ton of information related to the binding info in the library
+    The binding table contains a ton of information related to the binding info in the image
 
     .lookup_table - Contains a map of address -> Symbol declarations which should be used for processing off-image
     symbol decorations
@@ -656,14 +656,14 @@ class BindingTable:
 
     """
 
-    def __init__(self, library, table_start, table_size):
+    def __init__(self, image, table_start, table_size):
         """
-        Pass a library to be processed
+        Pass a image to be processed
 
-        :param library: Library to be processed
-        :type library: Library
+        :param image: image to be processed
+        :type image: Image
         """
-        self.library = library
+        self.image = image
         self.import_stack = self._load_binding_info(table_start, table_size)
         self.actions = self._create_action_list()
         self.lookup_table = {}
@@ -674,7 +674,7 @@ class BindingTable:
         table = []
         for act in self.actions:
             if act.item:
-                sym = Symbol(self.library, fullname=act.item, ordinal=act.libname, addr=act.vmaddr)
+                sym = Symbol(self.image, fullname=act.item, ordinal=act.libname, addr=act.vmaddr)
                 # log.debug(f'Binding info: Loaded symbol:{act.item} ordinal:{act.libname} addr:{act.vmaddr}')
                 table.append(sym)
                 self.lookup_table[act.vmaddr] = sym
@@ -683,10 +683,10 @@ class BindingTable:
     def _create_action_list(self):
         actions = []
         for bind_command in self.import_stack:
-            segment = list(self.library.segments.values())[bind_command.seg_index]
+            segment = list(self.image.segments.values())[bind_command.seg_index]
             vm_address = segment.vm_address + bind_command.seg_offset
             try:
-                lib = self.library.linked[bind_command.lib_ordinal - 1].install_name
+                lib = self.image.linked[bind_command.lib_ordinal - 1].install_name
             except IndexError:
                 # log.debug(f'Binding Info: {bind_command.lib_ordinal} Ordinal wasn't found, Something is wrong')
                 lib = str(bind_command.lib_ordinal)
@@ -711,8 +711,8 @@ class BindingTable:
             while True:
                 # There are 0xc opcodes total
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
-                binding_opcode = self.library.get_int_at(read_address, 1) & 0xF0
-                value = self.library.get_int_at(read_address, 1) & 0x0F
+                binding_opcode = self.image.get_int_at(read_address, 1) & 0xF0
+                value = self.image.get_int_at(read_address, 1) & 0x0F
                 log.debug_tm(f'{BINDING_OPCODE(binding_opcode).name}: {hex(value)}')
                 cmd_start_addr = read_address
                 read_address += 1
@@ -727,7 +727,7 @@ class BindingTable:
                     lib_ordinal = value
 
                 elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_ULEB:
-                    lib_ordinal, read_address = self.library.decode_uleb128(read_address)
+                    lib_ordinal, read_address = self.image.decode_uleb128(read_address)
 
                 elif binding_opcode == BINDING_OPCODE.SET_DYLIB_SPECIAL_IMM:
                     special_dylib = 0x1
@@ -735,21 +735,21 @@ class BindingTable:
 
                 elif binding_opcode == BINDING_OPCODE.SET_SYMBOL_TRAILING_FLAGS_IMM:
                     flags = value
-                    name = self.library.get_cstr_at(read_address)
+                    name = self.image.get_cstr_at(read_address)
                     read_address += len(name) + 1
 
                 elif binding_opcode == BINDING_OPCODE.SET_TYPE_IMM:
                     btype = value
 
                 elif binding_opcode == BINDING_OPCODE.SET_ADDEND_SLEB:
-                    addend, read_address = self.library.decode_uleb128(read_address)
+                    addend, read_address = self.image.decode_uleb128(read_address)
 
                 elif binding_opcode == BINDING_OPCODE.SET_SEGMENT_AND_OFFSET_ULEB:
                     seg_index = value
-                    seg_offset, read_address = self.library.decode_uleb128(read_address)
+                    seg_offset, read_address = self.image.decode_uleb128(read_address)
 
                 elif binding_opcode == BINDING_OPCODE.ADD_ADDR_ULEB:
-                    o, read_address = self.library.decode_uleb128(read_address)
+                    o, read_address = self.image.decode_uleb128(read_address)
                     seg_offset += o
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_ULEB:
@@ -757,7 +757,7 @@ class BindingTable:
                         record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
                                special_dylib))
                     seg_offset += 8
-                    o, read_address = self.library.decode_uleb128(read_address)
+                    o, read_address = self.image.decode_uleb128(read_address)
                     seg_offset += o
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_IMM_SCALED:
@@ -767,8 +767,8 @@ class BindingTable:
                     seg_offset = seg_offset + (value * 8) + 8
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
-                    count, read_address = self.library.decode_uleb128(read_address)
-                    skip, read_address = self.library.decode_uleb128(read_address)
+                    count, read_address = self.image.decode_uleb128(read_address)
+                    skip, read_address = self.image.decode_uleb128(read_address)
 
                     for i in range(0, count):
                         import_stack.append(

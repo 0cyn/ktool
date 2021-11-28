@@ -13,7 +13,7 @@
 #
 
 from .dyld import SymbolType
-from .objc import ObjCLibrary
+from .objc import ObjCImage
 
 from .util import KTOOL_VERSION
 
@@ -21,36 +21,36 @@ from .util import KTOOL_VERSION
 class HeaderUtils:
 
     @staticmethod
-    def header_head(library):
+    def header_head(image):
         try:
             prefix = "// Headers generated with ktool v" + KTOOL_VERSION + "\n"
             prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
-            prefix += f'// Platform: {library.platform.name} | '
-            prefix += f'Minimum OS: {library.minos.x}.{library.minos.y}.{library.minos.z} | '
-            prefix += f'SDK: {library.sdk_version.x}.{library.sdk_version.y}.{library.sdk_version.z}\n\n'
+            prefix += f'// Platform: {image.platform.name} | '
+            prefix += f'Minimum OS: {image.minos.x}.{image.minos.y}.{image.minos.z} | '
+            prefix += f'SDK: {image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}\n\n'
             return prefix
         except AttributeError:
             prefix = "// Headers generated with ktool v" + KTOOL_VERSION + "\n"
             prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
-            prefix += "// Issue loading library metadata\n\n"
+            prefix += "// Issue loading image metadata\n\n"
             return prefix
 
 
 class TypeResolver:
-    def __init__(self, objc_library: ObjCLibrary):
-        self.library = objc_library
+    def __init__(self, objc_image: ObjCImage):
+        self.image = objc_image
         classes = []
         self.classmap = {}
         try:
-            for sym in objc_library.library.binding_table.symbol_table:
+            for sym in objc_image.image.binding_table.symbol_table:
                 if sym.type == SymbolType.CLASS:
                     self.classmap[sym.name[1:]] = sym
                     classes.append(sym)
         except AttributeError:
             pass
         self.classes = classes
-        self.local_classes = objc_library.classlist
-        self.local_protos = objc_library.protolist
+        self.local_classes = objc_image.classlist
+        self.local_protos = objc_image.protolist
 
     def find_linked(self, classname):
         for local in self.local_classes:
@@ -61,7 +61,7 @@ class TypeResolver:
                 return "-Protocol"
         if classname in self.classmap:
             try:
-                nam = self.library.library.linked[int(self.classmap[classname].ordinal) - 1].install_name
+                nam = self.image.image.linked[int(self.classmap[classname].ordinal) - 1].install_name
                 if '.dylib' in nam:
                     return None
                 return nam
@@ -71,34 +71,34 @@ class TypeResolver:
 
 
 class HeaderGenerator:
-    def __init__(self, objc_library):
-        self.type_resolver = TypeResolver(objc_library)
+    def __init__(self, objc_image):
+        self.type_resolver = TypeResolver(objc_image)
 
-        self.library = objc_library
+        self.image = objc_image
         self.headers = {}
 
-        for objc_class in objc_library.classlist:
+        for objc_class in objc_image.classlist:
             self.headers[objc_class.name + '.h'] = Header(self.type_resolver, objc_class)
-        for objc_cat in objc_library.catlist:
+        for objc_cat in objc_image.catlist:
             if objc_cat.classname != "":
                 self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(objc_cat)
-        for objc_proto in objc_library.protolist:
+        for objc_proto in objc_image.protolist:
             self.headers[objc_proto.name + '-Protocol.h'] = ProtocolHeader(objc_proto)
 
-        self.headers[self.library.name + '.h'] = UmbrellaHeader(self.headers)
-        self.headers[self.library.name + '-Structs.h'] = StructHeader(objc_library)
+        self.headers[self.image.name + '.h'] = UmbrellaHeader(self.headers)
+        self.headers[self.image.name + '-Structs.h'] = StructHeader(objc_image)
 
 
 class StructHeader:
-    def __init__(self, library):
+    def __init__(self, image):
         """
         Scans through structs cached in the ObjCLib's type processor and writes them to a header
 
-        :param library: Library containing structs
+        :param image: image containing structs
         """
         text = ""
 
-        for struct in library.tp.structs.values():
+        for struct in image.tp.structs.values():
             text += str(struct) + '\n\n'
 
         self.text = text
@@ -129,7 +129,7 @@ class Header:
         return self.text
 
     def _generate_text(self):
-        text = [HeaderUtils.header_head(self.type_resolver.library.library),
+        text = [HeaderUtils.header_head(self.type_resolver.image.image),
                 "#ifndef " + self.objc_class.name.upper() + "_H", "#define " + self.objc_class.name.upper() + "_H", ""]
 
         if len(self.forward_declaration_classes) > 0:
@@ -266,7 +266,7 @@ class CategoryHeader:
         return self.text
 
     def _generate_text(self):
-        text = [HeaderUtils.header_head(self.category.library.library),
+        text = [HeaderUtils.header_head(self.category.image.image),
                 "",
                 str(self.interface),
                 "",
@@ -287,7 +287,7 @@ class ProtocolHeader:
         return self.text
 
     def _generate_text(self):
-        text = [HeaderUtils.header_head(self.protocol.library.library),
+        text = [HeaderUtils.header_head(self.protocol.image.image),
                 "",
                 str(self.interface),
                 "",
