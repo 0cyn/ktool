@@ -41,6 +41,11 @@ type_encodings = {
     "?": "unk",
 }
 
+# https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
+RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG = 0x40000000
+RELATIVE_METHOD_FLAG = 0x80000000
+METHOD_LIST_FLAGS_MASK = 0xFFFF0000
+
 
 class ObjCImage:
 
@@ -362,6 +367,10 @@ class Ivar:
         return str(type)
 
 
+class MethodList:
+    def __init__(self):
+        pass
+
 class Method:
     def __init__(self, image, meta, method: objc2_meth, vmaddr: int, uses_rel_meth=False, rms_are_direct=False):
         self.meta = meta
@@ -529,34 +538,33 @@ class Class:
         if self.objc2_class_ro.base_meths == 0:
             return methods  # Useless Subclass
 
-        vm_ea = self.objc2_class_ro.base_meths
         methlist_head = self.image.load_struct(self.objc2_class_ro.base_meths, objc2_meth_list)
-        ea = methlist_head.off
 
-        # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
-        RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG = 0x40000000
-        RELATIVE_METHOD_FLAG = 0x80000000
-        METHOD_LIST_FLAGS_MASK = 0xFFFF0000
+        ea = methlist_head.off
+        vm_ea = self.objc2_class_ro.base_meths
 
         uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
         rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
 
-        ea += 8
-        vm_ea += 8
+        ea += objc2_meth_list.SIZE
+        vm_ea += objc2_meth_list.SIZE
+
         for i in range(1, methlist_head.count + 1):
             if uses_relative_methods:
                 meth = self.image.load_struct(ea, objc2_meth_list_entry, vm=False)
             else:
                 meth = self.image.load_struct(ea, objc2_meth, vm=False)
+
             try:
                 method = Method(self.image, self.meta, meth, vm_ea, uses_relative_methods, rms_are_direct)
                 methods.append(method)
-                for type in method.types:
-                    if type.type == EncodedType.STRUCT:
-                        self.struct_list.append(type.value)
+                for method_type in method.types:
+                    if method_type.type == EncodedType.STRUCT:
+                        self.struct_list.append(method_type.value)
 
             except Exception as ex:
                 log.warning(f'Failed to load methods with {str(ex)}')
+
             if uses_relative_methods:
                 ea += objc2_meth_list_entry.SIZE
                 vm_ea += objc2_meth_list_entry.SIZE
@@ -572,21 +580,24 @@ class Class:
         if self.objc2_class_ro.base_props == 0:
             return properties
 
-        vm_ea = self.objc2_class_ro.base_props
         proplist_head = self.image.load_struct(self.objc2_class_ro.base_props, objc2_prop_list)
 
         ea = proplist_head.off
-        ea += 8
-        vm_ea += 8
+        vm_ea = self.objc2_class_ro.base_props
+
+        ea += objc2_prop_list.SIZE
+        vm_ea += objc2_prop_list.SIZE
 
         for i in range(1, proplist_head.count + 1):
             prop = self.image.load_struct(ea, objc2_prop, vm=False)
+
             try:
                 property = Property(self.image, prop, vm_ea)
                 properties.append(property)
                 if hasattr(property, 'attr'):
                     if property.attr.type.type == EncodedType.STRUCT:
                         self.struct_list.append(property.attr.type.value)
+
             except Exception as ex:
                 log.warning(f'Failed to load property with {str(ex)}')
             ea += objc2_prop.SIZE
@@ -740,20 +751,16 @@ class Category:
         if loc == 0:
             return methods  # Useless Subclass
 
-        vm_ea = loc
         methlist_head = self.image.load_struct(loc, objc2_meth_list)
         ea = methlist_head.off
-
-        # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
-        RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG = 0x40000000
-        RELATIVE_METHOD_FLAG = 0x80000000
-        METHOD_LIST_FLAGS_MASK = 0xFFFF0000
+        vm_ea = loc
 
         uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
         rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
 
-        ea += 8
-        vm_ea += 8
+        ea += objc2_meth_list.SIZE
+        vm_ea += objc2_meth_list.SIZE
+
         for i in range(1, methlist_head.count + 1):
             if uses_relative_methods:
                 meth = self.image.load_struct(ea, objc2_meth_list_entry, vm=False)
@@ -823,11 +830,6 @@ class Protocol:
         vm_ea = loc
         methlist_head = self.image.load_struct(loc, objc2_meth_list)
         ea = methlist_head.off
-
-        # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
-        RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG = 0x40000000
-        RELATIVE_METHOD_FLAG = 0x80000000
-        METHOD_LIST_FLAGS_MASK = 0xFFFF0000
 
         uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
         rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
