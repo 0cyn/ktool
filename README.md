@@ -47,7 +47,7 @@ MachO Editing ---
 MachO Analysis ---
     dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
     list - Print various lists (Classlist, etc.)
-    symbols - Print various tables (Symbols, binding info)
+    symbols - Print various tables (Symbols, imports, exports)
     info - Print misc info about the target mach-o
 
 Misc Utilities ---
