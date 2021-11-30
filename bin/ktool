@@ -114,61 +114,87 @@ def require_args(args, always=None, one_of=None):
 
 def main():
     parser = ArgumentParser(description="ktool")
+
     parser.add_argument('--bench', dest='bench', action='store_true')
     parser.add_argument('-v', dest='logging_level', type=int)
     parser.add_argument('-f', dest='force_load', action='store_true')
     parser.set_defaults(func=help_prompt, bench=False, force_load=False, logging_level=1)
+
     subparsers = parser.add_subparsers(help='sub-command help')
 
+    # open command: opens the main GUI
     parser_open = subparsers.add_parser('open', help='open ktool GUI and browse file')
+
     parser_open.add_argument('filename', nargs='?', default='')
+
     parser_open.set_defaults(func=_open)
 
+    # insert command: optool replacement
     parser_insert = subparsers.add_parser('insert', help='Insert data into MachO Binary')
+
     parser_insert.add_argument('filename', nargs='?', default='')
     parser_insert.add_argument('--lc', dest='lc', help="Type of Load Command to insert")
     parser_insert.add_argument('--payload', dest='payload', help="Payload (if required) for insertion")
     parser_insert.add_argument('--out', dest='out', help="Output file destination for patches")
+
     parser_insert.set_defaults(func=insert, out=None, lc=None, payload=None)
 
+    # edit command: install-name-tool replacement
     parser_edit = subparsers.add_parser('edit', help='Edit attributes of the MachO')
+
     parser_edit.add_argument('filename', nargs='?', default='')
     parser_edit.add_argument('--iname', dest='iname', help='Modify the Install Name of a image')
     parser_edit.add_argument('--apad', dest='apad',
-                             help='Add MachO Header Padding (You probably dont want to do this manually)')
+                             help='Add MachO Header Padding (not yet implemented, ignore this flag please)')
     parser_edit.add_argument('--out', dest='out', help="Output file destination for patches")
+
     parser_edit.set_defaults(func=edit, out=None, iname=None, apad=None)
 
+    # lipo command: you will never guess which macos cli tool the lipo command replaces
     parser_lipo = subparsers.add_parser('lipo', help='Extract/Combine slices')
+
     parser_lipo.add_argument('--extract', dest='extract', type=str, help='Extract a slice (--extract arm64)')
     parser_lipo.add_argument('--out', dest='out', help="Output File")
     parser_lipo.add_argument('--create', dest='combine', action='store_true',
                              help="Combine files to create a fat mach-o image")
     parser_lipo.add_argument('filename', nargs='*', default='')
+
     parser_lipo.set_defaults(func=lipo, out="", combine=False)
 
+    # img4 command: because why not
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
 
     parser_img4.add_argument('filename', nargs='?', default='')
+
     parser_img4.add_argument('--kbag', dest='get_kbag', action='store_true', help="Decode keybags in an im4p file")
     parser_img4.add_argument('--dec', dest='do_decrypt', action='store_true', help="Decrypt an im4p file with iv/key")
     parser_img4.add_argument('--iv', dest='aes_iv', type=str, help='IV for decryption')
     parser_img4.add_argument('--key', dest='aes_key', type=str, help='Key for decryption')
     parser_img4.add_argument('--out', dest='out', help="Output file destination for decryption")
+
     parser_img4.set_defaults(func=img4, get_kbag=False, do_decrypt=False, aes_iv=None, aes_key=None, out=None)
 
+    # file command: super basic info about a file (thin/fat, and if fat, what slices are contained)
+    #               replaces the relevant usage of the `file` command on macos
     parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
+
     parser_file.add_argument('filename', nargs='?', default='')
+
     parser_file.set_defaults(func=_file)
 
+    # info command: prints the VM map (this is honestly just for me when debugging shit)
     parser_info = subparsers.add_parser('info', help='Print Info about a MachO image')
+
     parser_info.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO image")
     parser_info.add_argument('filename', nargs='?', default='')
+
     parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, slice_index=0)
 
+    # dump command: for dumping headers/tbds from an image
     parser_dump = subparsers.add_parser('dump', help='Dump items (headers) from binary')
+
     parser_dump.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
@@ -176,9 +202,12 @@ def main():
     parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
     parser_dump.add_argument('filename', nargs='?', default='')
+
     parser_dump.set_defaults(func=dump, do_headers=False, sort_headers=False, do_tbd=False, slice_index=0)
 
+    # list command: Lists lists of things contained in lists in the image.
     parser_list = subparsers.add_parser('list', help='Print various lists')
+
     parser_list.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_list.add_argument('--classes', dest='get_classes', action='store_true', help='Print class list')
@@ -186,10 +215,13 @@ def main():
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
     parser_list.add_argument('filename', nargs='?', default='')
+
     parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False,
                              slice_index=0)
 
+    # symbol command: prints various symbol tables
     parser_symbols = subparsers.add_parser('symbols', help='Print various symbols')
+
     parser_symbols.add_argument('--imports', dest='get_imports', action='store_true', help='Print Imports')
     parser_symbols.add_argument('--imp-acts', dest='get_actions', action='store_true', help='Print Raw Binding Imports')
     parser_symbols.add_argument('--symtab', dest='get_symtab', action='store_true', help='Print out the symtab')
@@ -197,20 +229,30 @@ def main():
     parser_symbols.add_argument('--slice', dest='slice_index', type=int,
                                 help="Specify Index of Slice (in FAT MachO) to examine")
     parser_symbols.add_argument('filename', nargs='?', default='')
+
     parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False,
                                 slice_index=0)
 
+    # process the arguments the user passed us.
+    # it is worth noting i set the default for `func` on each command parser to a function named without ();
+    # this means when that command is used, calling args.func() will branch off to that function.
     args = parser.parse_args()
 
-    download_thread = threading.Thread(target=check_for_update, name="UpdateChecker")
-    download_thread.start()
+    if 'KTOOL_NO_UPDATE_CHECK' not in os.environ:
+        # set this off on a separate thread before we do anything else
+        # it should have time to complete by the time the rest of our code is finished
+        download_thread = threading.Thread(target=check_for_update, name="UpdateChecker")
+        download_thread.start()
 
     if not hasattr(args, 'filename'):
-        # this is our default function
+        # this is our default function, bc it has no .filename attribute default set
+        # They typed no command or anything, so print the program usage.
         args.func(args)
         exit()
 
     if not args.filename or args.filename == '':
+        # if it has the .filename attribute, but its not set, then they've passed a command but with no filename
+        #   so, print the usage for that command.
         print(args.func.__doc__)
         exit()
 
@@ -218,6 +260,7 @@ def main():
     log.LOG_LEVEL = LogLevel(max(min(args.logging_level, 5), -1))
 
     if args.force_load:
+        # kind of a hack using a class attribute in ktool.util but it works.
         ignore.MALFORMED = True
 
     if args.bench:
@@ -227,7 +270,7 @@ def main():
         profile = cProfile.Profile()
         profile.runcall(args.func, args)
         ps = pstats.Stats(profile)
-        ps.sort_stats('time', 'cumtime')
+        ps.sort_stats('time', 'cumtime')  # who named this
         ps.print_stats(10)
     else:
         try:
@@ -243,6 +286,7 @@ def main():
     if UPDATE_AVAILABLE:
         print(f'\n\nUpdate Available ---')
         print(f'run `pip3 install --upgrade k2l` to fetch the latest update')
+        print(f'set the envar KTOOL_NO_UPDATE_CHECK to disable update checks')
 
     exit(0)
 
