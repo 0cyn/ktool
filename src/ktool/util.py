@@ -89,6 +89,7 @@ class LogLevel(Enum):
     DEBUG = 3
     DEBUG_MORE = 4
     # if this isn't being piped to a file it will be ridiculous
+    # it will also likely slow down the processor a shit-ton if it's being output to term.
     DEBUG_TOO_MUCH = 5
 
 
@@ -98,7 +99,10 @@ class log:
 
     so we use this.
     """
+
     LOG_LEVEL = LogLevel.ERROR
+    # Should be a function name, without ()
+    # We make this dynamically changeable for the sake of being able to redirect output in GUI tools.
     LOG_FUNC = print
 
     @staticmethod

@@ -14,16 +14,17 @@
 
 import os
 from collections import namedtuple
+from typing import Dict
 
 from kmacho.structs import *
 from . import log
-from .dyld import Dyld, SymbolType
+from .dyld import Dyld, SymbolType, Image
 from .macho import Slice
 from .objc import ObjCImage
 
 
 class TBDGenerator:
-    def __init__(self, image, general=True, objc_lib=None):
+    def __init__(self, image: Image, general=True, objc_lib: ObjCImage = None):
         """
         The TBD Generator is a generator that creates TAPI formatted text based stubs for libraries.
 
@@ -121,7 +122,7 @@ class FatMachOGenerator:
         self.fat_head = fat_head
 
     @staticmethod
-    def _fat_arch_for_slice(fat_slice: Slice, previous_fat_arch):
+    def _fat_arch_for_slice(fat_slice: Slice, previous_fat_arch: fat_arch_for_slice) -> fat_arch_for_slice:
         """
         :param fat_slice: Fat slice
         :type fat_slice: Slice

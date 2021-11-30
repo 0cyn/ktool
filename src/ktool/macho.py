@@ -16,7 +16,7 @@ import mmap
 import os
 from collections import namedtuple
 from enum import Enum
-from typing import Tuple
+from typing import Tuple, List, Dict
 
 from kmacho import *
 from kmacho.structs import *
@@ -46,7 +46,7 @@ class MachOFile:
         else:
             self.slices.append(Slice(self, None))
 
-    def _load_filetype(self):
+    def _load_filetype(self) -> MachOFileType:
         if self.magic == FAT_MAGIC or self.magic == FAT_CIGAM:
             return MachOFileType.FAT
         elif self.magic == MH_MAGIC or self.magic == MH_FILETYPE or self.magic == MH_MAGIC_64 or self.magic == MH_CIGAM_64:
@@ -67,11 +67,25 @@ class MachOFile:
         return self.file[addr: addr + count]
 
     # noinspection PyTypeChecker
-    def _get_at(self, addr, count, endian="big"):
+    def _get_at(self, addr, count, endian="big") -> int:
         return int.from_bytes(self.file[addr:addr + count], endian)
 
     def __del__(self):
         self.file.close()
+
+
+class Section:
+    """
+
+    """
+
+    def __init__(self, segment, cmd):
+        self.cmd = cmd
+        self.segment = segment
+        self.name = segment.image.get_str_at(cmd.off, 16)
+        self.vm_address = cmd.addr
+        self.file_address = cmd.offset
+        self.size = cmd.size
 
 
 class Segment:
@@ -94,7 +108,7 @@ class Segment:
 
         self.type = SectionType(S_FLAGS_MASKS.SECTION_TYPE & self.cmd.flags)
 
-    def _process_sections(self):
+    def _process_sections(self) -> Dict[str, Section]:
         sections = {}
         ea = self.cmd.off + segment_command_64.SIZE
 
@@ -106,20 +120,6 @@ class Segment:
 
         ea += segment_command_64.SIZE
         return sections
-
-
-class Section:
-    """
-
-    """
-
-    def __init__(self, segment, cmd):
-        self.cmd = cmd
-        self.segment = segment
-        self.name = segment.image.get_str_at(cmd.off, 16)
-        self.vm_address = cmd.addr
-        self.file_address = cmd.offset
-        self.size = cmd.size
 
 
 vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr", "name"])
@@ -185,12 +185,13 @@ class _VirtualMemoryMap:
         else:
             return list(sortedmap.values())[0].vm_address
 
-    def get_file_address(self, vm_address: int, segment_name=None):
+    def get_file_address(self, vm_address: int, segment_name=None) -> int:
         # This function gets called *a lot*
         # It needs to be fast as shit.
         vm_address = 0x0000FFFFFFFFF & vm_address
         if vm_address in self.cache:
             return self.cache[vm_address]
+
         if segment_name is not None:
             o = self.map[segment_name]
 
@@ -199,6 +200,7 @@ class _VirtualMemoryMap:
                 file_addr = o.fileaddr + vm_address - o.vmaddr
                 self.cache[vm_address] = file_addr
                 return file_addr
+
             else:
                 # noinspection PyBroadException
                 try:
@@ -208,6 +210,7 @@ class _VirtualMemoryMap:
                         file_addr = o.fileaddr + vm_address - o.vmaddr
                         self.cache[vm_address] = file_addr
                         return file_addr
+
                 except Exception:
                     for o in self.map.values():
                         # noinspection PyChainedComparisons
@@ -250,15 +253,15 @@ class Slice:
 
     """
 
-    def __init__(self, macho_file, arch_struct, offset=0):
+    def __init__(self, macho_file: MachOFile, arch_struct: fat_arch, offset=0):
         """
 
         :param macho_file:
         :param arch_struct:
         :param offset:
         """
-        self.macho_file = macho_file
-        self.arch_struct = arch_struct
+        self.macho_file: MachOFile = macho_file
+        self.arch_struct: fat_arch = arch_struct
 
         self.patches = {}
 
@@ -284,7 +287,7 @@ class Slice:
 
         self.byte_order = "little" if self.get_int_at(0, 4, "little") == MH_MAGIC_64 else "big"
 
-    def patch(self, address, raw):
+    def patch(self, address: int, raw: bytes):
         self.macho_file.file.seek(self.offset + address)
         log.debug(f'Patched At: {hex(address)} ')
         log.debug(f'New Bytes: {str(raw)}')
@@ -316,27 +319,44 @@ class Slice:
 
         return struct
 
-    def get_int_at(self, addr, count, endian="little"):
+    def get_int_at(self, addr: int, count: int, endian="little"):
         addr = addr + self.offset
         return int.from_bytes(self.macho_file.file[addr:addr + count], endian)
 
-    def get_bytes_at(self, addr, count):
+    def get_bytes_at(self, addr: int, count: int):
         addr = addr + self.offset
         return self.macho_file.file[addr:addr + count]
 
-    def get_str_at(self, addr: int, count: int):
+    def get_str_at(self, addr: int, count: int) -> str:
+        """
+        Decode String with known length
+
+        :param addr:
+        :param count:
+        :return:
+        """
         addr = addr + self.offset
         return self.macho_file.file[addr:addr + count].decode().rstrip('\x00')
 
-    def get_cstr_at(self, addr: int, limit: int = 0):
+    def get_cstr_at(self, addr: int, limit: int = 0) -> str:
+        """
+        Get C-style null-terminated string at set address.
+
+        :param addr:
+        :param limit:
+        :return:
+        """
         addr = addr + self.offset
         self.macho_file.file.seek(addr)
+
         try:
             text = self.macho_file.file[addr:self.macho_file.file.find(b"\x00")].decode()
         except Exception as ex:
             log.debug(f'Failed to decode CString at raw {hex(addr)} off {hex(addr - self.offset)}')
             raise ex
+
         self.macho_file.file.seek(0)
+
         return text
 
     def decode_uleb128(self, readHead: int) -> Tuple[int, int]:
@@ -358,7 +378,7 @@ class Slice:
 
         return value, readHead
 
-    def _load_type(self):
+    def _load_type(self) -> CPUType:
         cpu_type = self.arch_struct.cpu_type
 
         try:
@@ -368,7 +388,7 @@ class Slice:
                       f'https://github.com/kritantadev/ktool')
             return CPUType.ARM
 
-    def _load_subtype(self, cputype):
+    def _load_subtype(self, cputype: CPUType):
         cpu_subtype = self.arch_struct.cpu_subtype
 
         subtype_ret = None

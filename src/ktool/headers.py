@@ -12,8 +12,10 @@
 #  Copyright (c) kat 2021.
 #
 
-from .dyld import SymbolType
-from .objc import ObjCImage
+from typing import List, Dict
+
+from .dyld import SymbolType, Image
+from .objc import ObjCImage, Class, Category, Protocol, Property, Method, Ivar
 
 from .util import KTOOL_VERSION
 
@@ -21,7 +23,13 @@ from .util import KTOOL_VERSION
 class HeaderUtils:
 
     @staticmethod
-    def header_head(image):
+    def header_head(image: Image) -> str:
+        """
+        This is the prefix comments at the very top of the headers generated
+
+        :param image: MachO Image
+        :return: Newline delimited string to be placed at the top of the header.
+        """
         try:
             prefix = "// Headers generated with ktool v" + KTOOL_VERSION + "\n"
             prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
@@ -37,8 +45,15 @@ class HeaderUtils:
 
 
 class TypeResolver:
+    """
+    the Type Resolver is just in charge of figuring out where imports came from.
+
+    Initialize it with an objc image, then pass it a type name, and it'll try to figure out which
+        framework that class should be imported from (utilizing the image's imports)
+    """
     def __init__(self, objc_image: ObjCImage):
-        self.image = objc_image
+
+        self.objc_image = objc_image
         classes = []
         self.classmap = {}
         try:
@@ -52,7 +67,13 @@ class TypeResolver:
         self.local_classes = objc_image.classlist
         self.local_protos = objc_image.protolist
 
-    def find_linked(self, classname):
+    def find_linked(self, classname: str):
+        """
+        given a classname, return install name of a framework if that class was imported from it.
+
+        :param classname:
+        :return:
+        """
         for local in self.local_classes:
             if local.name == classname:
                 return ""
@@ -61,20 +82,20 @@ class TypeResolver:
                 return "-Protocol"
         if classname in self.classmap:
             try:
-                nam = self.image.image.linked[int(self.classmap[classname].ordinal) - 1].install_name
-                if '.dylib' in nam:
+                name = self.objc_image.image.linked[int(self.classmap[classname].ordinal) - 1].install_name
+                if '.dylib' in name:
                     return None
-                return nam
+                return name
             except Exception as ex:
                 pass
         return None
 
 
 class HeaderGenerator:
-    def __init__(self, objc_image):
-        self.type_resolver = TypeResolver(objc_image)
+    def __init__(self, objc_image: ObjCImage):
+        self.type_resolver: TypeResolver = TypeResolver(objc_image)
 
-        self.image = objc_image
+        self.objc_image: ObjCImage = objc_image
         self.headers = {}
 
         for objc_class in objc_image.classlist:
@@ -85,20 +106,20 @@ class HeaderGenerator:
         for objc_proto in objc_image.protolist:
             self.headers[objc_proto.name + '-Protocol.h'] = ProtocolHeader(objc_proto)
 
-        self.headers[self.image.name + '.h'] = UmbrellaHeader(self.headers)
-        self.headers[self.image.name + '-Structs.h'] = StructHeader(objc_image)
+        self.headers[self.objc_image.name + '.h'] = UmbrellaHeader(self.headers)
+        self.headers[self.objc_image.name + '-Structs.h'] = StructHeader(objc_image)
 
 
 class StructHeader:
-    def __init__(self, image):
+    def __init__(self, objc_image: ObjCImage):
         """
         Scans through structs cached in the ObjCLib's type processor and writes them to a header
 
-        :param image: image containing structs
+        :param objc_image: image containing structs
         """
         text = ""
 
-        for struct in image.tp.structs.values():
+        for struct in objc_image.tp.structs.values():
             text += str(struct) + '\n\n'
 
         self.text = text
@@ -108,29 +129,36 @@ class StructHeader:
 
 
 class Header:
-    def __init__(self, type_resolver, objc_class):
-        self.interface = Interface(objc_class)
-        self.objc_class = objc_class
+    def __init__(self, type_resolver: TypeResolver, objc_class: Class):
+        self.interface: Interface = Interface(objc_class)
+        self.objc_class: Class = objc_class
 
-        self.type_resolver = type_resolver
+        self.type_resolver: TypeResolver = type_resolver
 
-        self.forward_declaration_classes = []
-        self.forward_declaration_protocols = []
+        self.forward_declaration_classes: List[str] = []
+        self.forward_declaration_protocols: List[str] = []
 
-        self.imported_classes = {}
-        self.locally_imported_classes = []
-        self.locally_imported_protocols = []
+        self.imported_classes: Dict[str, str] = {}
+        self.locally_imported_classes: List[str] = []
+        self.locally_imported_protocols: List[str] = []
 
-        self._get_import_section()
+        self._process_import_section()
 
         self.text = self._generate_text()
 
     def __str__(self):
         return self.text
 
-    def _generate_text(self):
-        text = [HeaderUtils.header_head(self.type_resolver.image.image),
-                "#ifndef " + self.objc_class.name.upper() + "_H", "#define " + self.objc_class.name.upper() + "_H", ""]
+    def _generate_text(self) -> str:
+        """
+        Generates the header text based on the processed and configured properties
+
+        :return: the header text
+        """
+        text = [HeaderUtils.header_head(self.type_resolver.objc_image.image),
+                "#ifndef " + self.objc_class.name.upper() + "_H",
+                "#define " + self.objc_class.name.upper() + "_H",
+                ""]
 
         if len(self.forward_declaration_classes) > 0:
             text.append("@class " + ", ".join(self.forward_declaration_classes) + ";")
@@ -141,24 +169,24 @@ class Header:
 
         imported_classes = {}
 
-        for oclass, installname in self.imported_classes.items():
-            if '/Frameworks/' in installname:
-                nam = installname.split("/")[-1]
+        for objc_class, install_name in self.imported_classes.items():
+            if '/Frameworks/' in install_name:
+                nam = install_name.split("/")[-1]
                 if nam not in imported_classes:
                     imported_classes[nam] = nam
             else:
-                imported_classes[oclass] = installname
+                imported_classes[objc_class] = install_name
 
-        for oclass, installname in imported_classes.items():
-            text.append(f'#import <{installname.split("/")[-1]}/{oclass}.h>')
+        for objc_class, install_name in imported_classes.items():
+            text.append(f'#import <{install_name.split("/")[-1]}/{objc_class}.h>')
 
         text.append("")
 
-        for oclass in self.locally_imported_classes:
-            text.append(f'#import "{oclass}.h"')
+        for objc_class in self.locally_imported_classes:
+            text.append(f'#import "{objc_class}.h"')
 
-        for oprot in self.locally_imported_protocols:
-            text.append(f'#import "{oprot}-Protocol.h"')
+        for objc_protocol in self.locally_imported_protocols:
+            text.append(f'#import "{objc_protocol}-Protocol.h"')
 
         text.append("")
 
@@ -170,88 +198,88 @@ class Header:
 
         return "\n".join(text)
 
-    def _get_import_section(self):
+    def _process_import_section(self):
         if self.interface.objc_class.superclass != "":
-            tp = self.interface.objc_class.superclass.split('_')[-1]
-            rt = self.type_resolver.find_linked(tp)
-            if rt is None:
-                if tp != "id":
-                    if tp.startswith('<'):
-                        if tp[1:-1] not in self.forward_declaration_protocols:
-                            self.forward_declaration_protocols.append(tp[1:-1])
-                    elif tp.startswith('NSObject<'):
-                        if tp[9:-1] not in self.forward_declaration_protocols:
-                            self.forward_declaration_protocols.append(tp[9:-1])
+            type_name = self.interface.objc_class.superclass.split('_')[-1]
+            resolved_type = self.type_resolver.find_linked(type_name)
+            if resolved_type is None:
+                if type_name != "id":
+                    if type_name.startswith('<'):
+                        if type_name[1:-1] not in self.forward_declaration_protocols:
+                            self.forward_declaration_protocols.append(type_name[1:-1])
+                    elif type_name.startswith('NSObject<'):
+                        if type_name[9:-1] not in self.forward_declaration_protocols:
+                            self.forward_declaration_protocols.append(type_name[9:-1])
                     else:
-                        if tp not in self.forward_declaration_classes:
-                            self.forward_declaration_classes.append(tp)
-            elif rt == "":
-                if tp not in self.locally_imported_classes:
-                    self.locally_imported_classes.append(tp)
+                        if type_name not in self.forward_declaration_classes:
+                            self.forward_declaration_classes.append(type_name)
+            elif resolved_type == "":
+                if type_name not in self.locally_imported_classes:
+                    self.locally_imported_classes.append(type_name)
             else:
-                if tp not in self.imported_classes:
-                    self.imported_classes[tp] = rt
-        for proto in self.interface.objc_class.protocols:
-            tname = f'<{proto.name}>'
-            rt = self.type_resolver.find_linked(tname)
-            if rt == "-Protocol":
-                self.locally_imported_protocols.append(proto.name)
+                if type_name not in self.imported_classes:
+                    self.imported_classes[type_name] = resolved_type
+        for protocol in self.interface.objc_class.protocols:
+            type_name = f'<{protocol.name}>'
+            resolved_type = self.type_resolver.find_linked(type_name)
+            if resolved_type == "-Protocol":
+                self.locally_imported_protocols.append(protocol.name)
             else:
-                self.forward_declaration_protocols.append(proto.name)
+                self.forward_declaration_protocols.append(protocol.name)
         for ivar in self.interface.ivars:
             if ivar.is_id:
-                tp = ivar.type
-                rt = self.type_resolver.find_linked(tp)
-                if rt is None:
-                    if tp != "id":
-                        if tp.startswith('<'):
-                            if tp[1:-1] not in self.forward_declaration_protocols:
-                                self.forward_declaration_protocols.append(tp[1:-1])
-                        elif tp.startswith('NSObject<'):
+                type_name = ivar.type
+                resolved_type = self.type_resolver.find_linked(type_name)
+                if resolved_type is None:
+                    if type_name != "id":
+                        if type_name.startswith('<'):
+                            if type_name[1:-1] not in self.forward_declaration_protocols:
+                                self.forward_declaration_protocols.append(type_name[1:-1])
+                        elif type_name.startswith('NSObject<'):
 
-                            if tp[9:-1] not in self.forward_declaration_protocols:
-                                self.forward_declaration_protocols.append(tp[9:-1])
+                            if type_name[9:-1] not in self.forward_declaration_protocols:
+                                self.forward_declaration_protocols.append(type_name[9:-1])
                         else:
-                            if tp not in self.forward_declaration_classes:
-                                self.forward_declaration_classes.append(tp)
-                elif rt == "":
-                    if tp not in self.locally_imported_classes:
-                        self.locally_imported_classes.append(tp)
-                elif rt == "-Protocol":
-                    if tp not in self.locally_imported_protocols:
-                        self.locally_imported_protocols.append(tp[1:-1])
+                            if type_name not in self.forward_declaration_classes:
+                                self.forward_declaration_classes.append(type_name)
+                elif resolved_type == "":
+                    if type_name not in self.locally_imported_classes:
+                        self.locally_imported_classes.append(type_name)
+                elif resolved_type == "-Protocol":
+                    if type_name not in self.locally_imported_protocols:
+                        self.locally_imported_protocols.append(type_name[1:-1])
                 else:
-                    if tp not in self.imported_classes:
-                        self.imported_classes[tp] = rt
+                    if type_name not in self.imported_classes:
+                        self.imported_classes[type_name] = resolved_type
         for property in self.interface.properties:
             if property.is_id:
-                tp = property.type
-                rt = self.type_resolver.find_linked(tp)
-                if rt is None:
-                    if tp != "id":
-                        if tp.startswith('<'):
-                            if tp[1:-1] not in self.forward_declaration_protocols:
-                                self.forward_declaration_protocols.append(tp[1:-1])
-                        elif tp.startswith('NSObject<'):
+                type_name = property.type
+                resolved_type = self.type_resolver.find_linked(type_name)
+                if resolved_type is None:
+                    if type_name != "id":
+                        if type_name.startswith('<'):
+                            if type_name[1:-1] not in self.forward_declaration_protocols:
+                                self.forward_declaration_protocols.append(type_name[1:-1])
+                        elif type_name.startswith('NSObject<'):
 
-                            if tp[9:-1] not in self.forward_declaration_protocols:
-                                self.forward_declaration_protocols.append(tp[9:-1])
+                            if type_name[9:-1] not in self.forward_declaration_protocols:
+                                self.forward_declaration_protocols.append(type_name[9:-1])
                         else:
-                            if tp not in self.forward_declaration_classes:
-                                self.forward_declaration_classes.append(tp)
-                elif rt == "":
-                    if tp not in self.locally_imported_classes:
-                        self.locally_imported_classes.append(tp)
-                elif rt == "-Protocol":
-                    if tp not in self.locally_imported_protocols:
-                        self.locally_imported_protocols.append(tp[1:-1])
+                            if type_name not in self.forward_declaration_classes:
+                                self.forward_declaration_classes.append(type_name)
+                elif resolved_type == "":
+                    if type_name not in self.locally_imported_classes:
+                        self.locally_imported_classes.append(type_name)
+                elif resolved_type == "-Protocol":
+                    if type_name not in self.locally_imported_protocols:
+                        self.locally_imported_protocols.append(type_name[1:-1])
                 else:
-                    if tp not in self.imported_classes:
-                        self.imported_classes[tp] = rt
+                    if type_name not in self.imported_classes:
+                        self.imported_classes[type_name] = resolved_type
 
 
 class CategoryHeader:
-    def __init__(self, objc_category):
+    def __init__(self, objc_category: Category):
         self.category = objc_category
 
         self.properties = objc_category.properties
@@ -266,7 +294,12 @@ class CategoryHeader:
         return self.text
 
     def _generate_text(self):
-        text = [HeaderUtils.header_head(self.category.image.image),
+        """
+        Generate Category text
+
+        :return: category text
+        """
+        text = [HeaderUtils.header_head(self.category.objc_image.image),
                 "",
                 str(self.interface),
                 "",
@@ -276,8 +309,8 @@ class CategoryHeader:
 
 
 class ProtocolHeader:
-    def __init__(self, objc_protocol):
-        self.protocol = objc_protocol
+    def __init__(self, objc_protocol: Protocol):
+        self.protocol: Protocol = objc_protocol
 
         self.interface = ProtocolInterface(objc_protocol)
 
@@ -287,7 +320,12 @@ class ProtocolHeader:
         return self.text
 
     def _generate_text(self):
-        text = [HeaderUtils.header_head(self.protocol.image.image),
+        """
+        Generate Protocol Header text
+
+        :return:
+        """
+        text = [HeaderUtils.header_head(self.protocol.objc_image.image),
                 "",
                 str(self.interface),
                 "",
@@ -297,17 +335,21 @@ class ProtocolHeader:
 
 
 class Interface:
-    def __init__(self, objc_class):
+    """
+    The Interface class represents the "main body" of the header (not including the import section)
+
+    """
+    def __init__(self, objc_class: Class):
         self.objc_class = objc_class
 
-        self.properties = []
-        self.methods = []
-        self.ivars = []
+        self.properties: List[Property] = []
+        self.methods: List[Method] = []
+        self.ivars: List[Ivar] = []
         self.structs = []
 
         # just store these so we know not to display them
-        self.getters = []
-        self.setters = []
+        self.getters: List[str] = []
+        self.setters: List[str] = []
         self._process_properties()
         self._process_methods()
         self._process_ivars()
@@ -404,7 +446,7 @@ class StructDef:
 
 
 class CategoryInterface:
-    def __init__(self, objc_category):
+    def __init__(self, objc_category: Category):
         self.category = objc_category
 
         self.properties = self.category.properties
@@ -450,8 +492,8 @@ class CategoryInterface:
 
 
 class ProtocolInterface:
-    def __init__(self, protocol):
-        self.protocol = protocol
+    def __init__(self, protocol: Protocol):
+        self.protocol: Protocol = protocol
 
         self.text = self._generate_text()
 

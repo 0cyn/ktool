@@ -3,6 +3,8 @@
 #  window.py
 #
 #  This file houses Command Line GUI rendering code. A lot of it.
+#  If you're looking to contribute to this right now, and are lost, please hit me up;
+#       this file is a slight mess, and the entire UI framework is custom.
 #
 #  This file is part of ktool. ktool is free software that
 #  is made available under the MIT license. Consult the
@@ -80,6 +82,7 @@ class ColorRep:
         return curses.color_pair(self.n)
 
 
+# somewhat unused
 class Attribute:
     HIGHLIGHTED = curses.A_STANDOUT
     UNDERLINED = curses.A_UNDERLINE

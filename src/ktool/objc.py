@@ -13,6 +13,7 @@
 #
 from collections import namedtuple
 from enum import Enum
+from typing import List
 
 from .structs import *
 from .util import log
@@ -79,26 +80,34 @@ class ObjCImage:
 
         return cats
 
-    def _generate_class_list(self, classlimit):
+    def _generate_class_list(self, only_retrieve_class: str = None):
+        """
+
+
+        :param only_retrieve_class: Only grab a specific class
+        :return:
+        """
         sect = None
         for seg in self.image.segments:
             for sec in self.image.segments[seg].sections:
                 if sec == "__objc_classlist":
                     sect = self.image.segments[seg].sections[sec]
         # sect: Section = self.image.segments['__DATA_CONST'].sections['__objc_classlist']
+
         if not sect:
             return []
+
         classes = []
         cnt = sect.size // 0x8
         for i in range(0, cnt):
-            if classlimit is None:
+            if only_retrieve_class is None:
                 try:
                     classes.append(Class(self, sect.vm_address + i * 0x8))
                 except Exception as ex:
                     log.error(f'Failed to load a class! Ex: {str(ex)}')
             else:
                 oc = Class(self, sect.vm_address + i * 0x8)
-                if classlimit == oc.name:
+                if only_retrieve_class == oc.name:
                     classes.append(oc)
         return classes
 
@@ -141,11 +150,11 @@ class ObjCImage:
 
 
 class Struct_Representation:
-    def __init__(self, processor, type_str: str):
+    def __init__(self, processor: 'TypeProcessor', type_str: str):
         # {name=dd}
 
         # Remove the outer {}, then get everything to the left of the equal sign
-        self.name = type_str[1:-1].split('=')[0]
+        self.name: str = type_str[1:-1].split('=')[0]
 
         if '=' not in type_str:
             self.fields = []
@@ -240,8 +249,8 @@ class EncodedType(Enum):
 
 
 class Type:
-    def __init__(self, processor, typestr, pc=0):
-        start = typestr[0]
+    def __init__(self, processor, type_string, pc=0):
+        start = type_string[0]
         self.child = None
         self.pointer_count = pc
 
@@ -252,12 +261,12 @@ class Type:
 
         elif start == '"':
             self.type = EncodedType.NAMED
-            self.value = typestr[1:-1]
+            self.value = type_string[1:-1]
             return
 
         elif start == '{':
             self.type = EncodedType.STRUCT
-            self.value = Struct_Representation(processor, typestr)
+            self.value = Struct_Representation(processor, type_string)
             return
         raise ValueError(f'Struct with type {start} not found')
 
@@ -278,6 +287,8 @@ class TypeProcessor:
         else:
             if len(self.structs[struct_to_save.name].fields) == 0:
                 self.structs[struct_to_save.name] = struct_to_save
+            # If the struct being saved has more field names than the one we already have saved,
+            #   save this one instead.
             if len(struct_to_save.field_names) > 0 and len(self.structs[struct_to_save.name].field_names) == 0:
                 self.structs[struct_to_save.name] = struct_to_save
 
@@ -339,11 +350,11 @@ class TypeProcessor:
 
 
 class Ivar:
-    def __init__(self, image, objc_class, ivar: objc2_ivar, vmaddr: int):
-        self.name = image.get_cstr_at(ivar.name, 0, True, "__objc_methname")
-        type_string = image.get_cstr_at(ivar.type, 0, True, "__objc_methtype")
-        self.is_id = type_string[0] == "@"
-        self.type = self._renderable_type(image.tp.process(type_string)[0])
+    def __init__(self, objc_image: ObjCImage, objc_class, ivar: objc2_ivar, vmaddr: int):
+        self.name: str = objc_image.get_cstr_at(ivar.name, 0, True, "__objc_methname")
+        type_string: str = objc_image.get_cstr_at(ivar.type, 0, True, "__objc_methtype")
+        self.is_id: bool = type_string[0] == "@"
+        self.type: str = self._renderable_type(objc_image.tp.process(type_string)[0])
 
     def __str__(self):
         ret = ""
@@ -356,40 +367,52 @@ class Ivar:
         return ret
 
     @staticmethod
-    def _renderable_type(type: Type):
-        if type.type == EncodedType.NORMAL:
-            return str(type)
-        elif type.type == EncodedType.STRUCT:
+    def _renderable_type(ivar_type: Type) -> str:
+        if ivar_type.type == EncodedType.NORMAL:
+            return str(ivar_type)
+        elif ivar_type.type == EncodedType.STRUCT:
             ptr_addition = ""
-            for i in range(0, type.pointer_count):
+            for i in range(0, ivar_type.pointer_count):
                 ptr_addition += '*'
-            return ptr_addition + type.value.name
-        return str(type)
+            return ptr_addition + ivar_type.value.name
+        return str(ivar_type)
 
 
 class MethodList:
     def __init__(self):
         pass
 
+
 class Method:
-    def __init__(self, image, meta, method: objc2_meth, vmaddr: int, uses_rel_meth=False, rms_are_direct=False):
+    def __init__(self, objc_image: ObjCImage, meta, method: objc2_meth, vmaddr: int,
+                 uses_relative_method_selectors=False, relative_method_selectors_are_direct=False):
+        """
+
+
+        :param objc_image:
+        :param meta:
+        :param method:
+        :param vmaddr:
+        :param uses_relative_method_selectors:
+        :param relative_method_selectors_are_direct:
+        """
         self.meta = meta
 
-        if uses_rel_meth:
-            if rms_are_direct:
-                self.sel = image.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
-                self.type_string = image.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
-                                                       sectname="__objc_methtype")
+        if uses_relative_method_selectors:
+            if relative_method_selectors_are_direct:
+                self.sel = objc_image.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
+                self.type_string = objc_image.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
+                                                          sectname="__objc_methtype")
             else:
-                selref = image.get_int_at(method.selector + vmaddr, 8, vm=True)
-                self.sel = image.get_cstr_at(selref, 0, vm=True, sectname="__objc_methname")
-                self.type_string = image.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
-                                                       sectname="__objc_methtype")
+                selector_pointer = objc_image.get_int_at(method.selector + vmaddr, 8, vm=True)
+                self.sel = objc_image.get_cstr_at(selector_pointer, 0, vm=True, sectname="__objc_methname")
+                self.type_string = objc_image.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
+                                                          sectname="__objc_methtype")
         else:
-            self.sel = image.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
-            self.type_string = image.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
+            self.sel = objc_image.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
+            self.type_string = objc_image.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
 
-        self.types = image.tp.process(self.type_string)
+        self.types = objc_image.tp.process(self.type_string)
 
         self.return_string = self._renderable_type(self.types[0])
         self.arguments = [self._renderable_type(i) for i in self.types[1:]]
@@ -402,14 +425,14 @@ class Method:
         return ret
 
     @staticmethod
-    def _renderable_type(type: Type):
-        if type.type == EncodedType.NORMAL:
-            return str(type)
-        elif type.type == EncodedType.STRUCT:
+    def _renderable_type(method_type: Type):
+        if method_type.type == EncodedType.NORMAL:
+            return str(method_type)
+        elif method_type.type == EncodedType.STRUCT:
             ptr_addition = ""
-            for i in range(0, type.pointer_count):
+            for i in range(0, method_type.pointer_count):
                 ptr_addition += '*'
-            return 'struct ' + type.value.name + ' ' + ptr_addition
+            return 'struct ' + method_type.value.name + ' ' + ptr_addition
 
     def _build_method_signature(self):
         dash = "+" if self.meta else "-"
@@ -452,8 +475,8 @@ class Class:
     objc2_class_ro = ["off", "flags", "ivar_base_start", "ivar_base_size", "reserved", "ivar_lyt", "name", "base_meths", "base_prots", "ivars", "weak_ivar_lyt", "base_props"]
     """
 
-    def __init__(self, image, ptr: int, meta=False, objc2class=None):
-        self.image = image
+    def __init__(self, image: ObjCImage, ptr: int, meta=False, objc2class=None):
+        self.objc_image = image
         self.ptr = ptr
         self.meta = meta
         self.metaclass = None
@@ -469,7 +492,7 @@ class Class:
         else:
             self.objc2_class = objc2class
 
-        self.objc2_class_ro = self.image.load_struct(self.objc2_class.info, objc2_class_ro, vm=True)
+        self.objc2_class_ro = self.objc_image.load_struct(self.objc2_class.info, objc2_class_ro, vm=True)
 
         self._process_structs()
 
@@ -487,15 +510,15 @@ class Class:
     def _load_linked_libraries(self):
         pass
 
-    def _load_objc2_class(self, ptr):
+    def _load_objc2_class(self, ptr: int):
 
-        objc2_class_location = self.image.get_int_at(ptr, 8, vm=True)
-        objc2_class_item: objc2_class = self.image.load_struct(objc2_class_location, objc2_class, vm=True)
+        objc2_class_location = self.objc_image.get_int_at(ptr, 8, vm=True)
+        objc2_class_item: objc2_class = self.objc_image.load_struct(objc2_class_location, objc2_class, vm=True)
 
         bad_addr = False
         try:
-            objc2_superclass: objc2_class = self.image.load_struct(objc2_class_item.superclass, objc2_class)
-            superclass = Class(self.image, objc2_superclass.off, False, objc2_superclass)
+            objc2_superclass: objc2_class = self.objc_image.load_struct(objc2_class_item.superclass, objc2_class)
+            superclass = Class(self.objc_image, objc2_superclass.off, False, objc2_superclass)
             self.superclass = superclass.name
         except:
             bad_addr = True
@@ -505,7 +528,7 @@ class Class:
             struct_size = objc2_class.SIZE
             struct_location = objc2_class_item.off
             try:
-                symbol = self.image.image.binding_table.lookup_table[objc2_class_location + 8]
+                symbol = self.objc_image.image.binding_table.lookup_table[objc2_class_location + 8]
             except KeyError as ex:
                 self.superclass = "NSObject"
                 return objc2_class_item
@@ -514,31 +537,31 @@ class Class:
                 return objc2_class_item
             self.superclass = symbol.name[1:]
             try:
-                self.linked_classes.append(LinkedClass(symbol.name[1:], self.image.image.linked[
+                self.linked_classes.append(LinkedClass(symbol.name[1:], self.objc_image.image.linked[
                     int(symbol.ordinal) - 1].install_name))
             except IndexError:
                 pass
         if objc2_class_item.isa != 0 and objc2_class_item.isa <= 0xFFFFFFFFFF and not self.meta:
             try:
-                metaclass_item: objc2_class = self.image.load_struct(objc2_class_item.isa, objc2_class)
-                self.metaclass = Class(self.image, metaclass_item.off, True, metaclass_item)
+                metaclass_item: objc2_class = self.objc_image.load_struct(objc2_class_item.isa, objc2_class)
+                self.metaclass = Class(self.objc_image, metaclass_item.off, True, metaclass_item)
             except ValueError:
                 pass
         return objc2_class_item
 
     def _process_structs(self):
         try:
-            self.name = self.image.get_cstr_at(self.objc2_class_ro.name, 0, vm=True)
+            self.name = self.objc_image.get_cstr_at(self.objc2_class_ro.name, 0, vm=True)
         except ValueError as ex:
             pass
 
-    def _process_methods(self):
+    def _process_methods(self) -> List[Method]:
         methods = []
 
         if self.objc2_class_ro.base_meths == 0:
             return methods  # Useless Subclass
 
-        methlist_head = self.image.load_struct(self.objc2_class_ro.base_meths, objc2_meth_list)
+        methlist_head = self.objc_image.load_struct(self.objc2_class_ro.base_meths, objc2_meth_list)
 
         ea = methlist_head.off
         vm_ea = self.objc2_class_ro.base_meths
@@ -551,12 +574,12 @@ class Class:
 
         for i in range(1, methlist_head.count + 1):
             if uses_relative_methods:
-                meth = self.image.load_struct(ea, objc2_meth_list_entry, vm=False)
+                meth = self.objc_image.load_struct(ea, objc2_meth_list_entry, vm=False)
             else:
-                meth = self.image.load_struct(ea, objc2_meth, vm=False)
+                meth = self.objc_image.load_struct(ea, objc2_meth, vm=False)
 
             try:
-                method = Method(self.image, self.meta, meth, vm_ea, uses_relative_methods, rms_are_direct)
+                method = Method(self.objc_image, self.meta, meth, vm_ea, uses_relative_methods, rms_are_direct)
                 methods.append(method)
                 for method_type in method.types:
                     if method_type.type == EncodedType.STRUCT:
@@ -574,13 +597,13 @@ class Class:
 
         return methods
 
-    def _process_props(self):
+    def _process_props(self) -> List['Property']:
         properties = []
 
         if self.objc2_class_ro.base_props == 0:
             return properties
 
-        proplist_head = self.image.load_struct(self.objc2_class_ro.base_props, objc2_prop_list)
+        proplist_head = self.objc_image.load_struct(self.objc2_class_ro.base_props, objc2_prop_list)
 
         ea = proplist_head.off
         vm_ea = self.objc2_class_ro.base_props
@@ -589,10 +612,10 @@ class Class:
         vm_ea += objc2_prop_list.SIZE
 
         for i in range(1, proplist_head.count + 1):
-            prop = self.image.load_struct(ea, objc2_prop, vm=False)
+            prop = self.objc_image.load_struct(ea, objc2_prop, vm=False)
 
             try:
-                property = Property(self.image, prop, vm_ea)
+                property = Property(self.objc_image, prop, vm_ea)
                 properties.append(property)
                 if hasattr(property, 'attr'):
                     if property.attr.type.type == EncodedType.STRUCT:
@@ -605,32 +628,32 @@ class Class:
 
         return properties
 
-    def _process_prots(self):
+    def _process_prots(self) -> List['Protocol']:
         prots = []
         if self.objc2_class_ro.base_prots == 0:
             return prots
-        protlist: objc2_prot_list = self.image.load_struct(self.objc2_class_ro.base_prots, objc2_prot_list)
+        protlist: objc2_prot_list = self.objc_image.load_struct(self.objc2_class_ro.base_prots, objc2_prot_list)
         ea = protlist.off
         for i in range(1, protlist.cnt + 1):
-            prot_loc = self.image.get_int_at(ea + i * 8, 8, vm=False)
-            prot = self.image.load_struct(prot_loc, objc2_prot, vm=True)
+            prot_loc = self.objc_image.get_int_at(ea + i * 8, 8, vm=False)
+            prot = self.objc_image.load_struct(prot_loc, objc2_prot, vm=True)
             try:
-                prots.append(Protocol(self.image, prot, prot_loc))
+                prots.append(Protocol(self.objc_image, prot, prot_loc))
             except Exception as ex:
                 log.warning(f'Failed to load protocol with {str(ex)}')
         return prots
 
-    def _process_ivars(self):
+    def _process_ivars(self) -> List[Ivar]:
         ivars = []
         if self.objc2_class_ro.ivars == 0:
             return ivars
-        ivarlist: objc2_ivar_list = self.image.load_struct(self.objc2_class_ro.ivars, objc2_ivar_list)
+        ivarlist: objc2_ivar_list = self.objc_image.load_struct(self.objc2_class_ro.ivars, objc2_ivar_list)
         ea = ivarlist.off + 8
         for i in range(1, ivarlist.cnt + 1):
             ivar_loc = ea + objc2_ivar.SIZE * (i - 1)
-            ivar = self.image.load_struct(ivar_loc, objc2_ivar, vm=False)
+            ivar = self.objc_image.load_struct(ivar_loc, objc2_ivar, vm=False)
             try:
-                ivar_object = Ivar(self.image, self, ivar, ivar_loc)
+                ivar_object = Ivar(self.objc_image, self, ivar, ivar_loc)
                 ivars.append(ivar_object)
             except Exception as ex:
                 log.warning(f'Failed to load ivar with {str(ex)}')
@@ -649,18 +672,18 @@ property_attr = namedtuple("property_attr", ["type", "attributes", "ivar", "is_i
 
 
 class Property:
-    def __init__(self, image, property: objc2_prop, vmaddr: int):
-        self.image = image
-        self.property = property
+    def __init__(self, objc_image: ObjCImage, property: objc2_prop, vmaddr: int):
+        self.objc_image: ObjCImage = objc_image
+        self.property: objc2_prop = property
 
-        self.name = image.get_cstr_at(property.name, 0, True, "__objc_methname")
+        self.name = objc_image.get_cstr_at(property.name, 0, True, "__objc_methname")
 
         try:
             self.attr = self.decode_property_attributes(
-                self.image.get_cstr_at(property.attr, 0, True, "__objc_methname"))
+                self.objc_image.get_cstr_at(property.attr, 0, True, "__objc_methname"))
         except IndexError:
             log.warn(
-                f'issue with property {self.name} in {self.image.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
+                f'issue with property {self.name} in {self.objc_image.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
             return
         # property_attr = namedtuple("property_attr", ["type", "attributes", "ivar"])
         self.type = self._renderable_type(self.attr.type)
@@ -710,7 +733,7 @@ class Property:
         for attribute in attribute_strings:
             indicator = attribute[0]
             if indicator == "T":
-                ptype = self.image.tp.process(attribute[1:])[0]
+                ptype = self.objc_image.tp.process(attribute[1:])[0]
                 if ptype == "{":
                     print(attribute)
                 is_id = attribute[1] == "@"
@@ -725,15 +748,15 @@ class Property:
 
 class Category:
     def __init__(self, image, ptr):
-        self.image = image
+        self.objc_image = image
         self.ptr = ptr
-        loc = self.image.get_int_at(ptr, 8, vm=True)
+        loc = self.objc_image.get_int_at(ptr, 8, vm=True)
 
-        self.struct: objc2_category = self.image.load_struct(loc, objc2_category, vm=True)
-        self.name = self.image.get_cstr_at(self.struct.name, vm=True)
+        self.struct: objc2_category = self.objc_image.load_struct(loc, objc2_category, vm=True)
+        self.name = self.objc_image.get_cstr_at(self.struct.name, vm=True)
         self.classname = ""
         try:
-            sym = self.image.image.binding_table.lookup_table[loc + 8]
+            sym = self.objc_image.image.binding_table.lookup_table[loc + 8]
             self.classname = sym.name[1:]
         except:
             pass
@@ -751,7 +774,7 @@ class Category:
         if loc == 0:
             return methods  # Useless Subclass
 
-        methlist_head = self.image.load_struct(loc, objc2_meth_list)
+        methlist_head = self.objc_image.load_struct(loc, objc2_meth_list)
         ea = methlist_head.off
         vm_ea = loc
 
@@ -763,11 +786,11 @@ class Category:
 
         for i in range(1, methlist_head.count + 1):
             if uses_relative_methods:
-                meth = self.image.load_struct(ea, objc2_meth_list_entry, vm=False)
+                meth = self.objc_image.load_struct(ea, objc2_meth_list_entry, vm=False)
             else:
-                meth = self.image.load_struct(ea, objc2_meth, vm=False)
+                meth = self.objc_image.load_struct(ea, objc2_meth, vm=False)
             try:
-                methods.append(Method(self.image, meta, meth, vm_ea, uses_relative_methods, rms_are_direct))
+                methods.append(Method(self.objc_image, meta, meth, vm_ea, uses_relative_methods, rms_are_direct))
             except Exception as ex:
                 log.warning(f'Failed to load method with {str(ex)}')
             if uses_relative_methods:
@@ -786,16 +809,16 @@ class Category:
             return properties
 
         vm_ea = location
-        proplist_head = self.image.load_struct(location, objc2_prop_list)
+        proplist_head = self.objc_image.load_struct(location, objc2_prop_list)
 
         ea = proplist_head.off
         ea += 8
         vm_ea += 8
 
         for i in range(1, proplist_head.count + 1):
-            prop = self.image.load_struct(ea, objc2_prop, vm=False)
+            prop = self.objc_image.load_struct(ea, objc2_prop, vm=False)
             try:
-                properties.append(Property(self.image, prop, vm_ea))
+                properties.append(Property(self.objc_image, prop, vm_ea))
             except Exception as ex:
                 log.warning(f'Failed to load property with {str(ex)}')
             ea += objc2_prop.SIZE
@@ -809,9 +832,9 @@ class Category:
 # objc2_prot_t = struct(objc2_prot, [8, 8, 8, 8, 8, 8, 8, 8, 4, 4])
 
 class Protocol:
-    def __init__(self, image, protocol: objc2_prot, vmaddr: int):
-        self.image = image
-        self.name = image.get_cstr_at(protocol.name, 0, vm=True)
+    def __init__(self, objc_image, protocol: objc2_prot, vmaddr: int):
+        self.objc_image = objc_image
+        self.name = objc_image.get_cstr_at(protocol.name, 0, vm=True)
 
         self.methods = self._process_methods(protocol.inst_meths)
         self.methods += self._process_methods(protocol.class_meths, True)
@@ -828,7 +851,7 @@ class Protocol:
             return methods  # Useless Subclass
 
         vm_ea = loc
-        methlist_head = self.image.load_struct(loc, objc2_meth_list)
+        methlist_head = self.objc_image.load_struct(loc, objc2_meth_list)
         ea = methlist_head.off
 
         uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
@@ -838,11 +861,11 @@ class Protocol:
         vm_ea += 8
         for i in range(1, methlist_head.count + 1):
             if uses_relative_methods:
-                meth = self.image.load_struct(ea, objc2_meth_list_entry, vm=False)
+                meth = self.objc_image.load_struct(ea, objc2_meth_list_entry, vm=False)
             else:
-                meth = self.image.load_struct(ea, objc2_meth, vm=False)
+                meth = self.objc_image.load_struct(ea, objc2_meth, vm=False)
             try:
-                methods.append(Method(self.image, meta, meth, vm_ea, uses_relative_methods, rms_are_direct))
+                methods.append(Method(self.objc_image, meta, meth, vm_ea, uses_relative_methods, rms_are_direct))
             except Exception as ex:
                 log.warning(f'Failed to load method with {str(ex)}')
             if uses_relative_methods:
@@ -861,16 +884,16 @@ class Protocol:
             return properties
 
         vm_ea = location
-        proplist_head = self.image.load_struct(location, objc2_prop_list)
+        proplist_head = self.objc_image.load_struct(location, objc2_prop_list)
 
         ea = proplist_head.off
         ea += 8
         vm_ea += 8
 
         for i in range(1, proplist_head.count + 1):
-            prop = self.image.load_struct(ea, objc2_prop, vm=False)
+            prop = self.objc_image.load_struct(ea, objc2_prop, vm=False)
             try:
-                properties.append(Property(self.image, prop, vm_ea))
+                properties.append(Property(self.objc_image, prop, vm_ea))
             except Exception as ex:
                 log.warning(f'Failed to load property with {str(ex)}')
             ea += objc2_prop.SIZE

@@ -194,6 +194,8 @@ def main():
     parser_symbols.add_argument('--imp-acts', dest='get_actions', action='store_true', help='Print Raw Binding Imports')
     parser_symbols.add_argument('--symtab', dest='get_symtab', action='store_true', help='Print out the symtab')
     parser_symbols.add_argument('--exports', dest='get_exports', action='store_true', help='Print exports')
+    parser_symbols.add_argument('--slice', dest='slice_index', type=int,
+                             help="Specify Index of Slice (in FAT MachO) to examine")
     parser_symbols.add_argument('filename', nargs='?', default='')
     parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False,
                                 slice_index=0)

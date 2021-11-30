@@ -15,145 +15,88 @@
 import math
 from collections import namedtuple
 from enum import Enum
+from typing import List
 
 from kmacho import (
     MH_FLAGS,
     MH_FILETYPE,
     LOAD_COMMAND,
     BINDING_OPCODE,
-    LOAD_COMMAND_MAP
+    LOAD_COMMAND_MAP,
+    BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB,
+    BIND_SUBOPCODE_THREADED_APPLY
 )
 from kmacho.structs import *
 from kmacho.base import Constructable
-from .macho import _VirtualMemoryMap, Segment
+from .macho import _VirtualMemoryMap, Segment, Slice
 from .util import log, macho_is_malformed
-from .exceptions import *
 
 
-class Dyld:
+class ImageHeader(Constructable):
     """
-    This is a static class containing several methods for, essentially, recreating the functionality of Dyld for our
-    own purposes.
+    This class represents the Mach-O Header
+    It contains the basic header info along with all load commands within it.
 
-    It isn't meant to be a faithful recreation of dyld so to speak, it just does things dyld also does, kinda.
-
+    It doesn't handle complex abstraction logic, it simply loads in the load commands as their raw structs
     """
 
-    @classmethod
-    def load(cls, macho_slice, load_symtab=True, load_imports=True, load_exports=True):
-        """
-        Take a slice of a macho file and process it using the dyld functions
+    @staticmethod
+    def from_bytes(macho_slice) -> 'ImageHeader':
 
-        :param load_binding: Load Binding Info?
-        :param load_symtab: Load Symbol Table?
-        :param macho_slice: Slice to load. If your image is not fat, that'll be MachOFile.slices[0]
-        :type macho_slice: Slice
-        :return: Processed image object
-        :rtype: Image
-        """
-        log.info("Loading image")
-        image = Image(macho_slice)
+        image_header = ImageHeader()
 
-        log.info("Processing Load Commands")
-        Dyld._parse_load_commands(image, load_symtab, load_imports, load_exports)
-        return image
+        offset = 0
+        header: dyld_header = macho_slice.load_struct(offset, dyld_header)
+        raw = header.raw
 
-    @classmethod
-    def _parse_load_commands(cls, image, load_symtab=True, load_imports=True, load_exports=True):
-        # noinspection PyUnusedLocal
-        fixups = None
-        log.info(f'registered {len(image.macho_header.load_commands)} Load Commands')
-        for cmd in image.macho_header.load_commands:
-            if isinstance(cmd, segment_command_64):
-                log.debug("Loading segment_command_64")
-                segment = Segment(image, cmd)
+        image_header.filetype = MH_FILETYPE(header.filetype)
 
-                log.info(f'Loaded Segment {segment.name}')
-                image.vm.add_segment(segment)
-                image.segments[segment.name] = segment
+        for flag in MH_FLAGS:
+            if header.flags & flag.value:
+                image_header.flags.append(flag)
 
-                log.debug(f'Added {segment.name} to VM Map')
+        offset += header.SIZE
 
-            elif isinstance(cmd, dyld_info_command):
-                image.info = cmd
-                if load_imports:
-                    log.info("Loading Binding Info")
-                    image.binding_table = BindingTable(image, cmd.bind_off, cmd.bind_size)
-                    image.weak_binding_table = BindingTable(image, cmd.weak_bind_off, cmd.weak_bind_size)
-                    image.lazy_binding_table = BindingTable(image, cmd.lazy_bind_off, cmd.lazy_bind_size)
-                if load_exports:
-                    log.info("Loading Export Trie")
-                    image.exports = ExportTrie.from_bytes(image, cmd.export_off, cmd.export_size)
+        load_commands = []
 
-            elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
-                log.info("Loading Export Trie")
-                image.exports = ExportTrie.from_bytes(image, cmd.dataoff, cmd.datasize)
+        for i in range(1, header.loadcnt + 1):
+            cmd = macho_slice.get_int_at(offset, 4)
+            cmd_size = macho_slice.get_int_at(offset + 4, 4)
 
-            elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
-                log.warning("image uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
-                # fixups = ChainedFixups(image, cmd.dataoff, cmd.datasize)
-                pass
+            cmd_raw = macho_slice.get_bytes_at(offset, cmd_size)
+            try:
+                load_cmd = Struct.create_with_bytes(LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)], cmd_raw)
+                load_cmd.off = offset
+            except ValueError:
+                unk_lc = macho_slice.load_struct(offset, unk_command)
+                load_cmd = unk_lc
+            except KeyError:
+                unk_lc = macho_slice.load_struct(offset, unk_command)
+                load_cmd = unk_lc
 
-            elif isinstance(cmd, symtab_command):
-                if load_symtab:
-                    log.info("Loading Symbol Table")
-                    image.symbol_table = SymbolTable(image, cmd)
+            load_commands.append(load_cmd)
+            raw += cmd_raw
+            offset += load_cmd.cmdsize
 
-            elif isinstance(cmd, uuid_command):
-                image.uuid = cmd.uuid.to_bytes(16, "little")
-                log.info(f'image UUID: {image.uuid}')
+        image_header.raw = raw
+        image_header.dyld_header = header
+        image_header.load_commands = load_commands
 
-            elif isinstance(cmd, sub_client_command):
-                string = image.get_cstr_at(cmd.off + cmd.offset)
-                image.allowed_clients.append(string)
-                log.debug(f'Loaded Subclient "{string}"')
+        return image_header
 
-            elif isinstance(cmd, rpath_command):
-                string = image.get_cstr_at(cmd.off + cmd.path)
-                image.rpath = string
-                log.info(f'image Resource Path: {string}')
+    @staticmethod
+    def from_values(*args, **kwargs):
+        pass
 
-            elif isinstance(cmd, build_version_command):
-                image.platform = PlatformType(cmd.platform)
-                image.minos = os_version(x=image.get_int_at(cmd.off + 14, 2), y=image.get_int_at(cmd.off + 13, 1),
-                                         z=image.get_int_at(cmd.off + 12, 1))
-                image.sdk_version = os_version(x=image.get_int_at(cmd.off + 18, 2),
-                                               y=image.get_int_at(cmd.off + 17, 1),
-                                               z=image.get_int_at(cmd.off + 16, 1))
-                log.info(f'Loaded platform {image.platform.name} | '
-                          f'Minimum OS {image.minos.x}.{image.minos.y}'
-                          f'.{image.minos.z} | SDK Version {image.sdk_version.x}'
-                          f'.{image.sdk_version.y}.{image.sdk_version.z}')
+    def __init__(self):
+        self.dyld_header = None
+        self.filetype = MH_FILETYPE(0)
+        self.flags: List[MH_FILETYPE] = []
+        self.load_commands = []
+        self.raw = bytearray()
 
-            elif isinstance(cmd, version_min_command):
-                # Only override this if it wasn't set by build_version
-                if image.platform == PlatformType.UNK:
-                    if LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_MACOSX:
-                        image.platform = PlatformType.MACOS
-                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_IPHONEOS:
-                        image.platform = PlatformType.IOS
-                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_TVOS:
-                        image.platform = PlatformType.TVOS
-                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_WATCHOS:
-                        image.platform = PlatformType.WATCHOS
-
-                    image.minos = os_version(x=image.get_int_at(cmd.off + 10, 2),
-                                             y=image.get_int_at(cmd.off + 9, 1),
-                                             z=image.get_int_at(cmd.off + 8, 1))
-
-            elif isinstance(cmd, dylib_command):
-                if cmd.cmd == 0xD:  # local
-                    image.dylib = ExternalDylib(image, cmd)
-                    log.info(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
-                else:
-                    external_dylib = ExternalDylib(image, cmd)
-                    image.linked.append(external_dylib)
-                    log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
-
-        if image.dylib is not None:
-            image.name = image.dylib.install_name.split('/')[-1]
-        else:
-            image.name = ""
+    def raw_bytes(self) -> bytes:
+        return self.raw
 
 
 class Image:
@@ -169,16 +112,16 @@ class Image:
     The Dyld class set is responsible for loading in and processing the raw values to it.
     """
 
-    def __init__(self, macho_slice):
+    def __init__(self, macho_slice: Slice):
         """
         Create a MachO image
 
         :param macho_slice: MachO Slice being processed
         :type macho_slice: MachO Slice
         """
-        self.macho_header = ImageHeader.from_bytes(macho_slice=macho_slice)
+        self.macho_header: ImageHeader = ImageHeader.from_bytes(macho_slice=macho_slice)
 
-        self.slice = macho_slice
+        self.slice: Slice = macho_slice
 
         self.linked = []
         self.name = ""
@@ -368,82 +311,146 @@ class Image:
         self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
 
 
-class ImageHeader(Constructable):
+class Dyld:
     """
-    This class represents the Mach-O Header
-    It contains the basic header info along with all load commands within it.
+    This is a static class containing several methods for, essentially, recreating the functionality of Dyld for our
+    own purposes.
 
-    It doesn't handle complex abstraction logic, it simply loads in the load commands as their raw structs
+    It isn't meant to be a faithful recreation of dyld so to speak, it just does things dyld also does, kinda.
+
     """
 
-    @staticmethod
-    def from_bytes(macho_slice):
+    @classmethod
+    def load(cls, macho_slice: Slice, load_symtab=True, load_imports=True, load_exports=True) -> Image:
+        """
+        Take a slice of a macho file and process it using the dyld functions
 
-        image_header = ImageHeader()
+        :param load_exports: Load Exports
+        :param load_imports: Load Imports
+        :param load_symtab: Load Symbol Table
+        :param macho_slice: Slice to load. If your image is not fat, that'll be MachOFile.slices[0]
+        :type macho_slice: Slice
+        :return: Processed image object
+        :rtype: Image
+        """
+        log.info("Loading image")
+        image = Image(macho_slice)
 
-        offset = 0
-        header: dyld_header = macho_slice.load_struct(offset, dyld_header)
-        raw = header.raw
+        log.info("Processing Load Commands")
+        Dyld._parse_load_commands(image, load_symtab, load_imports, load_exports)
+        return image
 
-        image_header.filetype = MH_FILETYPE(header.filetype)
+    @classmethod
+    def _parse_load_commands(cls, image: Image, load_symtab=True, load_imports=True, load_exports=True) -> None:
+        # noinspection PyUnusedLocal
+        fixups = None
+        log.info(f'registered {len(image.macho_header.load_commands)} Load Commands')
+        for cmd in image.macho_header.load_commands:
+            if isinstance(cmd, segment_command_64):
+                log.debug("Loading segment_command_64")
+                segment = Segment(image, cmd)
 
-        for flag in MH_FLAGS:
-            if header.flags & flag.value:
-                image_header.flags.append(flag)
+                log.info(f'Loaded Segment {segment.name}')
+                image.vm.add_segment(segment)
+                image.segments[segment.name] = segment
 
-        offset += header.SIZE
+                log.debug(f'Added {segment.name} to VM Map')
 
-        load_commands = []
+            elif isinstance(cmd, dyld_info_command):
+                image.info = cmd
 
-        for i in range(1, header.loadcnt + 1):
-            cmd = macho_slice.get_int_at(offset, 4)
-            cmd_size = macho_slice.get_int_at(offset+4, 4)
+                if load_imports:
+                    log.info("Loading Binding Info")
+                    image.binding_table = BindingTable(image, cmd.bind_off, cmd.bind_size)
+                    image.weak_binding_table = BindingTable(image, cmd.weak_bind_off, cmd.weak_bind_size)
+                    image.lazy_binding_table = BindingTable(image, cmd.lazy_bind_off, cmd.lazy_bind_size)
 
-            cmd_raw = macho_slice.get_bytes_at(offset, cmd_size)
-            try:
-                load_cmd = Struct.create_with_bytes(LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)], cmd_raw)
-                load_cmd.off = offset
-            except ValueError:
-                unk_lc = macho_slice.load_struct(offset, unk_command)
-                load_cmd = unk_lc
-            except KeyError:
-                unk_lc = macho_slice.load_struct(offset, unk_command)
-                load_cmd = unk_lc
+                if load_exports:
+                    log.info("Loading Export Trie")
+                    image.exports = ExportTrie.from_bytes(image, cmd.export_off, cmd.export_size)
 
-            load_commands.append(load_cmd)
-            raw += cmd_raw
-            offset += load_cmd.cmdsize
+            elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
+                log.info("Loading Export Trie")
+                image.exports = ExportTrie.from_bytes(image, cmd.dataoff, cmd.datasize)
 
-        image_header.raw = raw
-        image_header.dyld_header = header
-        image_header.load_commands = load_commands
+            elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
+                log.warning(
+                    "image uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
+                # fixups = ChainedFixups(image, cmd.dataoff, cmd.datasize)
+                pass
 
-        return image_header
+            elif isinstance(cmd, symtab_command):
+                if load_symtab:
+                    log.info("Loading Symbol Table")
+                    image.symbol_table = SymbolTable(image, cmd)
 
-    @staticmethod
-    def from_values(*args, **kwargs):
-        pass
+            elif isinstance(cmd, uuid_command):
+                image.uuid = cmd.uuid.to_bytes(16, "little")
+                log.info(f'image UUID: {image.uuid}')
 
-    def __init__(self):
-        self.dyld_header = None
-        self.filetype = MH_FILETYPE(0)
-        self.flags = []
-        self.load_commands = []
-        self.raw = bytearray()
+            elif isinstance(cmd, sub_client_command):
+                string = image.get_cstr_at(cmd.off + cmd.offset)
+                image.allowed_clients.append(string)
+                log.debug(f'Loaded Subclient "{string}"')
 
-    def raw_bytes(self):
-        return self.raw
+            elif isinstance(cmd, rpath_command):
+                string = image.get_cstr_at(cmd.off + cmd.path)
+                image.rpath = string
+                log.info(f'image Resource Path: {string}')
+
+            elif isinstance(cmd, build_version_command):
+                image.platform = PlatformType(cmd.platform)
+                image.minos = os_version(x=image.get_int_at(cmd.off + 14, 2), y=image.get_int_at(cmd.off + 13, 1),
+                                         z=image.get_int_at(cmd.off + 12, 1))
+                image.sdk_version = os_version(x=image.get_int_at(cmd.off + 18, 2),
+                                               y=image.get_int_at(cmd.off + 17, 1),
+                                               z=image.get_int_at(cmd.off + 16, 1))
+                log.info(f'Loaded platform {image.platform.name} | '
+                         f'Minimum OS {image.minos.x}.{image.minos.y}'
+                         f'.{image.minos.z} | SDK Version {image.sdk_version.x}'
+                         f'.{image.sdk_version.y}.{image.sdk_version.z}')
+
+            elif isinstance(cmd, version_min_command):
+                # Only override this if it wasn't set by build_version
+                if image.platform == PlatformType.UNK:
+                    if LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_MACOSX:
+                        image.platform = PlatformType.MACOS
+                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_IPHONEOS:
+                        image.platform = PlatformType.IOS
+                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_TVOS:
+                        image.platform = PlatformType.TVOS
+                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_WATCHOS:
+                        image.platform = PlatformType.WATCHOS
+
+                    image.minos = os_version(x=image.get_int_at(cmd.off + 10, 2),
+                                             y=image.get_int_at(cmd.off + 9, 1),
+                                             z=image.get_int_at(cmd.off + 8, 1))
+
+            elif isinstance(cmd, dylib_command):
+                if cmd.cmd == 0xD:  # local
+                    image.dylib = ExternalDylib(image, cmd)
+                    log.info(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
+                else:
+                    external_dylib = ExternalDylib(image, cmd)
+                    image.linked.append(external_dylib)
+                    log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
+
+        if image.dylib is not None:
+            image.name = image.dylib.install_name.split('/')[-1]
+        else:
+            image.name = ""
 
 
 class ExternalDylib:
-    def __init__(self, source_image, cmd):
+    def __init__(self, source_image: Image, cmd):
         self.cmd = cmd
         self.source_image = source_image
+
         self.install_name = self._get_name(cmd)
         self.weak = cmd.cmd == 0x18 | 0x80000000
         self.local = cmd.cmd == 0xD
 
-    def _get_name(self, cmd):
+    def _get_name(self, cmd) -> str:
         read_address = cmd.off + dylib_command.SIZE
         return self.source_image.get_cstr_at(read_address)
 
@@ -498,11 +505,11 @@ class Symbol:
 
     """
 
-    def __init__(self, lib, cmd=None, entry=None, fullname=None, ordinal=None, addr=None):
+    def __init__(self, image: Image, cmd=None, entry=None, fullname=None, ordinal=None, addr=None):
         if fullname:
             self.fullname = fullname
         else:
-            self.fullname = lib.get_cstr_at(entry.str_index + cmd.stroff)
+            self.fullname = image.get_cstr_at(entry.str_index + cmd.stroff)
         if '_$_' in self.fullname:
             if self.fullname.startswith('_OBJC_CLASS_$'):
                 self.type = SymbolType.CLASS
@@ -538,13 +545,14 @@ class SymbolTable:
 
     """
 
-    def __init__(self, image, cmd: symtab_command):
-        self.image = image
+    def __init__(self, image: Image, cmd: symtab_command):
+        self.image: Image = image
         self.cmd = cmd
-        self.ext = []
-        self.table = self._load_symbol_table()
 
-    def _load_symbol_table(self):
+        self.ext: List[Symbol] = []
+        self.table: List[Symbol] = self._load_symbol_table()
+
+    def _load_symbol_table(self) -> List[Symbol]:
         symbol_table = []
         read_address = self.cmd.symoff
         for i in range(0, self.cmd.nsyms):
@@ -565,7 +573,7 @@ export_node = namedtuple("export_node", ['text', 'offset'])
 
 class ExportTrie(Constructable):
     @staticmethod
-    def from_bytes(image, export_start, export_size):
+    def from_bytes(image: Image, export_start: int, export_size: int) -> 'ExportTrie':
         trie = ExportTrie()
 
         endpoint = export_start + export_size
@@ -590,11 +598,11 @@ class ExportTrie(Constructable):
 
     def __init__(self):
         self.raw = bytearray()
-        self.nodes = []
-        self.symbols = []
+        self.nodes: List[export_node] = []
+        self.symbols: List[Symbol] = []
 
     @classmethod
-    def read_node(cls, image, trie_start, string, cursor, endpoint):
+    def read_node(cls, image: Image, trie_start: int, string: str, cursor: int, endpoint: int) -> List[export_node]:
 
         if cursor > endpoint:
             macho_is_malformed()
@@ -656,7 +664,7 @@ class BindingTable:
 
     """
 
-    def __init__(self, image, table_start, table_size):
+    def __init__(self, image: Image, table_start: int, table_size: int):
         """
         Pass a image to be processed
 
@@ -670,7 +678,7 @@ class BindingTable:
         self.link_table = {}
         self.symbol_table = self._load_symbol_table()
 
-    def _load_symbol_table(self):
+    def _load_symbol_table(self) -> List[Symbol]:
         table = []
         for act in self.actions:
             if act.item:
@@ -680,7 +688,7 @@ class BindingTable:
                 self.lookup_table[act.vmaddr] = sym
         return table
 
-    def _create_action_list(self):
+    def _create_action_list(self) -> List[action]:
         actions = []
         for bind_command in self.import_stack:
             segment = list(self.image.segments.values())[bind_command.seg_index]
@@ -694,9 +702,11 @@ class BindingTable:
             actions.append(action(vm_address & 0xFFFFFFFFF, lib, item))
         return actions
 
-    def _load_binding_info(self, table_start, table_size):
+    def _load_binding_info(self, table_start: int, table_size: int) -> List[record]:
         read_address = table_start
         import_stack = []
+        threaded_stack = []
+        uses_threaded_bind = False
         while True:
             if read_address - table_size >= table_start:
                 break
@@ -718,8 +728,12 @@ class BindingTable:
                 is_beginning_stream = read_address == table_start
                 read_address += 1
 
-                if is_beginning_stream and binding_opcode == BINDING_OPCODE.SUBCODE_THREAED_APPLY:
-                    o, read_address = self.image.decode_uleb128(read_address)
+                if binding_opcode == BINDING_OPCODE.THREADED:
+                    if value == BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB:
+                        a_table_size, read_address = self.image.decode_uleb128(read_address)
+                        uses_threaded_bind = True
+                    elif value == BIND_SUBOPCODE_THREADED_APPLY:
+                        pass
 
                 if binding_opcode == BINDING_OPCODE.DONE:
                     import_stack.append(
@@ -781,9 +795,15 @@ class BindingTable:
                         seg_offset += skip + 8
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND:
-                    import_stack.append(
-                        record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
-                               special_dylib))
-                    seg_offset += 8
+                    if not uses_threaded_bind:
+                        import_stack.append(
+                            record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
+                                   special_dylib))
+                        seg_offset += 8
+                    else:
+                        threaded_stack.append(
+                            record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
+                                   special_dylib))
+                        seg_offset += 8
 
         return import_stack
