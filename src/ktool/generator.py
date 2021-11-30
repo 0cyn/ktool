@@ -14,7 +14,6 @@
 
 import os
 from collections import namedtuple
-from typing import Dict
 
 from kmacho.structs import *
 from . import log

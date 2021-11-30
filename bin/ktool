@@ -195,7 +195,7 @@ def main():
     parser_symbols.add_argument('--symtab', dest='get_symtab', action='store_true', help='Print out the symtab')
     parser_symbols.add_argument('--exports', dest='get_exports', action='store_true', help='Print exports')
     parser_symbols.add_argument('--slice', dest='slice_index', type=int,
-                             help="Specify Index of Slice (in FAT MachO) to examine")
+                                help="Specify Index of Slice (in FAT MachO) to examine")
     parser_symbols.add_argument('filename', nargs='?', default='')
     parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False,
                                 slice_index=0)
@@ -237,7 +237,8 @@ def main():
         except FileNotFoundError:
             exit_with_error(KToolError.ArgumentError, f'{args.filename} doesn\'t exist')
         except MalformedMachOException:
-            exit_with_error(KToolError.MalformedMachOError, f'Malformed MachO. Pass -f to force loading whatever possible')
+            exit_with_error(KToolError.MalformedMachOError,
+                            f'Malformed MachO. Pass -f to force loading whatever possible')
 
     if UPDATE_AVAILABLE:
         print(f'\n\nUpdate Available ---')
@@ -269,10 +270,10 @@ Misc Utilities ---
     file - Print very basic info about the MachO
     img4 - IMG4 Utilities
 
-Run `ktool [command]`  for info/examples on using that command
+Run `ktool [command]` for info/examples on using that command
 
 Global Flags:
-    -f - Force Load
+    -f - Force Load (ignores malformations in the MachO and tries to load whatever it can)
     -v [-1 through 5] - -1 will even hide errors, 5 is labeled internally as "TOO_MUCH"
     --bench - Run benchmarks. useful for developing/contributing.
         """

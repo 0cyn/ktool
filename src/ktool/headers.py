@@ -86,7 +86,7 @@ class TypeResolver:
                 if '.dylib' in name:
                     return None
                 return name
-            except Exception as ex:
+            except IndexError:
                 pass
         return None
 

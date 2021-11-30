@@ -16,7 +16,7 @@ import mmap
 import os
 from collections import namedtuple
 from enum import Enum
-from typing import Tuple, List, Dict
+from typing import Tuple, Dict
 
 from kmacho import *
 from kmacho.structs import *
@@ -253,7 +253,7 @@ class Slice:
 
     """
 
-    def __init__(self, macho_file: MachOFile, arch_struct: fat_arch, offset=0):
+    def __init__(self, macho_file: MachOFile, arch_struct: fat_arch = None, offset=0):
         """
 
         :param macho_file:

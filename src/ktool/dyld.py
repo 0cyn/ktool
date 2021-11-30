@@ -280,17 +280,17 @@ class Image:
 
         encoded = suffix.encode('utf-8') + b'\x00'
 
-        cmdsize = lc_type.SIZE
-        cmdsize += len(encoded)
-        cmdsize = 0x8 * math.ceil(cmdsize / 0x8)
-        log.debug(f'Computed Struct Size of {cmdsize}')
+        cmd_size = lc_type.SIZE
+        cmd_size += len(encoded)
+        cmd_size = 0x8 * math.ceil(cmd_size / 0x8)
+        log.debug(f'Computed Struct Size of {cmd_size}')
 
-        load_cmd.cmdsize = cmdsize
+        load_cmd.cmdsize = cmd_size
 
         off = dyld_header.SIZE
         off += self.macho_header.dyld_header.loadsize
-        raw = load_cmd.raw + encoded + (b'\x00' * (cmdsize - (lc_type.SIZE + len(encoded))))
-        log.debug(f'Padding Size {(cmdsize - (lc_type.SIZE + len(encoded)))}')
+        raw = load_cmd.raw + encoded + (b'\x00' * (cmd_size - (lc_type.SIZE + len(encoded))))
+        log.debug(f'Padding Size {(cmd_size - (lc_type.SIZE + len(encoded)))}')
         size = len(raw)
 
         if index != -1:
@@ -376,7 +376,6 @@ class Dyld:
             elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
                 log.warning(
                     "image uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
-                # fixups = ChainedFixups(image, cmd.dataoff, cmd.datasize)
                 pass
 
             elif isinstance(cmd, symtab_command):
@@ -568,7 +567,7 @@ class SymbolTable:
         return table
 
 
-export_node = namedtuple("export_node", ['text', 'offset'])
+export_node = namedtuple("export_node", ['text', 'offset', 'flags'])
 
 
 class ExportTrie(Constructable):
@@ -629,7 +628,7 @@ class ExportTrie(Constructable):
             flags = image.get_int_at(cursor, 1)
             cursor += 1
             offset, cursor = image.decode_uleb128(cursor)
-            results.append(export_node(string, offset))
+            results.append(export_node(string, offset, flags))
 
         return results
 
@@ -725,7 +724,6 @@ class BindingTable:
                 value = self.image.get_int_at(read_address, 1) & 0x0F
                 log.debug_tm(f'{BINDING_OPCODE(binding_opcode).name}: {hex(value)}')
                 cmd_start_addr = read_address
-                is_beginning_stream = read_address == table_start
                 read_address += 1
 
                 if binding_opcode == BINDING_OPCODE.THREADED:

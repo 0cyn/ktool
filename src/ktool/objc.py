@@ -220,7 +220,7 @@ class Struct_Representation:
             if len(self.field_names) > 0:
                 try:
                     field_name = self.field_names[i]
-                except IndexError as ex:
+                except IndexError:
                     log.debug(f'Missing a field in struct {self.name}')
 
             if isinstance(field.value, Struct_Representation):
