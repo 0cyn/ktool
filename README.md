@@ -55,7 +55,7 @@ Misc Utilities ---
     img4 - IMG4 Utilities
     
 
-Run `ktool [command]`  for info/examples on using that command
+Run `ktool [command]` for info/examples on using that command
 ```
 
 ### Documentation
