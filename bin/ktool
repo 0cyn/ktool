@@ -523,7 +523,7 @@ def edit(args):
                     if cmd.cmd == 0xD:
                         id_dylib_index = i
                         break
-                dylib_item = dylib.assemble()
+                dylib_item = Struct.create_with_values(dylib, [0x18, 2, 0, 0])
                 image.rm_load_command(id_dylib_index)
                 image = Dyld.load(macho_slice)
                 image.insert_lc_with_suf(LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
