@@ -131,7 +131,7 @@ class FatMachOGenerator:
         :rtype: fat_arch_for_slice
         """
         lib = Dyld.load(fat_slice)
-        cputype = lib.macho_header.dyld_header.cputype
+        cpu_type = lib.macho_header.dyld_header.cpu_type
         cpu_subtype = lib.macho_header.dyld_header.cpu_subtype
 
         if len(fat_slice.macho_file.slices) > 1:
@@ -145,15 +145,15 @@ class FatMachOGenerator:
             size = f.tell()
             f.seek(old_file_position, os.SEEK_SET)
 
-            if cputype == 16777228:
+            if cpu_type == 16777228:
                 align = pow(2, 0xe)
                 align_directive = 0xe
-            elif cputype == 16777223:
+            elif cpu_type == 16777223:
                 align = pow(2, 0xc)
                 align_directive = 0xc
             else:
                 # TODO: implement other alignment directives and stuff
-                print(cputype)
+                print(cpu_type)
                 raise AssertionError("not yet implemented")
         if previous_fat_arch is None:
             offset = align
@@ -166,4 +166,4 @@ class FatMachOGenerator:
 
         log.debug(f'Create arch with offset {hex(offset)} and size {hex(size)}')
 
-        return fat_arch_for_slice(fat_slice, cputype, cpu_subtype, offset, size, align_directive)
+        return fat_arch_for_slice(fat_slice, cpu_type, cpu_subtype, offset, size, align_directive)
