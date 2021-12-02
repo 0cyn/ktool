@@ -1,18 +1,18 @@
+#
+# If you're here looking for usage examples, look elsewhere (bin/ktool is better)
+# these test cases are just to make sure things work at a bare minimum, no good code to be found here,
+#   and there's a solid chance i'm doing something improperly out of sheer laziness
+#
+
 import os
 import sys
 import unittest
 
-from ktool import (
-    log,
-    Dyld,
-    LogLevel,
-    TBDGenerator,
-    HeaderGenerator,
-    MachOFile,
-    MachOFileType,
-    ObjCImage,
-    TapiYAMLWriter,
-)
+import ktool
+from ktool.headers import HeaderGenerator
+from ktool.macho import MachOFile, MachOFileType
+from ktool.objc import ObjCImage
+from ktool.util import log, LogLevel
 
 
 # We need to be in the right directory so we can find the bins
@@ -25,18 +25,16 @@ log.LOG_LEVEL = LogLevel.WARN
 class SymTabTestCase(unittest.TestCase):
     def test_bin(self):
         with open(scriptdir + '/bins/testbin1', 'rb') as file:
-            machofile = MachOFile(file)
-            image = Dyld.load(machofile.slices[0])
+            image = ktool.load_image(file)
+
             self.assertEqual(len(image.symbol_table.table), 23)
 
 
 class TBDTestCase(unittest.TestCase):
     def test_tapi_dump(self):
         with open(scriptdir + '/bins/PreferencesUI.dyldex', 'rb') as file:
-            machofile = MachOFile(file)
-            image = Dyld.load(machofile.slices[0])
-            tbd_dict = TBDGenerator(image).dict
-            print(TapiYAMLWriter.write_out(tbd_dict))
+            image = ktool.load_image(file)
+            print(ktool.generate_text_based_stub(image, True))
 
 
 class FileLoadTestCase(unittest.TestCase):
@@ -56,39 +54,39 @@ class FrameworksTestCase(unittest.TestCase):
 
     def test_coherence(self):
         with open(scriptdir + '/bins/Coherence.dyldex', 'rb') as fd:
-            HeaderGenerator(ObjCImage(Dyld.load(MachOFile(fd).slices[0])))
+            HeaderGenerator(ObjCImage(ktool.load_image(fd)))
 
     def test_safari_shared(self):
         with open(scriptdir + '/bins/SafariShared.dyldex', 'rb') as fd:
-            HeaderGenerator(ObjCImage(Dyld.load(MachOFile(fd).slices[0])))
+            HeaderGenerator(ObjCImage(ktool.load_image(fd)))
 
     def test_external_accesory(self):
         with open(scriptdir + '/bins/ExternalAccessory.dyldex', 'rb') as fd:
-            HeaderGenerator(ObjCImage(Dyld.load(MachOFile(fd).slices[0])))
+            HeaderGenerator(ObjCImage(ktool.load_image(fd)))
 
     def test_soundanalysis(self):
         with open(scriptdir + '/bins/SoundAnalysis', 'rb') as fd:
-            HeaderGenerator(ObjCImage(Dyld.load(MachOFile(fd).slices[0])))
+            HeaderGenerator(ObjCImage(ktool.load_image(fd)))
 
     def test_ktrace(self):
         with open(scriptdir + '/bins/ktrace.dyldex', 'rb') as fd:
-            ObjCImage(Dyld.load(MachOFile(fd).slices[0]))
+            ObjCImage(ktool.load_image(fd))
 
     def test_pfui(self):
         with open(scriptdir + '/bins/PreferencesUI', 'rb') as fd:
-            print(Dyld.load(MachOFile(fd).slices[0]).macho_header.flags)
+            print(ktool.load_image(fd).macho_header.flags)
 
     def test_pfui2(self):
         with open(scriptdir + '/bins/PreferencesUI.dyldex', 'rb') as fd:
-            ObjCImage(Dyld.load(MachOFile(fd).slices[0]))
+            ObjCImage(ktool.load_image(fd))
 
     def test_search(self):
         with open(scriptdir + '/bins/Search', 'rb') as fd:
-            ObjCImage(Dyld.load(MachOFile(fd).slices[0]))
+            ObjCImage(ktool.load_image(fd))
 
     def test_sbh(self):
         with open(scriptdir + '/bins/SpringBoardHome', 'rb') as fd:
-            objc_lib = ObjCImage(Dyld.load(MachOFile(fd).slices[0]))
+            objc_lib = ObjCImage(ktool.load_image(fd))
             self.assertGreater(len(objc_lib.classlist), 1)
             self.assertGreater(len(objc_lib.catlist), 1)
             self.assertGreater(len(objc_lib.classlist[0].methods), 4)
