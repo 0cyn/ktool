@@ -16,7 +16,7 @@ import os
 from collections import namedtuple
 
 from kmacho.structs import *
-from . import log
+from .util import log
 from .dyld import Dyld, SymbolType, Image
 from .macho import Slice
 from .objc import ObjCImage

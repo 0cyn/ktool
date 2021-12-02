@@ -40,7 +40,11 @@ from pygments.formatters.terminal256 import Terminal256Formatter
 from pygments.lexers.objective import ObjectiveCLexer
 
 from kmacho import LOAD_COMMAND
-from ktool import MachOFile, Dyld, ObjCImage, HeaderGenerator
+
+from ktool.macho import MachOFile
+from ktool.dyld import Dyld
+from ktool.objc import ObjCImage
+from ktool.headers import HeaderGenerator
 
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
