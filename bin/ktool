@@ -325,6 +325,7 @@ def _open(args):
         log.LOG_LEVEL = LogLevel.DEBUG
         screen = KToolScreen()
         log.LOG_FUNC = screen.ktool_dbg_print_func
+        log.LOG_ERR = screen.ktool_dbg_print_func
         screen.load_file(args.filename)
     except KeyboardInterrupt:
         external_hard_fault_teardown()

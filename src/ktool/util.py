@@ -14,6 +14,7 @@
 
 import inspect
 import os
+import sys
 from enum import Enum
 
 from .exceptions import *
@@ -93,6 +94,10 @@ class LogLevel(Enum):
     DEBUG_TOO_MUCH = 5
 
 
+def print_err(msg):
+    print(msg, file=sys.stderr)
+
+
 class log:
     """
     Python's default logging image is absolute garbage
@@ -104,6 +109,8 @@ class log:
     # Should be a function name, without ()
     # We make this dynamically changeable for the sake of being able to redirect output in GUI tools.
     LOG_FUNC = print
+    LOG_ERR = print_err
+
 
     @staticmethod
     def get_class_from_frame(fr):
@@ -148,14 +155,14 @@ class log:
     @staticmethod
     def warn(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.WARN.value:
-            log.LOG_FUNC(f'WARN - {log.line()} - {msg}')
+            log.LOG_ERR(f'WARN - {log.line()} - {msg}')
 
     @staticmethod
     def warning(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.WARN.value:
-            log.LOG_FUNC(f'WARN - {log.line()} - {msg}')
+            log.LOG_ERR(f'WARN - {log.line()} - {msg}')
 
     @staticmethod
     def error(msg: str):
         if log.LOG_LEVEL.value >= LogLevel.ERROR.value:
-            log.LOG_FUNC(f'ERROR - {log.line()} - {msg}')
+            log.LOG_ERR(f'ERROR - {log.line()} - {msg}')
