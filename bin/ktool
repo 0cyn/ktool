@@ -27,20 +27,14 @@ from kimg4.img4 import IM4P
 from packaging.version import Version
 
 from kmacho import LOAD_COMMAND, dylib_command, dylib, Struct
-from ktool import (
-    Dyld,
-    TBDGenerator,
-    FatMachOGenerator,
-    HeaderGenerator,
-    MachOFileType,
-    MachOFile,
-    ObjCImage,
-    TapiYAMLWriter,
-    log,
-    LogLevel
-)
+
+import ktool
+
+from ktool.dyld import Dyld
 from ktool.exceptions import *
-from ktool.util import KTOOL_VERSION, ignore
+from ktool.generator import FatMachOGenerator
+from ktool.macho import MachOFileType, MachOFile
+from ktool.util import KTOOL_VERSION, ignore, log, LogLevel
 from ktool.window import KToolScreen, external_hard_fault_teardown, Table
 
 UPDATE_AVAILABLE = False
@@ -264,6 +258,8 @@ def main():
         ignore.MALFORMED = True
 
     if args.bench:
+        # This will run the program as normal, but with profiling enabled
+        # It will print what are arguably the 10 routines contributing the most to slowdowns.
         import cProfile
         import pstats
 
@@ -357,8 +353,7 @@ def symbols(args):
 
     if args.get_exports:
         with open(args.filename, 'rb') as fd:
-            machofile = MachOFile(fd)
-            image = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_imports=False)
+            image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False)
 
             table = Table()
             table.titles = ['Address', 'Symbol']
@@ -370,8 +365,7 @@ def symbols(args):
 
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:
-            machofile = MachOFile(fd)
-            image = Dyld.load(machofile.slices[args.slice_index], load_imports=False, load_exports=False)
+            image = ktool.load_image(fd, args.slice_index, load_imports=False, load_exports= False)
 
             table = Table()
             table.titles = ['Address', 'Name']
@@ -383,8 +377,7 @@ def symbols(args):
 
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
-            machofile = MachOFile(fd)
-            image = Dyld.load(machofile.slices[args.slice_index], load_exports=False, load_symtab=False)
+            image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False)
 
             syms = {}
             symbol = namedtuple('symbol', ['name', 'image', 'from_table'])
@@ -415,8 +408,8 @@ def symbols(args):
 
     elif args.get_actions:
         with open(args.filename, 'rb') as fd:
-            machofile = MachOFile(fd)
-            image = Dyld.load(machofile.slices[args.slice_index])
+            image = ktool.load_image(fd, args.slice_index)
+
             print('\nBinding Info'.ljust(60, '-') + '\n')
             for sym in image.binding_table.symbol_table:
                 try:
@@ -657,19 +650,21 @@ def _list(args):
     require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs'])
 
     with open(args.filename, 'rb') as fd:
-        machofile = MachOFile(fd)
-        image = Dyld.load(machofile.slices[args.slice_index])
+        image = ktool.load_image(fd, args.slice_index)
+
+        if not args.get_lcs and not args.get_linked:
+            objc_image = ktool.load_objc_metadata(image)
+
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
+
         if args.get_lcs:
             for lc in image.macho_header.load_commands:
                 print(str(lc))
         elif args.get_classes:
-            objc_lib = ObjCImage(image)
-            for obj_class in objc_lib.classlist:
+            for obj_class in objc_image.classlist:
                 print(f'{obj_class.name}')
         elif args.get_protos:
-            objc_lib = ObjCImage(image)
-            for objc_proto in objc_lib.protolist:
+            for objc_proto in objc_image.protolist:
                 print(f'{objc_proto.name}')
         elif args.get_linked:
             for exlib in image.linked:
@@ -717,10 +712,11 @@ def info(args):
 
     """
     with open(args.filename, 'rb') as fp:
-        machofile = MachOFile(fp)
-        image = Dyld.load(machofile.slices[args.slice_index], load_symtab=False, load_imports=False, load_exports=False)
+        image = ktool.load_image(fp, args.slice_index, load_symtab=False, load_imports=False, load_exports=False)
+
         if args.get_vm:
             print(image.vm)
+
         else:
             print(f'Name: {image.name}')
             print(f'Filetype: {image.macho_header.filetype.name}')
@@ -733,7 +729,7 @@ def info(args):
 
 def dump(args):
     """
-    ktool dump
+    ------
     Tools to reconstruct certain files from compiled MachOs
 
     To dump a set of headers for a bin/framework
@@ -748,49 +744,34 @@ def dump(args):
     require_args(args, one_of=['do_headers', 'do_tbd'])
 
     if args.do_headers:
+        require_args(args, always=['outdir'])
+
         with open(args.filename, 'rb') as fp:
-            macho_file = MachOFile(fp)
-            image = Dyld.load(macho_file.slices[args.slice_index])
+            image = ktool.load_image(fp, args.slice_index)
+
             if image.name == "":
                 image.name = os.path.basename(args.filename)
-            objc_lib = ObjCImage(image)
 
-            if args.sort_headers:
-                for objc_class in objc_lib.classlist:
-                    objc_class.methods.sort(key=lambda h: h.signature)
-                    objc_class.properties.sort(key=lambda h: h.name)
-                    if objc_class.metaclass is not None:
-                        objc_class.metaclass.methods.sort(key=lambda h: h.signature)
+            objc_image = ktool.load_objc_metadata(image)
 
-                for objc_proto in objc_lib.protolist:
-                    objc_proto.methods.sort(key=lambda h: h.signature)
-                    objc_proto.opt_methods.sort(key=lambda h: h.signature)
+            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers)
 
-            if args.outdir is None:
-                exit_with_error(KToolError.ArgumentError,
-                                "Missing --out flag (--out <directory>), specifies directory to place headers")
-
-            generator = HeaderGenerator(objc_lib)
-            for header_name, header in generator.headers.items():
-                if args.outdir == "kdbg":  # something i can put into IDE args that wont accidentally get used by a user
-                    print('\n\n')
-                    print(header_name)
-                    print()
-                    print(header)
+            for header_name, header in objc_headers.items():
+                if args.outdir == "kdbg":
+                    print(f'\n\n{header_name}\n{header}')
                 elif args.outdir == 'ndbg':
                     pass
                 else:
                     os.makedirs(args.outdir, exist_ok=True)
                     with open(args.outdir + '/' + header_name, 'w') as out:
-                        out.write(str(header))
+                        out.write(header)
 
     elif args.do_tbd:
         with open(args.filename, 'rb') as fp:
-            macho_file = MachOFile(fp)
-            image = Dyld.load(macho_file.slices[args.slice_index])
-            tbdgen = TBDGenerator(image, True)
+            image = ktool.load_image(fp, args.slice_index)
+
             with open(image.name + '.tbd', 'w') as filen:
-                filen.write(TapiYAMLWriter.write_out(tbdgen.dict))
+                filen.write(ktool.generate_text_based_stub(image, compatibility=True))
 
 
 if __name__ == "__main__":
