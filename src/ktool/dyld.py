@@ -313,10 +313,7 @@ class Image:
 
 class Dyld:
     """
-    This is a static class containing several methods for, essentially, recreating the functionality of Dyld for our
-    own purposes.
-
-    It isn't meant to be a faithful recreation of dyld so to speak, it just does things dyld also does, kinda.
+    This class takes our initialized "Image" object, parses through the raw data behind it, and fills out its properties.
 
     """
 
@@ -346,17 +343,20 @@ class Dyld:
         fixups = None
         log.info(f'registered {len(image.macho_header.load_commands)} Load Commands')
         for cmd in image.macho_header.load_commands:
-            if isinstance(cmd, segment_command_64):
-                log.debug("Loading segment_command_64")
+            load_command = LOAD_COMMAND(cmd.cmd)
+
+            if load_command == LOAD_COMMAND.SEGMENT_64:
+                log.debug("Loading SEGMENT_64")
                 segment = Segment(image, cmd)
 
                 log.info(f'Loaded Segment {segment.name}')
+
                 image.vm.add_segment(segment)
                 image.segments[segment.name] = segment
 
                 log.debug(f'Added {segment.name} to VM Map')
 
-            elif isinstance(cmd, dyld_info_command):
+            elif load_command == LOAD_COMMAND.DYLD_INFO_ONLY:
                 image.info = cmd
 
                 if load_imports:
@@ -369,35 +369,35 @@ class Dyld:
                     log.info("Loading Export Trie")
                     image.exports = ExportTrie.from_bytes(image, cmd.export_off, cmd.export_size)
 
-            elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
+            elif load_command == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
                 log.info("Loading Export Trie")
                 image.exports = ExportTrie.from_bytes(image, cmd.dataoff, cmd.datasize)
 
-            elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
+            elif load_command == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
                 log.warning(
                     "image uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
                 pass
 
-            elif isinstance(cmd, symtab_command):
+            elif load_command == LOAD_COMMAND.SYMTAB:
                 if load_symtab:
                     log.info("Loading Symbol Table")
                     image.symbol_table = SymbolTable(image, cmd)
 
-            elif isinstance(cmd, uuid_command):
+            elif load_command == LOAD_COMMAND.UUID:
                 image.uuid = cmd.uuid.to_bytes(16, "little")
                 log.info(f'image UUID: {image.uuid}')
 
-            elif isinstance(cmd, sub_client_command):
+            elif load_command == LOAD_COMMAND.SUB_CLIENT:
                 string = image.get_cstr_at(cmd.off + cmd.offset)
                 image.allowed_clients.append(string)
                 log.debug(f'Loaded Subclient "{string}"')
 
-            elif isinstance(cmd, rpath_command):
+            elif load_command == LOAD_COMMAND.RPATH:
                 string = image.get_cstr_at(cmd.off + cmd.path)
                 image.rpath = string
                 log.info(f'image Resource Path: {string}')
 
-            elif isinstance(cmd, build_version_command):
+            elif load_command == LOAD_COMMAND.BUILD_VERSION:
                 image.platform = PlatformType(cmd.platform)
                 image.minos = os_version(x=image.get_int_at(cmd.off + 14, 2), y=image.get_int_at(cmd.off + 13, 1),
                                          z=image.get_int_at(cmd.off + 12, 1))
@@ -412,27 +412,27 @@ class Dyld:
             elif isinstance(cmd, version_min_command):
                 # Only override this if it wasn't set by build_version
                 if image.platform == PlatformType.UNK:
-                    if LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_MACOSX:
+                    if load_command == LOAD_COMMAND.VERSION_MIN_MACOSX:
                         image.platform = PlatformType.MACOS
-                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_IPHONEOS:
+                    elif load_command == LOAD_COMMAND.VERSION_MIN_IPHONEOS:
                         image.platform = PlatformType.IOS
-                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_TVOS:
+                    elif load_command == LOAD_COMMAND.VERSION_MIN_TVOS:
                         image.platform = PlatformType.TVOS
-                    elif LOAD_COMMAND(cmd.cmd) == LOAD_COMMAND.VERSION_MIN_WATCHOS:
+                    elif load_command == LOAD_COMMAND.VERSION_MIN_WATCHOS:
                         image.platform = PlatformType.WATCHOS
 
                     image.minos = os_version(x=image.get_int_at(cmd.off + 10, 2),
                                              y=image.get_int_at(cmd.off + 9, 1),
                                              z=image.get_int_at(cmd.off + 8, 1))
 
+            elif load_command == LOAD_COMMAND.ID_DYLIB:
+                image.dylib = ExternalDylib(image, cmd)
+                log.info(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
+
             elif isinstance(cmd, dylib_command):
-                if cmd.cmd == 0xD:  # local
-                    image.dylib = ExternalDylib(image, cmd)
-                    log.info(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
-                else:
-                    external_dylib = ExternalDylib(image, cmd)
-                    image.linked.append(external_dylib)
-                    log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
+                external_dylib = ExternalDylib(image, cmd)
+                image.linked.append(external_dylib)
+                log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
         if image.dylib is not None:
             image.name = image.dylib.install_name.split('/')[-1]
@@ -546,7 +546,7 @@ class SymbolTable:
 
     def __init__(self, image: Image, cmd: symtab_command):
         self.image: Image = image
-        self.cmd = cmd
+        self.cmd: symtab_command = cmd
 
         self.ext: List[Symbol] = []
         self.table: List[Symbol] = self._load_symbol_table()
@@ -604,6 +604,7 @@ class ExportTrie(Constructable):
     def read_node(cls, image: Image, trie_start: int, string: str, cursor: int, endpoint: int) -> List[export_node]:
 
         if cursor > endpoint:
+            log.error("Node offset greater than size of export trie")
             macho_is_malformed()
 
         start = cursor
@@ -682,7 +683,6 @@ class BindingTable:
         for act in self.actions:
             if act.item:
                 sym = Symbol(self.image, fullname=act.item, ordinal=act.libname, addr=act.vmaddr)
-                # log.debug(f'Binding info: Loaded symbol:{act.item} ordinal:{act.libname} addr:{act.vmaddr}')
                 table.append(sym)
                 self.lookup_table[act.vmaddr] = sym
         return table
@@ -695,7 +695,6 @@ class BindingTable:
             try:
                 lib = self.image.linked[bind_command.lib_ordinal - 1].install_name
             except IndexError:
-                # log.debug(f'Binding Info: {bind_command.lib_ordinal} Ordinal wasn't found, Something is wrong')
                 lib = str(bind_command.lib_ordinal)
             item = bind_command.name
             actions.append(action(vm_address & 0xFFFFFFFFF, lib, item))
