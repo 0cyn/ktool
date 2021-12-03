@@ -118,20 +118,19 @@ def require_args(args, always=None, one_of=None):
         missing = []
         for i in always:
             if not hasattr(args, i):
-                print(args.func.__doc__)
                 missing.append(i)
-                exit_with_error(KToolError.ArgumentError, f'Missing required argument {i}')
             elif not getattr(args, i):
-                print(args.func.__doc__)
                 missing.append(i)
-                exit_with_error(KToolError.ArgumentError, f'Missing required argument {i}')
+
         if len(missing) > 0:
+            print(args.func.__doc__)
             if len(missing) == 1:
                 error_str = f'Missing required argument {arg_dest_to_name(MAIN_PARSER, missing[0])}'
                 exit_with_error(KToolError.ArgumentError, error_str)
             else:
                 error_str = 'Missing required arguments: '
                 error_str += ', '.join([arg_dest_to_name(MAIN_PARSER, i) for i in missing])
+                exit_with_error(KToolError.ArgumentError, error_str)
 
     if one_of:
         found_one = False
@@ -602,8 +601,8 @@ def img4(args):
             for bag in im4p.kbag.keybags:
                 print(f'{bag.iv.hex()}{bag.key.hex()}')
     if args.do_decrypt:
-        if not args.aes_key or not args.aes_iv:
-            exit_with_error(KToolError.ArgumentError, "--dec option requires --iv and --key")
+        require_args(args, always=['aes_key', 'aes_iv'])
+
         out = args.out
         if not out:
             out = args.filename + '.dec'
