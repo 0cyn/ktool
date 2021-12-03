@@ -78,6 +78,7 @@ class KToolError(Enum):
     ArgumentError = 1
     FiletypeError = 2
     MalformedMachOError = 3
+    ProcessingError = 4
 
 
 def exit_with_error(error: KToolError, msg):
@@ -519,16 +520,22 @@ def insert(args):
     patched_libraries = []
 
     with open(args.filename, 'rb') as fp:
-        machofile = MachOFile(fp)
-        for macho_slice in machofile.slices:
-            image = Dyld.load(macho_slice)
+        macho_file = ktool.load_macho_file(fp)
+        for macho_slice in macho_file.slices:
+            image = ktool.load_image(macho_slice)
             last_dylib_command_index = -1
             for i, cmd in enumerate(image.macho_header.load_commands):
                 if isinstance(cmd, dylib_command):
                     last_dylib_command_index = i + 1
             dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
             image.insert_lc_with_suf(lc, [dylib_item.raw], args.payload, last_dylib_command_index)
-            image = Dyld.load(macho_slice)
+
+            log.info("Reloading MachO Slice to verify integrity")
+            try:
+                image = ktool.load_image(macho_slice)
+            except MalformedMachOException:
+                exit_with_error(KToolError.ProcessingError, "Reloading MachO after patch failed. This is an issue with my patch code. Please file an issue on https://github.com/kritantadev/ktool.")
+
             patched_libraries.append(image)
 
     with open(args.out, 'wb') as fd:
@@ -563,9 +570,9 @@ def edit(args):
         new_iname = args.iname
 
         with open(args.filename, 'rb') as fp:
-            machofile = MachOFile(fp)
-            for macho_slice in machofile.slices:
-                image = Dyld.load(macho_slice)
+            macho_file = ktool.load_macho_file(fp)
+            for macho_slice in macho_file.slices:
+                image = ktool.load_image(macho_slice)
                 id_dylib_index = -1
                 for i, cmd in enumerate(image.macho_header.load_commands):
                     if cmd.cmd == 0xD:
@@ -573,9 +580,19 @@ def edit(args):
                         break
                 dylib_item = Struct.create_with_values(dylib, [0x18, 2, 0, 0])
                 image.rm_load_command(id_dylib_index)
-                image = Dyld.load(macho_slice)
+
+                try:
+                    image = ktool.load_image(macho_slice)
+                except MalformedMachOException:
+                    exit_with_error(KToolError.ProcessingError, "Reloading MachO after patch failed. This is an issue with my patch code. Please file an issue on https://github.com/kritantadev/ktool.")
+
                 image.insert_lc_with_suf(LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
-                image = Dyld.load(macho_slice)
+
+                try:
+                    image = ktool.load_image(macho_slice)
+                except MalformedMachOException:
+                    exit_with_error(KToolError.ProcessingError, "Reloading MachO after patch failed. This is an issue with my patch code. Please file an issue on https://github.com/kritantadev/ktool.")
+
                 patched_libraries.append(image)
 
         with open(args.out, 'wb') as fd:
@@ -651,7 +668,7 @@ def lipo(args):
         for filename in args.filename:
             # Slice() might hold a ref preventing it from being closed? but i'm just going to let it close on exit()
             fd = open(filename, 'rb')
-            macho_file = MachOFile(fd)
+            macho_file = ktool.load_macho_file(fd)
             if macho_file.type != MachOFileType.THIN:
                 exit_with_error(KToolError.ArgumentError, "Fat mach-o passed to --create")
             slices.append(macho_file.slices[0])
@@ -666,7 +683,7 @@ def lipo(args):
 
     elif args.extract != "":
         with open(args.filename[0], 'rb') as fd:
-            macho_file = MachOFile(fd)
+            macho_file = ktool.load_macho_file(fd)
             output = args.out
             if output == "":
                 output = args.filename[0] + '.' + args.extract.lower()
@@ -736,7 +753,7 @@ def _file(args):
         ktool file [filename]
     """
     with open(args.filename, 'rb') as fp:
-        machofile = MachOFile(fp)
+        machofile = ktool.load_image(fp)
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
 
         if machofile.type == MachOFileType.FAT:
