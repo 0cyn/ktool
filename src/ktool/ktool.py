@@ -12,7 +12,7 @@
 #  Copyright (c) kat 2021.
 #
 
-from typing import Dict
+from typing import Dict, Union, BinaryIO
 
 from .generator import TBDGenerator
 from .headers import HeaderGenerator
@@ -26,7 +26,8 @@ def load_macho_file(fp) -> MachOFile:
     return MachOFile(fp)
 
 
-def load_image(fp, slice_index=0, load_symtab=True, load_imports=True, load_exports=True) -> Image:
+def load_image(fp: Union[BinaryIO, MachOFile], slice_index=0, load_symtab=True, load_imports=True, load_exports=True) -> Image:
+
     if not isinstance(fp, MachOFile):
         macho_file = MachOFile(fp)
     else:

@@ -23,6 +23,7 @@ import urllib.request
 from argparse import ArgumentParser
 from collections import namedtuple
 from enum import Enum
+from typing import Union
 
 from kimg4.img4 import IM4P
 from packaging.version import Version
@@ -31,12 +32,20 @@ from kmacho import LOAD_COMMAND, dylib_command, dylib, Struct
 
 import ktool
 
-from ktool.dyld import Dyld
+from ktool import (
+    Dyld,
+    MachOFile,
+    MachOFileType,
+    KTOOL_VERSION,
+    ignore,
+    log,
+    LogLevel,
+    Table
+)
+
 from ktool.exceptions import *
 from ktool.generator import FatMachOGenerator
-from ktool.macho import MachOFileType, MachOFile
-from ktool.util import KTOOL_VERSION, ignore, log, LogLevel
-from ktool.window import KToolScreen, external_hard_fault_teardown, Table
+from ktool.window import KToolScreen, external_hard_fault_teardown
 
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
@@ -77,7 +86,7 @@ def exit_with_error(error: KToolError, msg):
 
 
 # noinspection PyProtectedMember
-def arg_dest_to_name(parser, dest):
+def arg_dest_to_name(parser: Union[None, ArgumentParser], dest):
     """
     Convert dest (an argument destination variable name) to the actual flag used to set it (do_headers -> --headers)
 
@@ -90,9 +99,13 @@ def arg_dest_to_name(parser, dest):
     args = {}
 
     for k, v in parser._option_string_actions.items():
+        # parser here is an instance of ArgumentParser
         args[str(v.dest)] = k
 
     for parser_name, sparser in parser._subparsers._group_actions[0].choices.items():
+        # if a parser has subparsers, you'll be able to get an instance of ArgumentParser representing them at
+        # _subparsers._group_actions[0].choices, which is a Dict[str, Argumentparser] containing all registered
+        # subparsers.
         for k, v in sparser._option_string_actions.items():
             args[str(v.dest)] = k
 
