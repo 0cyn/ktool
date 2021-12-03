@@ -753,7 +753,7 @@ def _file(args):
         ktool file [filename]
     """
     with open(args.filename, 'rb') as fp:
-        machofile = ktool.load_image(fp)
+        machofile = ktool.load_macho_file(fp)
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
 
         if machofile.type == MachOFileType.FAT:
