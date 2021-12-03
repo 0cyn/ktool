@@ -22,8 +22,15 @@ from .macho import Slice, MachOFile
 from .util import TapiYAMLWriter
 
 
+def load_macho_file(fp) -> MachOFile:
+    return MachOFile(fp)
+
+
 def load_image(fp, slice_index=0, load_symtab=True, load_imports=True, load_exports=True) -> Image:
-    macho_file = MachOFile(fp)
+    if not isinstance(fp, MachOFile):
+        macho_file = MachOFile(fp)
+    else:
+        macho_file = fp
     macho_slice: Slice = macho_file.slices[slice_index]
 
     return Dyld.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports, load_exports=load_exports)

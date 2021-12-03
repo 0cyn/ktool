@@ -17,6 +17,7 @@
 import json
 import os
 import os.path
+import sys
 import threading
 import urllib.request
 from argparse import ArgumentParser
@@ -38,6 +39,7 @@ from ktool.util import KTOOL_VERSION, ignore, log, LogLevel
 from ktool.window import KToolScreen, external_hard_fault_teardown, Table
 
 UPDATE_AVAILABLE = False
+MAIN_PARSER = None
 
 
 def get_terminal_size():
@@ -70,8 +72,34 @@ class KToolError(Enum):
 
 
 def exit_with_error(error: KToolError, msg):
-    print(f'Encountered an Error ({error.name}):\n', f"{msg}")
+    print(f'Encountered an Error ({error.name}):\n', f"{msg}", file=sys.stderr)
     exit(error.value)
+
+
+# noinspection PyProtectedMember
+def arg_dest_to_name(parser, dest):
+    """
+    Convert dest (an argument destination variable name) to the actual flag used to set it (do_headers -> --headers)
+
+    Uses internal properties from argparse, this also iterates through all subparsers
+
+    :param parser: main argument parser to pull the original flag from
+    :param dest: destination variable name
+    :return:
+    """
+    args = {}
+
+    for k, v in parser._option_string_actions.items():
+        args[str(v.dest)] = k
+
+    for parser_name, sparser in parser._subparsers._group_actions[0].choices.items():
+        for k, v in sparser._option_string_actions.items():
+            args[str(v.dest)] = k
+
+    if dest not in args:
+        raise AttributeError(f'{dest} destination not in any arguments.')
+
+    return args[dest]
 
 
 def require_args(args, always=None, one_of=None):
@@ -85,14 +113,25 @@ def require_args(args, always=None, one_of=None):
     :param one_of: At least one of these arguments must be passed, and must evaluate as True
     :return:
     """
+
     if always:
+        missing = []
         for i in always:
             if not hasattr(args, i):
                 print(args.func.__doc__)
+                missing.append(i)
                 exit_with_error(KToolError.ArgumentError, f'Missing required argument {i}')
             elif not getattr(args, i):
                 print(args.func.__doc__)
+                missing.append(i)
                 exit_with_error(KToolError.ArgumentError, f'Missing required argument {i}')
+        if len(missing) > 0:
+            if len(missing) == 1:
+                error_str = f'Missing required argument {arg_dest_to_name(MAIN_PARSER, missing[0])}'
+                exit_with_error(KToolError.ArgumentError, error_str)
+            else:
+                error_str = 'Missing required arguments: '
+                error_str += ', '.join([arg_dest_to_name(MAIN_PARSER, i) for i in missing])
 
     if one_of:
         found_one = False
@@ -103,7 +142,7 @@ def require_args(args, always=None, one_of=None):
                     break
         if not found_one:
             print(args.func.__doc__)
-            exit_with_error(KToolError.ArgumentError, f'Missing one of [{",".join(one_of)}]')
+            exit_with_error(KToolError.ArgumentError, f'Missing one of {", ".join([arg_dest_to_name(MAIN_PARSER, i) for i in one_of])}')
 
 
 def main():
@@ -231,6 +270,9 @@ def main():
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
     # this means when that command is used, calling args.func() will branch off to that function.
     args = parser.parse_args()
+
+    global MAIN_PARSER
+    MAIN_PARSER = parser
 
     if 'KTOOL_NO_UPDATE_CHECK' not in os.environ:
         # set this off on a separate thread before we do anything else
