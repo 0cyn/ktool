@@ -384,6 +384,10 @@ def _open(args):
     except KeyboardInterrupt:
         external_hard_fault_teardown()
         print('Hard Faulted. This was likely due to a curses error causing a freeze while rendering.')
+        exit(64)
+
+    # should probably just always do this, just in case.
+    external_hard_fault_teardown()
 
 
 def symbols(args):
