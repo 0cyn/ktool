@@ -84,8 +84,8 @@ class TBDGenerator:
 
 fat_arch_for_slice = namedtuple("fat_arch_for_slice", [
     "slice",
-    "cputype",
-    "cpusubtype",
+    "cpu_type",
+    "cpu_subtype",
     "offset",
     "size",
     "align"
@@ -114,7 +114,7 @@ class FatMachOGenerator:
 
         for fat_arch_item in self.fat_archs:
             fa = Struct.create_with_values(fat_arch,
-                                           [fat_arch_item.cputype, fat_arch_item.cpusubtype, fat_arch_item.offset,
+                                           [fat_arch_item.cpu_type, fat_arch_item.cpu_subtype, fat_arch_item.offset,
                                             fat_arch_item.size, fat_arch_item.align], "big")
             fat_head += fa.raw
 

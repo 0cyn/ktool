@@ -367,8 +367,8 @@ class Interface:
         # Protocol Implementing Declaration
         if len(self.objc_class.protocols) > 0:
             head += " <"
-            for prot in self.objc_class.protocols:
-                head += str(prot) + ', '
+            for protocol in self.objc_class.protocols:
+                head += str(protocol) + ', '
             head = head[:-2]
             head += '>\n\n'
 
@@ -401,13 +401,13 @@ class Interface:
             if not hasattr(property, 'type'):
                 continue
             if property.type.lower() == 'bool':
-                gettername = 'is' + property.name[0].upper() + property.name[1:]
-                self.getters.append(gettername)
+                getter_name = 'is' + property.name[0].upper() + property.name[1:]
+                self.getters.append(getter_name)
             else:
                 self.getters.append(property.name)
             if 'readonly' not in property.attributes:
-                settername = 'set' + property.name[0].upper() + property.name[1:]
-                self.setters.append(settername)
+                setter_name = 'set' + property.name[0].upper() + property.name[1:]
+                self.setters.append(setter_name)
             self.properties.append(property)
 
     def _process_ivars(self):
@@ -441,8 +441,8 @@ class Interface:
 
 
 class StructDef:
-    def __init__(self, structdef):
-        self.structdef = structdef
+    def __init__(self, struct_definition):
+        self.struct_definition = struct_definition
 
 
 class CategoryInterface:
@@ -467,8 +467,8 @@ class CategoryInterface:
         # Protocol Implementing Declaration
         if len(self.category.protocols) > 0:
             head += " <"
-            for prot in self.category.protocols:
-                head += str(prot) + ', '
+            for protocol in self.category.protocols:
+                head += str(protocol) + ', '
             head = head[:-2]
             head += '>\n'
 
