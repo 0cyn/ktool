@@ -56,6 +56,11 @@ class FrameworksTestCase(unittest.TestCase):
         with open(scriptdir + '/bins/Coherence.dyldex', 'rb') as fd:
             HeaderGenerator(ObjCImage(ktool.load_image(fd)))
 
+    def test_no_mmaped_support(self):
+        with open(scriptdir + '/bins/Coherence.dyldex', 'rb') as fp:
+            macho_file = ktool.load_macho_file(fp, False)
+            ktool.load_objc_metadata(ktool.load_image(macho_file))
+
     def test_safari_shared(self):
         with open(scriptdir + '/bins/SafariShared.dyldex', 'rb') as fd:
             HeaderGenerator(ObjCImage(ktool.load_image(fd)))
@@ -75,10 +80,6 @@ class FrameworksTestCase(unittest.TestCase):
     def test_pfui(self):
         with open(scriptdir + '/bins/PreferencesUI', 'rb') as fd:
             print(ktool.load_image(fd).macho_header.flags)
-
-    def test_pfui2(self):
-        with open(scriptdir + '/bins/PreferencesUI.dyldex', 'rb') as fd:
-            ObjCImage(ktool.load_image(fd))
 
     def test_search(self):
         with open(scriptdir + '/bins/Search', 'rb') as fd:

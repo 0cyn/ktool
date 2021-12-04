@@ -12,7 +12,7 @@
 #  Copyright (c) kat 2021.
 #
 
-import mmap
+mmap = None
 import os
 from collections import namedtuple
 from enum import Enum
@@ -30,9 +30,23 @@ class MachOFileType(Enum):
 
 
 class MachOFile:
-    def __init__(self, file):
+    def __init__(self, file, use_mmaped_io=True):
         self.file_object = file
-        self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_COPY)
+
+        self.uses_mmaped_io = use_mmaped_io
+
+        if use_mmaped_io:
+            global mmap
+            import mmap
+            self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_COPY)
+            self._get_bytes_at = self._mmaped_get_bytes_at
+            self._get_at = self._mmaped_get_at
+
+        else:
+            self.file = file
+            self._get_bytes_at = self._bio_get_bytes_at
+            self._get_at = self._bio_get_at
+
         self.slices = []
         self.magic = self._get_at(0, 4)
         self.type = self._load_filetype()
@@ -63,11 +77,20 @@ class MachOFile:
 
         return struct
 
-    def _get_bytes_at(self, addr, count):
+    def _bio_get_bytes_at(self, addr: int, count: int):
+        self.file.seek(addr)
+        data = self.file.read(count)
+        self.file.seek(0)
+        return data
+
+    def _mmaped_get_bytes_at(self, addr: int, count: int):
         return self.file[addr: addr + count]
 
+    def _bio_get_at(self, addr: int, count: int, endian="big"):
+        return int.from_bytes(self._bio_get_bytes_at(addr, count), endian)
+
     # noinspection PyTypeChecker
-    def _get_at(self, addr, count, endian="big") -> int:
+    def _mmaped_get_at(self, addr: int, count: int, endian="big") -> int:
         return int.from_bytes(self.file[addr:addr + count], endian)
 
     def __del__(self):
@@ -263,6 +286,17 @@ class Slice:
         self.macho_file: MachOFile = macho_file
         self.arch_struct: fat_arch = arch_struct
 
+        if macho_file.uses_mmaped_io:
+            self.get_int_at = self._mmap_get_int_at
+            self.get_bytes_at = self._mmap_get_bytes_at
+            self.get_str_at = self._mmap_get_str_at
+            self.get_cstr_at = self._mmap_get_cstr_at
+        else:
+            self.get_int_at = self._bio_get_int_at
+            self.get_bytes_at = self._bio_get_bytes_at
+            self.get_str_at = self._bio_get_str_at
+            self.get_cstr_at = self._bio_get_cstr_at
+
         self.patches = {}
 
         self.patched_bytes = b''
@@ -319,15 +353,26 @@ class Slice:
 
         return struct
 
-    def get_int_at(self, addr: int, count: int, endian="little"):
+    def _mmap_get_int_at(self, addr: int, count: int, endian="little"):
         addr = addr + self.offset
         return int.from_bytes(self.macho_file.file[addr:addr + count], endian)
 
-    def get_bytes_at(self, addr: int, count: int):
+    def _bio_get_int_at(self, addr: int, count: int, endian="little"):
+        addr = addr + self.offset
+        return int.from_bytes(self._bio_get_bytes_at(addr, count), endian)
+
+    def _mmap_get_bytes_at(self, addr: int, count: int):
         addr = addr + self.offset
         return self.macho_file.file[addr:addr + count]
 
-    def get_str_at(self, addr: int, count: int) -> str:
+    def _bio_get_bytes_at(self, addr: int, count: int, endian="little"):
+        addr = addr + self.offset
+        self.macho_file.file.seek(addr)
+        data = self.macho_file.file.read(count)
+        self.macho_file.file.seek(0)
+        return data
+
+    def _mmap_get_str_at(self, addr: int, count: int) -> str:
         """
         Decode String with known length
 
@@ -338,7 +383,13 @@ class Slice:
         addr = addr + self.offset
         return self.macho_file.file[addr:addr + count].decode().rstrip('\x00')
 
-    def get_cstr_at(self, addr: int, limit: int = 0) -> str:
+    def _bio_get_str_at(self, addr: int, count: int):
+        addr = addr + self.offset
+        self.macho_file.file.seek(addr)
+        data = self.macho_file.file.read(count)
+        return data.decode().rstrip('\x00')
+
+    def _mmap_get_cstr_at(self, addr: int, limit: int = 0) -> str:
         """
         Get C-style null-terminated string at set address.
 
@@ -357,6 +408,21 @@ class Slice:
 
         self.macho_file.file.seek(0)
 
+        return text
+
+    def _bio_get_cstr_at(self, addr: int, limit: int = 0):
+        # this function will likely be a bit slower than the mmaped one, and will probably bottleneck things, oh well.
+        # I'm unsure if there's any possible faster approach than this.
+        addr = addr + self.offset
+        self.macho_file.file.seek(addr)
+        cnt = 0
+        while True:
+            if self.macho_file.file.read(1) != b"\x00":
+                cnt += 1
+            else:
+                break
+        text = self._bio_get_bytes_at(addr, cnt).decode()
+        self.macho_file.file.seek(0)
         return text
 
     def decode_uleb128(self, readHead: int) -> Tuple[int, int]:

@@ -47,6 +47,7 @@ from ktool.window import KToolScreen, external_hard_fault_teardown
 
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
+MMAP_ENABLED = True
 
 
 def get_terminal_size():
@@ -163,7 +164,8 @@ def main():
     parser.add_argument('--bench', dest='bench', action='store_true')
     parser.add_argument('-v', dest='logging_level', type=int)
     parser.add_argument('-f', dest='force_load', action='store_true')
-    parser.set_defaults(func=help_prompt, bench=False, force_load=False, logging_level=1)
+    parser.add_argument('--no-mmap', dest='no_mmap', action='store_true', help='Disable mmaped IO')
+    parser.set_defaults(func=help_prompt, bench=False, force_load=False, no_mmap=False, logging_level=1)
 
     subparsers = parser.add_subparsers(help='sub-command help')
 
@@ -206,7 +208,7 @@ def main():
 
     parser_lipo.set_defaults(func=lipo, out="", combine=False)
 
-    # img4 command: because why not
+    # img4 command: because why not. wrote an img4 library for iBootLoader and it can definitely be useful elsewhere.
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
 
     parser_img4.add_argument('filename', nargs='?', default='')
@@ -311,6 +313,10 @@ def main():
         # kind of a hack using a class attribute in ktool.util but it works.
         ignore.MALFORMED = True
 
+    if args.no_mmap:
+        global MMAP_ENABLED
+        MMAP_ENABLED = False
+
     if args.bench:
         # This will run the program as normal, but with profiling enabled
         # It will print what are arguably the 10 routines contributing the most to slowdowns.
@@ -369,6 +375,8 @@ Run `ktool [command]` for info/examples on using that command
 Global Flags:
     -f - Force Load (ignores malformations in the MachO and tries to load whatever it can)
     -v [-1 through 5] - -1 will even hide errors, 5 is labeled internally as "TOO_MUCH"
+    --no-mmap - Disables mmaped IO. Only use this flag if your system doesn't support mmaped IO, using this flag will
+                cause the program to run *much* slower.
     --bench - Run benchmarks. useful for developing/contributing.
         """
     print(help_prompt.__doc__)
@@ -412,7 +420,7 @@ def symbols(args):
 
     if args.get_exports:
         with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False)
+            image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False, use_mmaped_io=MMAP_ENABLED)
 
             table = Table()
             table.titles = ['Address', 'Symbol']
@@ -424,7 +432,7 @@ def symbols(args):
 
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_imports=False, load_exports=False)
+            image = ktool.load_image(fd, args.slice_index, load_imports=False, load_exports=False, use_mmaped_io=MMAP_ENABLED)
 
             table = Table()
             table.titles = ['Address', 'Name']
@@ -436,7 +444,7 @@ def symbols(args):
 
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False)
+            image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False, use_mmaped_io=MMAP_ENABLED)
 
             import_symbols = {}
             symbol = namedtuple('symbol', ['name', 'image', 'from_table'])
@@ -467,7 +475,7 @@ def symbols(args):
 
     elif args.get_actions:
         with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index)
+            image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
 
             print('\nBinding Info'.ljust(60, '-') + '\n')
             for sym in image.binding_table.symbol_table:
@@ -523,13 +531,16 @@ def insert(args):
     patched_libraries = []
 
     with open(args.filename, 'rb') as fp:
-        macho_file = ktool.load_macho_file(fp)
+        macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
         for macho_slice in macho_file.slices:
+
             image = ktool.load_image(macho_slice)
+
             last_dylib_command_index = -1
             for i, cmd in enumerate(image.macho_header.load_commands):
                 if isinstance(cmd, dylib_command):
                     last_dylib_command_index = i + 1
+
             dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
             image.insert_lc_with_suf(lc, [dylib_item.raw], args.payload, last_dylib_command_index)
 
@@ -573,7 +584,7 @@ def edit(args):
         new_iname = args.iname
 
         with open(args.filename, 'rb') as fp:
-            macho_file = ktool.load_macho_file(fp)
+            macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
             for macho_slice in macho_file.slices:
                 image = ktool.load_image(macho_slice)
                 id_dylib_index = -1
@@ -668,7 +679,7 @@ def lipo(args):
         for filename in args.filename:
             # Slice() might hold a ref preventing it from being closed? but i'm just going to let it close on exit()
             fd = open(filename, 'rb')
-            macho_file = ktool.load_macho_file(fd)
+            macho_file = ktool.load_macho_file(fd, use_mmaped_io=MMAP_ENABLED)
             if macho_file.type != MachOFileType.THIN:
                 exit_with_error(KToolError.ArgumentError, "Fat mach-o passed to --create")
             slices.append(macho_file.slices[0])
@@ -683,7 +694,7 @@ def lipo(args):
 
     elif args.extract != "":
         with open(args.filename[0], 'rb') as fd:
-            macho_file = ktool.load_macho_file(fd)
+            macho_file = ktool.load_macho_file(fd, use_mmaped_io=MMAP_ENABLED)
             output = args.out
             if output == "":
                 output = args.filename[0] + '.' + args.extract.lower()
@@ -722,7 +733,7 @@ def _list(args):
     require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs'])
 
     with open(args.filename, 'rb') as fd:
-        image = ktool.load_image(fd, args.slice_index)
+        image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
 
         if not args.get_lcs and not args.get_linked:
             objc_image = ktool.load_objc_metadata(image)
@@ -753,7 +764,7 @@ def _file(args):
         ktool file [filename]
     """
     with open(args.filename, 'rb') as fp:
-        macho_file = ktool.load_macho_file(fp)
+        macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
 
         if macho_file.type == MachOFileType.FAT:
@@ -784,7 +795,7 @@ def info(args):
 
     """
     with open(args.filename, 'rb') as fp:
-        image = ktool.load_image(fp, args.slice_index, load_symtab=False, load_imports=False, load_exports=False)
+        image = ktool.load_image(fp, args.slice_index, load_symtab=False, load_imports=False, load_exports=False, use_mmaped_io=MMAP_ENABLED)
 
         if args.get_vm:
             print(image.vm)
@@ -819,7 +830,7 @@ def dump(args):
         require_args(args, always=['outdir'])
 
         with open(args.filename, 'rb') as fp:
-            image = ktool.load_image(fp, args.slice_index)
+            image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
 
             if image.name == "":
                 image.name = os.path.basename(args.filename)
@@ -840,7 +851,7 @@ def dump(args):
 
     elif args.do_tbd:
         with open(args.filename, 'rb') as fp:
-            image = ktool.load_image(fp, args.slice_index)
+            image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
 
             with open(image.name + '.tbd', 'w') as out_fp:
                 out_fp.write(ktool.generate_text_based_stub(image, compatibility=True))

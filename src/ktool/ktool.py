@@ -4,6 +4,9 @@
 #
 #  Outward facing API
 #
+#  Some of these functions are only one line long, but the point is to standardize an outward facing API that allows
+#   me to refactor and change things internally without breaking others' scripts.
+#
 #  This file is part of ktool. ktool is free software that
 #  is made available under the MIT license. Consult the
 #  file "LICENSE" that is distributed together with this file
@@ -14,30 +17,82 @@
 
 from typing import Dict, Union, BinaryIO
 
+from .dyld import Dyld, Image
 from .generator import TBDGenerator
 from .headers import HeaderGenerator
-from .objc import ObjCImage
-from .dyld import Dyld, Image
 from .macho import Slice, MachOFile
-from .util import TapiYAMLWriter
+from .objc import ObjCImage
+from .util import TapiYAMLWriter, ignore, log
 
 
-def load_macho_file(fp) -> MachOFile:
-    return MachOFile(fp)
+def load_macho_file(fp: BinaryIO, use_mmaped_io=True) -> MachOFile:
+    """
+    This function takes a bare file and loads it as a MachOFile.
+
+    File should be opened with 'rb'
+
+    :param fp: BinaryIO object
+    :param use_mmaped_io: Should the MachOFile be loaded with a mmaped-io-backend? Leaving this enabled massively
+                            improves load time and IO performance, only disable if your system doesn't support it
+    :return:
+    """
+    return MachOFile(fp, use_mmaped_io=use_mmaped_io)
 
 
-def load_image(fp: Union[BinaryIO, MachOFile, Slice], slice_index=0, load_symtab=True, load_imports=True, load_exports=True) -> Image:
+def load_image(fp: Union[BinaryIO, MachOFile, Slice], slice_index=0, load_symtab=True, load_imports=True,
+               load_exports=True, use_mmaped_io=True) -> Image:
+    """
+    Take a bare file, MachOFile, or Slice, and load MachO/dyld metadata about that item
 
+    :param fp: a bare file, MachOFile, or Slice to load.
+    :param slice_index: If a Slice is not being passed, and a file or MachOFile is a Fat MachO, which slice should be loaded?
+    :param use_mmaped_io: If a bare file is being passed, load it with mmaped IO?
+    :param load_symtab: Load the symbol table if one exists. This can be disabled for targeted loads, for speed.
+    :param load_imports: Load imports if they exist. This can be disabled for targeted loads, for speed.
+    :param load_exports: Load exports if they exist. This can be disabled for targeted loads, for speed.
+    :return: Returns a loaded Image object
+    :rtype: Image
+    """
     if isinstance(fp, MachOFile):
         macho_file = fp
         macho_slice: Slice = macho_file.slices[slice_index]
     elif isinstance(fp, Slice):
         macho_slice = fp
     else:
-        macho_file = load_macho_file(fp)
+        macho_file = load_macho_file(fp, use_mmaped_io=use_mmaped_io)
         macho_slice: Slice = macho_file.slices[slice_index]
 
     return Dyld.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports, load_exports=load_exports)
+
+
+def macho_verify(fp: Union[BinaryIO, MachOFile, Slice, Image]) -> None:
+    """
+    This function takes a variety of MachO-based objects, and loads them with malformation exceptions fully enabled.
+
+    This can be used to verify patch code did not damage or improperly modify a MachO.
+
+    :param fp: One of: BinaryIO, MachOFile, Slice, or Image, to load and verify
+    :return:
+    :raises: MalformedMachOException
+    """
+    should_ignore = ignore.MALFORMED
+
+    log.info("Verifying MachO Integrity")
+    ignore.MALFORMED = False
+
+    if isinstance(fp, Image):
+        load_image(fp.slice)
+    elif isinstance(fp, MachOFile) or isinstance(fp, BinaryIO):
+        if isinstance(fp, MachOFile):
+            slices = fp.slices
+        else:
+            slices = load_macho_file(fp)
+        for macho_slice in slices:
+            load_image(macho_slice)
+    else:
+        load_image(fp)
+
+    ignore.MALFORMED = should_ignore
 
 
 def load_objc_metadata(image: Image) -> ObjCImage:
