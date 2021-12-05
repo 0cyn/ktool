@@ -38,7 +38,7 @@ from ktool import (
     ignore,
     log,
     LogLevel,
-    Table
+    Table, Image
 )
 
 from ktool.exceptions import *
@@ -382,9 +382,9 @@ Global Flags:
     print(help_prompt.__doc__)
 
 
-def verify_patches(image):
+def process_patches(image) -> 'Image':
     try:
-        ktool.macho_verify(image)
+        return ktool.reload_image(image)
     except MalformedMachOException:
         exit_with_error(KToolError.ProcessingError, "Reloading MachO after patch failed. This is an issue with "
                                                     "my patch code. Please file an issue on https://github.com/kritantadev/ktool.")
@@ -553,7 +553,7 @@ def insert(args):
             image.insert_lc_with_suf(lc, [dylib_item.raw], args.payload, last_dylib_command_index)
 
             log.info("Reloading MachO Slice to verify integrity")
-            verify_patches(macho_slice)
+            image = process_patches(image)
             patched_libraries.append(image)
 
     with open(args.out, 'wb') as fd:
@@ -592,7 +592,7 @@ def edit(args):
             for macho_slice in macho_file.slices:
                 image = ktool.load_image(macho_slice)
                 id_dylib_index = -1
-                
+
                 for i, cmd in enumerate(image.macho_header.load_commands):
                     if cmd.cmd == 0xD:
                         id_dylib_index = i
@@ -601,11 +601,11 @@ def edit(args):
                 dylib_item = Struct.create_with_values(dylib, [0x18, 2, 0, 0])
                 image.rm_load_command(id_dylib_index)
 
-                verify_patches(macho_slice)
+                image = process_patches(image)
 
                 image.insert_lc_with_suf(LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
 
-                verify_patches(macho_slice)
+                image = process_patches(image)
 
                 patched_libraries.append(image)
 

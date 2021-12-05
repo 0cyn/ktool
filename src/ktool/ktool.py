@@ -39,6 +39,18 @@ def load_macho_file(fp: BinaryIO, use_mmaped_io=True) -> MachOFile:
     return MachOFile(fp, use_mmaped_io=use_mmaped_io)
 
 
+def reload_image(image: Image) -> Image:
+    """
+    Reload an image (properly updates internal representations after patches)
+
+    :param image:
+    :return:
+    """
+    # This is going to be horribly slow. Dyld class needs refactored to have a better way to do this or ideally just
+    #   not fuck things up and require a reload every time we make a patch.
+    return load_image(image.slice)
+
+
 def load_image(fp: Union[BinaryIO, MachOFile, Slice], slice_index=0, load_symtab=True, load_imports=True,
                load_exports=True, use_mmaped_io=True) -> Image:
     """
