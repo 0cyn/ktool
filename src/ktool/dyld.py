@@ -124,7 +124,11 @@ class Image:
         self.slice: Slice = macho_slice
 
         self.linked = []
-        self.name = ""
+
+        self.name = ""  # Remove this field soon.
+        self.base_name = ""  # copy of self.name
+        self.install_name = ""
+
         self.segments = {}
 
         log.debug("Initializing VM Map")
@@ -436,8 +440,12 @@ class Dyld:
 
         if image.dylib is not None:
             image.name = image.dylib.install_name.split('/')[-1]
+            image.base_name = image.dylib.install_name.split('/')[-1]
+            image.install_name = image.dylib.install_name
         else:
             image.name = ""
+            image.base_name = ""
+            image.install_name = ""
 
 
 class ExternalDylib:

@@ -22,3 +22,8 @@ class MalformedMachOException(Exception):
 class UnsupportedFiletypeException(Exception):
     """
     """
+
+
+class NoObjCMetadataException(Exception):
+    """
+    """

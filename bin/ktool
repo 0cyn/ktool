@@ -801,7 +801,8 @@ def info(args):
             print(image.vm)
 
         else:
-            print(f'Name: {image.name}')
+            print(f'{image.base_name} -----\n')
+            print(f'Install Name: {image.install_name}')
             print(f'Filetype: {image.macho_header.filetype.name}')
             print(f'Flags: {", ".join([i.name for i in image.macho_header.flags])}')
             print(f'UUID: {image.uuid.hex().upper()}')

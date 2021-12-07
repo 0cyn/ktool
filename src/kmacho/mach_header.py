@@ -206,7 +206,7 @@ class SectionAttributesSys(IntEnum):
     S_ATTR_LOC_RELOC = 0x00000100
 
 
-CPU_ARCH_MASK = 0xff000000  # Maskfor architecture bits
+CPU_ARCH_MASK = 0xff000000  # Mask for architecture bits
 CPU_ARCH_ABI64 = 0x01000000
 
 
