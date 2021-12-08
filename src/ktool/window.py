@@ -1435,7 +1435,7 @@ class KToolMachOLoader:
     def _file(lib, parent=None, callback=None):
         file_content_item = MainMenuContentItem()
 
-        file_content_item.lines.append(f'Name: §35m{lib.name}§39m')
+        file_content_item.lines.append(f'Install Name: §35m{lib.install_name}§39m')
         file_content_item.lines.append(f'Filetype: §35m{lib.macho_header.filetype.name}§39m')
         file_content_item.lines.append(f'Flags: §35m{"§39m, §35m".join([i.name for i in lib.macho_header.flags])}§39m')
         file_content_item.lines.append(f'UUID: §35m{lib.uuid.hex().upper()}§39m')
