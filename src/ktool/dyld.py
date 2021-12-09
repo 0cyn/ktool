@@ -444,7 +444,7 @@ class Dyld:
             image.install_name = image.dylib.install_name
         else:
             image.name = ""
-            image.base_name = ""
+            image.base_name = image.slice.macho_file.filename
             image.install_name = ""
 
 
