@@ -395,7 +395,7 @@ def _open(args):
         log.LOG_LEVEL = LogLevel.DEBUG
         screen = KToolScreen()
         log.LOG_FUNC = screen.ktool_dbg_print_func
-        log.LOG_ERR = screen.ktool_dbg_print_func
+        log.LOG_ERR = screen.ktool_dbg_print_err_func
         screen.load_file(args.filename)
     except KeyboardInterrupt:
         external_hard_fault_teardown()
@@ -574,12 +574,12 @@ commands currently supported:
 
 def edit(args):
     """
-    ----------
-    Utils for editing MachO Binaries
+----------
+Utils for editing MachO Binaries
 
-    Modify the install name of a image
+Modify the install name of a image
 
-        ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
+    ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
     """
 
     require_args(args, one_of=['iname', 'apad'])
