@@ -60,7 +60,7 @@ Stay Updated with `python3 -m pip install --upgrade k2l` !
 
 Mouse support is a WIP; quite a few things support mouse interaction already.
 
-Navigate the sidebar with arrow keys (use left/right to expand and collapse submenus)
+Navigate the sidebar with arrow keys or mouse. You can use left/right arrow, or spacebar, to expand/collapse submenus.
 
 Hit tab to swap between the sidebar context and main context. Scroll the main context with up/down keys.
 
