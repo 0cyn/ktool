@@ -760,7 +760,7 @@ class FooterBar(View):
             (17, 21): evening
         }
         for key, val in msgmap.items():
-            if self.now.hour in range(key[0], key[1]):
+            if self.now.hour in range(key[0], key[1]+1):
                 self.hi_text = f' {val} '
 
     def redraw(self):
