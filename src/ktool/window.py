@@ -1075,6 +1075,16 @@ class DebugMenu(ScrollView):
         super().__init__()
         self.draw = False
 
+    def parse_lines(self):
+        attrib_content = []
+        for item in self.scroll_view_text_buffer.lines:
+            if isinstance(item, str):
+                attrib_content.append(AttributedString.ansi_to_attrstr(item))
+            else:
+                attrib_content.append(item)
+
+        self.scroll_view_text_buffer.lines = attrib_content
+
     def redraw(self):
         width = self.box.width - 10
         height = self.box.height
@@ -1710,6 +1720,9 @@ class KToolScreen:
     def ktool_dbg_print_func(self, msg):
         self.debug_menu.scroll_view_text_buffer.lines.append(msg)
 
+    def ktool_dbg_print_err_func(self, msg):
+        self.debug_menu.scroll_view_text_buffer.lines.append('§32m' + msg + '§39m')
+
     def setup(self):
         """
         Perform the curses initialization ritual
@@ -1855,13 +1868,14 @@ class KToolScreen:
                                                                          curses.LINES - 5)
 
         self.debug_menu.box = Box(self.root, 5, 5, curses.COLS - 10, curses.LINES - 10)
-        self.debug_menu.scroll_view = Box(self.root, 6, 6, curses.COLS - 12, curses.LINES - 12)
+        self.debug_menu.scroll_view = Box(self.root, 7, 6, curses.COLS - 12, curses.LINES - 12)
 
         ls = self.debug_menu.scroll_view_text_buffer.lines if  self.debug_menu.scroll_view_text_buffer else []
         self.debug_menu.scroll_view_text_buffer = ScrollingDisplayBuffer(self.debug_menu.scroll_view, 0, 0,
                                                                          curses.COLS - 22, curses.LINES - 12)
         self.debug_menu.scroll_view_text_buffer.render_attr = curses.color_pair(1)
         self.debug_menu.scroll_view_text_buffer.lines = ls # ?? We shouldn't need to do this
+        self.debug_menu.parse_lines()
 
         self.file_browser.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)
         self.file_browser.scroll_view = Box(self.root, 5, 4, curses.COLS - 10, curses.LINES - 8)
