@@ -34,6 +34,7 @@ class MachOFile:
         self.file_object = file
 
         self.uses_mmaped_io = use_mmaped_io
+        self.filename = os.path.basename(file.name)
 
         if use_mmaped_io:
             global mmap

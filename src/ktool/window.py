@@ -1342,6 +1342,7 @@ class FileSystemBrowserOverlayView(ScrollView):
 class KToolMachOLoader:
     SUPPORTS_256 = False
     SUPPORTS_COLOR = True
+    HARD_FAIL = False
     CUR_SL = 0
     SL_CNT = 0
 
@@ -1387,11 +1388,17 @@ class KToolMachOLoader:
             try:
                 slice_item.children.append(item(loaded_image, slice_item, callback))
             except Exception as ex:
-                pass
+                if KToolMachOLoader.HARD_FAIL:
+                    raise ex
+                else:
+                    pass
         try:
             slice_item.children += KToolMachOLoader.objc_items(loaded_image, slice_item, callback)
         except Exception as ex:
-            pass
+            if KToolMachOLoader.HARD_FAIL:
+                raise ex
+            else:
+                pass
         slice_item.show_children = True
         return slice_item
 
@@ -1787,7 +1794,9 @@ class KToolScreen:
 
             self.mainscreen.set_tab_name(filename)
 
-            self.sidebar.add_menu_item(SidebarMenuItem(f'{filename}', MainMenuContentItem(MAIN_TEXT.split('\n')), None))
+            filename_base = os.path.basename(filename)
+
+            self.sidebar.add_menu_item(SidebarMenuItem(f'{filename_base}', MainMenuContentItem(MAIN_TEXT.split('\n')), None))
 
             for item in KToolMachOLoader.contents_for_file(fd, self.update_load_status):
                 self.sidebar.add_menu_item(item)

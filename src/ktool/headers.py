@@ -106,8 +106,13 @@ class HeaderGenerator:
         for objc_proto in objc_image.protolist:
             self.headers[objc_proto.name + '-Protocol.h'] = ProtocolHeader(objc_proto)
 
-        self.headers[self.objc_image.name + '.h'] = UmbrellaHeader(self.headers)
-        self.headers[self.objc_image.name + '-Structs.h'] = StructHeader(objc_image)
+        if self.objc_image.name == "":
+            image_name = self.objc_image.image.slice.macho_file.filename
+        else:
+            image_name = self.objc_image.name
+
+        self.headers[image_name + '.h'] = UmbrellaHeader(self.headers)
+        self.headers[image_name + '-Structs.h'] = StructHeader(objc_image)
 
 
 class StructHeader:
