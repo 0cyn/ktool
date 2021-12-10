@@ -245,12 +245,13 @@ def main():
     parser_dump.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
+    parser_dump.add_argument('--hard-fail', dest='hard_fail', action='store_true')
     parser_dump.add_argument('--sorted', dest='sort_headers', action='store_true')
     parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
     parser_dump.add_argument('filename', nargs='?', default='')
 
-    parser_dump.set_defaults(func=dump, do_headers=False, sort_headers=False, do_tbd=False, slice_index=0)
+    parser_dump.set_defaults(func=dump, do_headers=False, sort_headers=False, do_tbd=False, slice_index=0, hard_fail=False)
 
     # list command: Lists lists of things contained in lists in the image.
     parser_list = subparsers.add_parser('list', help='Print various lists')
@@ -828,6 +829,9 @@ To dump .tbd files for a framework
 
     if args.do_headers:
         require_args(args, always=['outdir'])
+
+        if args.hard_fail:
+            ignore.OBJC_ERRORS = False
 
         with open(args.filename, 'rb') as fp:
             image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)

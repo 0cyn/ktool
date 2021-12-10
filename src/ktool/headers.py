@@ -165,6 +165,12 @@ class Header:
                 "#define " + self.objc_class.name.upper() + "_H",
                 ""]
 
+        for i in self.objc_class.load_errors:
+            text.append(f'// {i}')
+
+        if len(self.objc_class.load_errors) > 0:
+            text.append('')
+
         if len(self.forward_declaration_classes) > 0:
             text.append("@class " + ", ".join(self.forward_declaration_classes) + ";")
         if len(self.forward_declaration_protocols) > 0:

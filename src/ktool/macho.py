@@ -12,7 +12,6 @@
 #  Copyright (c) kat 2021.
 #
 
-mmap = None
 import os
 from collections import namedtuple
 from enum import Enum
@@ -22,6 +21,7 @@ from kmacho import *
 from kmacho.structs import *
 from .exceptions import *
 from .util import log
+mmap = None
 
 
 class MachOFileType(Enum):

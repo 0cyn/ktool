@@ -16,7 +16,7 @@ from enum import Enum
 from typing import List
 
 from .structs import *
-from .util import log
+from .util import log, ignore
 
 type_encodings = {
     "c": "char",
@@ -104,6 +104,8 @@ class ObjCImage:
                 try:
                     classes.append(Class(self, sect.vm_address + i * 0x8))
                 except Exception as ex:
+                    if not ignore.OBJC_ERRORS:
+                        raise ex
                     log.error(f'Failed to load a class! Ex: {str(ex)}')
             else:
                 oc = Class(self, sect.vm_address + i * 0x8)
@@ -354,7 +356,10 @@ class Ivar:
         self.name: str = objc_image.get_cstr_at(ivar.name, 0, True, "__objc_methname")
         type_string: str = objc_image.get_cstr_at(ivar.type, 0, True, "__objc_methtype")
         self.is_id: bool = type_string[0] == "@"
-        self.type: str = self._renderable_type(objc_image.tp.process(type_string)[0])
+        try:
+            self.type: str = self._renderable_type(objc_image.tp.process(type_string)[0])
+        except IndexError:
+            self.type: str = '?'
 
     def __str__(self):
         ret = ""
@@ -481,6 +486,9 @@ class Class:
         self.meta = meta
         self.metaclass = None
         self.superclass = ""
+
+        self.load_errors = []
+
         self.linkedlibs = []
         self.linked_classes = []
         self.fdec_classes = []
@@ -586,7 +594,10 @@ class Class:
                         self.struct_list.append(method_type.value)
 
             except Exception as ex:
-                log.warning(f'Failed to load methods with {str(ex)}')
+                if not ignore.OBJC_ERRORS:
+                    raise ex
+                log.warning(f'Failed to load method in {self.name} with {str(ex)}')
+                self.load_errors.append(f'Failed to load a method with {str(ex)}')
 
             if uses_relative_methods:
                 ea += objc2_meth_list_entry.SIZE
@@ -622,7 +633,11 @@ class Class:
                         self.struct_list.append(property.attr.type.value)
 
             except Exception as ex:
-                log.warning(f'Failed to load property with {str(ex)}')
+                if not ignore.OBJC_ERRORS:
+                    raise ex
+                log.warning(f'Failed to load a property in {self.name} with {str(ex)}')
+                self.load_errors.append(f'Failed to load a property with {str(ex)}')
+
             ea += objc2_prop.SIZE
             vm_ea += objc2_prop.SIZE
 
@@ -640,7 +655,11 @@ class Class:
             try:
                 prots.append(Protocol(self.objc_image, prot, prot_loc))
             except Exception as ex:
+                if not ignore.OBJC_ERRORS:
+                    raise ex
                 log.warning(f'Failed to load protocol with {str(ex)}')
+                self.load_errors.append(f'Failed to load a protocol with {str(ex)}')
+
         return prots
 
     def _process_ivars(self) -> List[Ivar]:
@@ -656,7 +675,11 @@ class Class:
                 ivar_object = Ivar(self.objc_image, self, ivar, ivar_loc)
                 ivars.append(ivar_object)
             except Exception as ex:
+                if not ignore.OBJC_ERRORS:
+                    raise ex
                 log.warning(f'Failed to load ivar with {str(ex)}')
+                self.load_errors.append(f'Failed to load an ivar with {str(ex)}')
+
         return ivars
 
 

@@ -26,6 +26,7 @@ KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
 
 class ignore:
     MALFORMED = False
+    OBJC_ERRORS = True
 
 
 def macho_is_malformed():
