@@ -1461,6 +1461,9 @@ class KToolMachOLoader:
         file_content_item.lines.append(
             f'SDK Version: §35m{lib.sdk_version.x}.{lib.sdk_version.y}.{lib.sdk_version.z}§39m')
 
+        file_content_item.lines.append('')
+        file_content_item.lines.append(f'macho_header: {str(lib.macho_header.dyld_header)}')
+
         menuitem = SidebarMenuItem("File Info", file_content_item, parent)
         menuitem.parse_mmc()
 

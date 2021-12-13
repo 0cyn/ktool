@@ -34,7 +34,11 @@ class MachOFile:
         self.file_object = file
 
         self.uses_mmaped_io = use_mmaped_io
-        self.filename = os.path.basename(file.name)
+
+        if hasattr(file, 'name'):
+            self.filename = os.path.basename(file.name)
+        else:
+            self.filename = ''
 
         if use_mmaped_io:
             global mmap
@@ -57,6 +61,7 @@ class MachOFile:
             for off in range(0, self.header.nfat_archs):
                 offset = fat_header.SIZE + (off * fat_arch.SIZE)
                 arch_struct = self._load_struct(offset, fat_arch, "big")
+                log.debug_more(arch_struct)
                 self.slices.append(Slice(self, arch_struct))
         else:
             self.slices.append(Slice(self, None))
@@ -323,27 +328,40 @@ class Slice:
         self.byte_order = "little" if self.get_int_at(0, 4, "little") == MH_MAGIC_64 else "big"
 
     def patch(self, address: int, raw: bytes):
-        self.macho_file.file.seek(self.offset + address)
-        log.debug(f'Patched At: {hex(address)} ')
-        log.debug(f'New Bytes: {str(raw)}')
-        diff = self.size - (self.offset + address + len(raw))
-        if diff < 0:
-            data = self.full_bytes_for_slice()
-            data = data[:address] + raw
-            # log.debug(data)
-            self.patched_bytes = data
-            self.use_patched_bytes = True
-            return
-        old_raw = self.macho_file.file.read(len(raw))
-        self.macho_file.file.seek(self.offset + address)
-        log.debug(f'Old Bytes: {str(old_raw)}')
-        self.macho_file.file.write(raw)
-        self.macho_file.file.seek(0)
+        if self.macho_file.uses_mmaped_io:
+            self.macho_file.file.seek(self.offset + address)
+            log.debug(f'Patched At: {hex(address)} ')
+            log.debug(f'New Bytes: {str(raw)}')
+            diff = self.size - (self.offset + address + len(raw))
+            if diff < 0:
+                data = self.full_bytes_for_slice()
+                data = data[:address] + raw
+                # log.debug(data)
+                self.patched_bytes = data
+                self.use_patched_bytes = True
+                return
+            old_raw = self.macho_file.file.read(len(raw))
+            self.macho_file.file.seek(self.offset + address)
+            log.debug(f'Old Bytes: {str(old_raw)}')
+            self.macho_file.file.write(raw)
+            self.macho_file.file.seek(0)
+        else:
+            self.patches[address] = raw
 
     def full_bytes_for_slice(self):
-        if self.offset == 0:
-            return self.macho_file.file[0:self.size]
-        return self.macho_file.file[self.offset:+self.offset + self.arch_struct.size]
+        if self.macho_file.uses_mmaped_io:
+            if self.offset == 0:
+                return self.macho_file.file[0:self.size]
+            return self.macho_file.file[self.offset:self.offset + self.arch_struct.size]
+        else:
+            data = bytearray(self.get_bytes_at(self.offset, self.size))
+            for patch_loc in self.patches:
+                i = 0
+                patch_data = self.patches[patch_loc]
+                for byte in patch_data:
+                    data[patch_loc + i] = byte
+                    i += 1
+            return data
 
     def load_struct(self, addr: int, struct_type, endian="little"):
         size = struct_type.SIZE
