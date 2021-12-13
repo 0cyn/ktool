@@ -687,13 +687,8 @@ Create a fat Macho Binary from multiple thin binaries
                 exit_with_error(KToolError.ArgumentError, "Fat mach-o passed to --create")
             slices.append(macho_file.slices[0])
 
-        fat_generator = FatMachOGenerator(slices)
-
         with open(output, 'wb') as fd:
-            fd.write(fat_generator.fat_head)
-            for arch in fat_generator.fat_archs:
-                fd.seek(arch.offset)
-                fd.write(arch.slice.full_bytes_for_slice())
+            fd.write(ktool.macho_combine(slices).read())
 
     elif args.extract != "":
         with open(args.filename[0], 'rb') as fd:

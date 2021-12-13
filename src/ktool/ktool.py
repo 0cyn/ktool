@@ -15,10 +15,11 @@
 #  Copyright (c) kat 2021.
 #
 
-from typing import Dict, Union, BinaryIO
+from typing import Dict, Union, BinaryIO, List
+from io import BytesIO
 
 from .dyld import Dyld, Image
-from .generator import TBDGenerator
+from .generator import TBDGenerator, FatMachOGenerator
 from .headers import HeaderGenerator
 from .macho import Slice, MachOFile
 from .objc import ObjCImage
@@ -134,3 +135,17 @@ def generate_headers(objc_image: ObjCImage, sort_items=False) -> Dict[str, str]:
 def generate_text_based_stub(image: Image, compatibility=True) -> str:
     generator = TBDGenerator(image, compatibility)
     return TapiYAMLWriter.write_out(generator.dict)
+
+
+def macho_combine(slices: List[Slice]) -> BytesIO:
+    fat_generator = FatMachOGenerator(slices)
+
+    fat_file = BytesIO()
+    fat_file.write(fat_generator.fat_head)
+    for arch in fat_generator.fat_archs:
+        fat_file.seek(arch.offset)
+        fat_file.write(arch.slice.full_bytes_for_slice())
+
+    fat_file.seek(0)
+    return fat_file
+
