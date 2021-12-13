@@ -26,7 +26,7 @@ from .objc import ObjCImage
 from .util import TapiYAMLWriter, ignore, log
 
 
-def load_macho_file(fp: BinaryIO, use_mmaped_io=True) -> MachOFile:
+def load_macho_file(fp: Union[BinaryIO, BytesIO], use_mmaped_io=True) -> MachOFile:
     """
     This function takes a bare file and loads it as a MachOFile.
 
@@ -37,6 +37,9 @@ def load_macho_file(fp: BinaryIO, use_mmaped_io=True) -> MachOFile:
                             improves load time and IO performance, only disable if your system doesn't support it
     :return:
     """
+    if isinstance(fp, BytesIO):
+        use_mmaped_io = False
+
     return MachOFile(fp, use_mmaped_io=use_mmaped_io)
 
 
@@ -52,10 +55,10 @@ def reload_image(image: Image) -> Image:
     return load_image(image.slice)
 
 
-def load_image(fp: Union[BinaryIO, MachOFile, Slice], slice_index=0, load_symtab=True, load_imports=True,
+def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO], slice_index=0, load_symtab=True, load_imports=True,
                load_exports=True, use_mmaped_io=True) -> Image:
     """
-    Take a bare file, MachOFile, or Slice, and load MachO/dyld metadata about that item
+    Take a bare file, MachOFile, BytesIO, or Slice, and load MachO/dyld metadata about that item
 
     :param fp: a bare file, MachOFile, or Slice to load.
     :param slice_index: If a Slice is not being passed, and a file or MachOFile is a Fat MachO, which slice should be loaded?
@@ -71,6 +74,9 @@ def load_image(fp: Union[BinaryIO, MachOFile, Slice], slice_index=0, load_symtab
         macho_slice: Slice = macho_file.slices[slice_index]
     elif isinstance(fp, Slice):
         macho_slice = fp
+    elif isinstance(fp, BytesIO):
+        macho_file = load_macho_file(fp, use_mmaped_io=False)
+        macho_slice: Slice = macho_file.slices[slice_index]
     else:
         macho_file = load_macho_file(fp, use_mmaped_io=use_mmaped_io)
         macho_slice: Slice = macho_file.slices[slice_index]
