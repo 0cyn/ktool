@@ -466,8 +466,9 @@ class Dyld:
             image.base_name = image.slice.macho_file.filename
             image.install_name = ""
 
-        for symbol in image.export_trie.symbols:
-            image.exports.append(symbol)
+        if image.export_trie:
+            for symbol in image.export_trie.symbols:
+                image.exports.append(symbol)
 
         if image.binding_table:
             for symbol in image.binding_table.symbol_table:
