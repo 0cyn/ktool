@@ -438,8 +438,8 @@ Print the symbol table
             table = Table()
             table.titles = ['Address', 'Symbol']
 
-            for i in image.exports.nodes:
-                table.rows.append([hex(i.offset), i.text])
+            for symbol in image.exports:
+                table.rows.append([hex(symbol.addr), symbol.fullname])
 
             print(table.render(get_terminal_size().columns))
 
@@ -462,24 +462,14 @@ Print the symbol table
             import_symbols = {}
             symbol = namedtuple('symbol', ['name', 'image', 'from_table'])
 
-            for sym in image.binding_table.symbol_table:
+            for sym in image.imports:
                 try:
-                    import_symbols[sym.fullname] = symbol(sym.fullname, image.linked[int(sym.ordinal) - 1].install_name, '')
+                    import_symbols[sym.fullname] = symbol(sym.fullname, image.linked[int(sym.ordinal) - 1].install_name, sym.attr)
                 except IndexError:
-                    import_symbols[sym.fullname] = symbol(sym.fullname, "ordinal: " + str(int(sym.ordinal)), '')
-            for sym in image.weak_binding_table.symbol_table:
-                try:
-                    import_symbols[sym.fullname] = symbol(sym.fullname, image.linked[int(sym.ordinal) - 1].install_name, 'Weak')
-                except IndexError:
-                    import_symbols[sym.fullname] = symbol(sym.fullname, "ordinal: " + str(int(sym.ordinal)), 'Weak')
-            for sym in image.lazy_binding_table.symbol_table:
-                try:
-                    import_symbols[sym.fullname] = symbol(sym.fullname, image.linked[int(sym.ordinal) - 1].install_name, 'Lazy')
-                except IndexError:
-                    import_symbols[sym.fullname] = symbol(sym.fullname, "ordinal: " + str(int(sym.ordinal)), 'Lazy')
+                    import_symbols[sym.fullname] = symbol(sym.fullname, "ordinal: " + str(int(sym.ordinal)), sym.attr)
 
             table = Table()
-            table.titles = ['Symbol', 'image', 'Type']
+            table.titles = ['Symbol', 'Image', 'Binding']
 
             for _, sym in import_symbols.items():
                 table.rows.append([sym.name, sym.image, sym.from_table])
@@ -747,7 +737,7 @@ To print a list of Load Commands and their data
             for objc_proto in objc_image.protolist:
                 print(f'{objc_proto.name}')
         elif args.get_linked:
-            for external_library in image.linked:
+            for external_library in image.linked_images:
                 print('(Weak) ' + external_library.install_name if external_library.weak else '' + external_library.install_name)
 
 

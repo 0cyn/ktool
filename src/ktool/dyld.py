@@ -15,7 +15,7 @@
 import math
 from collections import namedtuple
 from enum import Enum
-from typing import List
+from typing import List, Union
 
 from kmacho import (
     MH_FLAGS,
@@ -119,13 +119,14 @@ class Image:
         :param macho_slice: MachO Slice being processed
         :type macho_slice: MachO Slice
         """
-        self.macho_header: ImageHeader = ImageHeader.from_bytes(macho_slice=macho_slice)
-
         self.slice: Slice = macho_slice
 
-        self.linked = []
+        self.macho_header: ImageHeader = ImageHeader.from_bytes(macho_slice=macho_slice)
 
-        self.name = ""  # Remove this field soon.
+        self.linked = []  # TODO: Remove this field soon.
+        self.linked_images: List[ExternalDylib] = []
+
+        self.name = ""  # TODO: Remove this field soon.
         self.base_name = ""  # copy of self.name
         self.install_name = ""
 
@@ -134,25 +135,28 @@ class Image:
         log.debug("Initializing VM Map")
         self.vm = _VirtualMemoryMap(macho_slice)
 
-        self.info = None
-        self.dylib = None
+        self.info: Union[dyld_info_command, None] = None
+        self.dylib: Union[ExternalDylib, None] = None
         self.uuid = None
 
-        self.platform = PlatformType.UNK
+        self.platform: PlatformType = PlatformType.UNK
 
-        self.allowed_clients = []
+        self.allowed_clients: List[str] = []
 
-        self.rpath = None
+        self.rpath: Union[str, None] = None
 
         self.minos = os_version(0, 0, 0)
         self.sdk_version = os_version(0, 0, 0)
 
+        self.imports: List[Symbol] = []
+        self.exports: List[Symbol] = []
+
         self.binding_table = None
         self.weak_binding_table = None
         self.lazy_binding_table = None
-        self.exports = None
+        self.export_trie: Union[ExportTrie, None] = None
 
-        self.symbol_table = None
+        self.symbol_table: Union[SymbolTable, None] = None
 
     def get_int_at(self, offset: int, length: int, vm=False, section_name=None):
         """
@@ -339,6 +343,9 @@ class Dyld:
 
         log.info("Processing Load Commands")
         Dyld._parse_load_commands(image, load_symtab, load_imports, load_exports)
+
+        log.info("Processing Image")
+        Dyld._process_image(image)
         return image
 
     @classmethod
@@ -371,11 +378,11 @@ class Dyld:
 
                 if load_exports:
                     log.info("Loading Export Trie")
-                    image.exports = ExportTrie.from_bytes(image, cmd.export_off, cmd.export_size)
+                    image.export_trie = ExportTrie.from_bytes(image, cmd.export_off, cmd.export_size)
 
             elif load_command == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
                 log.info("Loading Export Trie")
-                image.exports = ExportTrie.from_bytes(image, cmd.dataoff, cmd.datasize)
+                image.export_trie = ExportTrie.from_bytes(image, cmd.dataoff, cmd.datasize)
 
             elif load_command == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
                 log.warning(
@@ -435,9 +442,21 @@ class Dyld:
 
             elif isinstance(cmd, dylib_command):
                 external_dylib = ExternalDylib(image, cmd)
-                image.linked.append(external_dylib)
+
+                image.linked.append(external_dylib)  # TODO: DEPRECATED
+
+                image.linked_images.append(external_dylib)
                 log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
+    @staticmethod
+    def _process_image(image: Image) -> None:
+        """
+        Once all load commands have been processed, process the results.
+        This is mainly for things which need to be done once *all* lcs have been processed.
+
+        :param image:
+        :return:
+        """
         if image.dylib is not None:
             image.name = image.dylib.install_name.split('/')[-1]
             image.base_name = image.dylib.install_name.split('/')[-1]
@@ -446,6 +465,20 @@ class Dyld:
             image.name = ""
             image.base_name = image.slice.macho_file.filename
             image.install_name = ""
+
+        for symbol in image.export_trie.symbols:
+            image.exports.append(symbol)
+
+        if image.binding_table:
+            for symbol in image.binding_table.symbol_table:
+                symbol.attr = ''
+                image.imports.append(symbol)
+            for symbol in image.weak_binding_table.symbol_table:
+                symbol.attr = 'Weak'
+                image.imports.append(symbol)
+            for symbol in image.lazy_binding_table.symbol_table:
+                symbol.attr = 'Lazy'
+                image.imports.append(symbol)
 
 
 class ExternalDylib:
@@ -512,7 +545,7 @@ class Symbol:
 
     """
 
-    def __init__(self, image: Image, cmd=None, entry=None, fullname=None, ordinal=None, addr=None):
+    def __init__(self, image: Image, cmd=None, entry=None, fullname=None, ordinal=None, addr=None, attr=None):
         if fullname:
             self.fullname = fullname
         else:
@@ -538,6 +571,7 @@ class Symbol:
             self.addr = addr
         self.entry = entry
         self.ordinal = ordinal
+        self.attr = attr
 
 
 class SymbolTable:

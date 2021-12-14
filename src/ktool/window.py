@@ -1391,9 +1391,9 @@ class KToolMachOLoader:
         items = [KToolMachOLoader.load_cmds,
                  KToolMachOLoader.segments,
                  KToolMachOLoader.linked,
-                 KToolMachOLoader.symtab,
-                 KToolMachOLoader.binding_group,
-                 KToolMachOLoader.vm_map]
+                 KToolMachOLoader.imports,
+                 KToolMachOLoader.exports,
+                 KToolMachOLoader.symtab]
         for item in items:
             try:
                 slice_item.children.append(item(loaded_image, slice_item, callback))
@@ -1475,7 +1475,7 @@ class KToolMachOLoader:
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nLoading Linked Libs')
 
         linked_libs_item = MainMenuContentItem()
-        for exlib in lib.linked:
+        for exlib in lib.linked_images:
             linked_libs_item.lines.append(
                 '§31m(Weak)§39m ' + exlib.install_name if exlib.weak else '' + exlib.install_name)
 
@@ -1544,16 +1544,20 @@ class KToolMachOLoader:
         return [KToolMachOLoader.objc_headers(objc_lib, parent, callback)]
 
     @staticmethod
-    def binding_group(lib, parent=None, callback=None):
+    def imports(lib, parent=None, callback=None):
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Imports')
+        mmci = MainMenuContentItem()
 
-        hnci = MainMenuContentItem
-        hnci.lines = ""
-        menuitem = SidebarMenuItem("Binding", hnci, parent)
+        table = Table()
+        table.titles = ['Address', 'Symbol', 'Binding']
 
-        menuitem.children = [KToolMachOLoader.binding_items(lib, menuitem, callback),
-                             KToolMachOLoader.weak_binding_items(lib, menuitem, callback),
-                             KToolMachOLoader.lazy_binding_items(lib, menuitem, callback),
-                             KToolMachOLoader.exports(lib, menuitem, callback)]
+        for symbol in lib.imports:
+            table.rows.append([hex(symbol.addr), symbol.fullname, symbol.attr.ljust(8)])  # pad the size of the attribute
+                                                                                           # to 10; this is so the addr
+                                                                                           # doesn't get wrapped
+        mmci.lines.append(table)
+
+        menuitem = SidebarMenuItem("Imports", mmci, parent)
 
         menuitem.parse_mmc()
         return menuitem
@@ -1566,75 +1570,12 @@ class KToolMachOLoader:
         table = Table()
         table.titles = ['Address', 'Symbol']
 
-        for node in lib.exports.nodes:
-            table.rows.append([hex(node.offset), node.text])
+        for symbol in lib.exports:
+            table.rows.append([hex(symbol.addr), symbol.fullname])
 
         mmci.lines.append(table)
 
         menuitem = SidebarMenuItem("Exports", mmci, parent)
-
-        menuitem.parse_mmc()
-        return menuitem
-
-    @staticmethod
-    def binding_items(lib, parent=None, callback=None):
-
-        mmci = MainMenuContentItem()
-
-        table = Table()
-        table.titles = ['Symbol', 'Address', 'image']
-
-        for sym in lib.binding_table.symbol_table:
-            try:
-                table.rows.append([sym.name, hex(sym.addr), lib.linked[int(sym.ordinal) - 1].install_name])
-            except IndexError:
-                table.rows.append([sym.name, hex(sym.addr), 'ERR'])
-
-        mmci.lines.append(table)
-
-        menuitem = SidebarMenuItem("Binding Info", mmci, parent)
-
-        menuitem.parse_mmc()
-        return menuitem
-
-    @staticmethod
-    def weak_binding_items(lib, parent=None, callback=None):
-
-        mmci = MainMenuContentItem()
-
-        table = Table()
-        table.titles = ['Symbol', 'Address', 'image']
-
-        for sym in lib.weak_binding_table.symbol_table:
-            try:
-                table.rows.append([sym.name, hex(sym.addr), lib.linked[int(sym.ordinal) - 1].install_name])
-            except IndexError:
-                table.rows.append([sym.name, hex(sym.addr), 'ERR'])
-
-        mmci.lines.append(table)
-
-        menuitem = SidebarMenuItem("Weak Binding Info", mmci, parent)
-
-        menuitem.parse_mmc()
-        return menuitem
-
-    @staticmethod
-    def lazy_binding_items(lib, parent=None, callback=None):
-
-        mmci = MainMenuContentItem()
-
-        table = Table()
-        table.titles = ['Symbol', 'Address', 'image']
-
-        for sym in lib.lazy_binding_table.symbol_table:
-            try:
-                table.rows.append([sym.name, hex(sym.addr), lib.linked[int(sym.ordinal) - 1].install_name])
-            except IndexError:
-                table.rows.append([sym.name, hex(sym.addr), 'ERR'])
-
-        mmci.lines.append(table)
-
-        menuitem = SidebarMenuItem("Lazy Binding Info", mmci, parent)
 
         menuitem.parse_mmc()
         return menuitem
