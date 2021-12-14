@@ -15,7 +15,7 @@
 import math
 from collections import namedtuple
 from enum import Enum
-from typing import List, Union
+from typing import List, Union, Dict
 
 from kmacho import (
     MH_FLAGS,
@@ -158,6 +158,8 @@ class Image:
 
         self.symbol_table: Union[SymbolTable, None] = None
 
+        self.struct_cache: Dict[int, Struct] = {}
+
     def get_int_at(self, offset: int, length: int, vm=False, section_name=None):
         """
         Get a sequence of bytes (as an int) from a location
@@ -197,9 +199,14 @@ class Image:
         :param endian: Endianness of bytes to read.
         :return: Loaded struct
         """
-        if vm:
-            address = self.vm.get_file_address(address, section_name)
-        return self.slice.load_struct(address, struct_type, endian)
+        if address not in self.struct_cache:
+            if vm:
+                address = self.vm.get_file_address(address, section_name)
+            struct = self.slice.load_struct(address, struct_type, endian)
+            self.struct_cache[address] = struct
+            return struct
+
+        return self.struct_cache[address]
 
     def get_str_at(self, address: int, count: int, vm=False, section_name=None):
         """

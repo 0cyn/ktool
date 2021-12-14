@@ -24,6 +24,7 @@ from argparse import ArgumentParser
 from collections import namedtuple
 from enum import Enum
 from typing import Union
+from pprint import pprint
 
 from kimg4.img4 import IM4P
 from packaging.version import Version
@@ -837,6 +838,10 @@ To dump .tbd files for a framework
                     os.makedirs(args.outdir, exist_ok=True)
                     with open(args.outdir + '/' + header_name, 'w') as out:
                         out.write(header)
+
+                if args.bench:
+                    pass
+                    # pprint(image.bench_stats)
 
     elif args.do_tbd:
         with open(args.filename, 'rb') as fp:
