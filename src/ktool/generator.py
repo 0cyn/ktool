@@ -66,7 +66,7 @@ class TBDGenerator:
             classes = []
             ivars = []
 
-            for sym in self.image.exports.symbols:
+            for sym in self.image.exports:
                 if sym.type == SymbolType.FUNC:
                     symbols.append(sym.name)
                 elif sym.type == SymbolType.CLASS:
