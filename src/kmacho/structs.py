@@ -37,16 +37,18 @@ class Struct:
         instance: Struct = struct_class(byte_order)
         current_off = 0
         raw = bytearray(raw)
+        inst_raw = bytearray()
 
-        for field in instance._field_list:
+        for field in instance._fields:
             size = instance._field_sizes[field]
             data = raw[current_off:current_off + size]
 
             instance._fields[field] = int.from_bytes(data, byte_order)
 
-            instance.raw += data
+            inst_raw += data
             current_off += size
 
+        instance.raw = inst_raw
         instance.initialized = True
         return instance
 
@@ -63,7 +65,7 @@ class Struct:
 
         instance: Struct = struct_class(byte_order)
 
-        for i, field in enumerate(instance._field_list):
+        for i, field in enumerate(instance._fields):
             instance._fields[field] = values[i]
 
         instance._rebuild_raw()
@@ -97,9 +99,7 @@ class Struct:
         self.byte_order = byte_order
         self.initialized = False
 
-        self._field_list = fields
         self._field_sizes = {}
-        self._sizeof = sum(sizes)
 
         for index, i in enumerate(fields):
             self._fields[i] = 0
@@ -110,7 +110,7 @@ class Struct:
 
     def _rebuild_raw(self):
         raw = bytearray()
-        for field in self._field_list:
+        for field in self._fields:
             size = self._field_sizes[field]
 
             field_dat = self._fields[field]
@@ -126,12 +126,7 @@ class Struct:
 
             raw += bytearray(data)
 
-        assert len(raw) == self._sizeof
-
         self.raw = raw
-
-    def __len__(self):
-        return self._sizeof
 
     def __getattr__(self, item):
         if item == '_fields':
