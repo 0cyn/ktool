@@ -80,7 +80,7 @@ class Struct:
 
     def __str__(self):
         text = f'{self.__class__.__name__}('
-        for field in self._field_list:
+        for field in self._fields:
             text += f'{field}={hex(self._fields[field])}, '
         return text[:-2] + ')'
 
