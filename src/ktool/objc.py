@@ -282,6 +282,7 @@ class Type:
 class TypeProcessor:
     def __init__(self):
         self.structs = {}
+        self.type_cache = {}
 
     def save_struct(self, struct_to_save: Struct_Representation):
         if struct_to_save.name not in self.structs.keys():
@@ -295,6 +296,8 @@ class TypeProcessor:
                 self.structs[struct_to_save.name] = struct_to_save
 
     def process(self, type_to_process: str):
+        if type_to_process in self.type_cache:
+            return self.type_cache[type_to_process]
         try:
             tokens = self.tokenize(type_to_process)
             types = []
@@ -308,6 +311,7 @@ class TypeProcessor:
                     if typee.type == EncodedType.STRUCT:
                         self.save_struct(typee.value)
                     pc = 0
+            self.type_cache[type_to_process] = types
             return types
         except:
             pass
@@ -384,12 +388,61 @@ class Ivar:
 
 
 class MethodList:
-    def __init__(self):
-        pass
+    def __init__(self, image: ObjCImage, methlist_head, base_meths, class_meta, class_name):
+        self.objc_image = image
+        self.methlist_head = methlist_head
+        self.meta = class_meta
+        self.name = class_name
+        self.load_errors = []
+
+        self.struct_list = []
+        self.methods = self._process_methlist(base_meths)
+
+    def _process_methlist(self, base_meths):
+        methods = []
+
+        ea = self.methlist_head.off
+        vm_ea = base_meths
+
+        uses_relative_methods = self.methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
+        rms_are_direct = self.methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
+
+        ea += objc2_meth_list.SIZE
+        vm_ea += objc2_meth_list.SIZE
+
+        for i in range(1, self.methlist_head.count + 1):
+            if uses_relative_methods:
+                sel = self.objc_image.get_int_at(ea, 4, vm=False)
+                types = self.objc_image.get_int_at(ea+4, 4, vm=False)
+            else:
+                sel = self.objc_image.get_int_at(ea, 8, vm=False)
+                types = self.objc_image.get_int_at(ea+8, 8, vm=False)
+
+            try:
+                method = Method(self.objc_image, self.meta, sel, types, vm_ea, uses_relative_methods, rms_are_direct)
+                methods.append(method)
+                for method_type in method.types:
+                    if method_type.type == EncodedType.STRUCT:
+                        self.struct_list.append(method_type.value)
+
+            except Exception as ex:
+                if not ignore.OBJC_ERRORS:
+                    raise ex
+                log.warning(f'Failed to load method in {self.name} with {str(ex)}')
+                self.load_errors.append(f'Failed to load a method with {str(ex)}')
+
+            if uses_relative_methods:
+                ea += objc2_meth_list_entry.SIZE
+                vm_ea += objc2_meth_list_entry.SIZE
+            else:
+                ea += objc2_meth.SIZE
+                vm_ea += objc2_meth.SIZE
+
+        return methods
 
 
 class Method:
-    def __init__(self, objc_image: ObjCImage, meta, method: objc2_meth, vmaddr: int,
+    def __init__(self, objc_image: ObjCImage, meta, selector, types, vmaddr: int,
                  uses_relative_method_selectors=False, relative_method_selectors_are_direct=False):
         """
 
@@ -405,17 +458,17 @@ class Method:
 
         if uses_relative_method_selectors:
             if relative_method_selectors_are_direct:
-                self.sel = objc_image.get_cstr_at(method.selector + vmaddr, 0, vm=True, sectname="__objc_methname")
-                self.type_string = objc_image.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
+                self.sel = objc_image.get_cstr_at(selector + vmaddr, 0, vm=True, sectname="__objc_methname")
+                self.type_string = objc_image.get_cstr_at(types + vmaddr + 4, 0, vm=True,
                                                           sectname="__objc_methtype")
             else:
-                selector_pointer = objc_image.get_int_at(method.selector + vmaddr, 8, vm=True)
+                selector_pointer = objc_image.get_int_at(selector + vmaddr, 8, vm=True)
                 self.sel = objc_image.get_cstr_at(selector_pointer, 0, vm=True, sectname="__objc_methname")
-                self.type_string = objc_image.get_cstr_at(method.types + vmaddr + 4, 0, vm=True,
+                self.type_string = objc_image.get_cstr_at(types + vmaddr + 4, 0, vm=True,
                                                           sectname="__objc_methtype")
         else:
-            self.sel = objc_image.get_cstr_at(method.selector, 0, vm=True, sectname="__objc_methname")
-            self.type_string = objc_image.get_cstr_at(method.types, 0, vm=True, sectname="__objc_methtype")
+            self.sel = objc_image.get_cstr_at(selector, 0, vm=True, sectname="__objc_methname")
+            self.type_string = objc_image.get_cstr_at(types, 0, vm=True, sectname="__objc_methtype")
 
         self.types = objc_image.tp.process(self.type_string)
 
@@ -571,42 +624,12 @@ class Class:
 
         methlist_head = self.objc_image.load_struct(self.objc2_class_ro.base_meths, objc2_meth_list)
 
-        ea = methlist_head.off
-        vm_ea = self.objc2_class_ro.base_meths
+        methlist = MethodList(self.objc_image, methlist_head, self.objc2_class_ro.base_meths, self.meta, self.name)
 
-        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
-        rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
+        self.load_errors += methlist.load_errors
+        self.struct_list += methlist.struct_list
 
-        ea += objc2_meth_list.SIZE
-        vm_ea += objc2_meth_list.SIZE
-
-        for i in range(1, methlist_head.count + 1):
-            if uses_relative_methods:
-                meth = self.objc_image.load_struct(ea, objc2_meth_list_entry, vm=False)
-            else:
-                meth = self.objc_image.load_struct(ea, objc2_meth, vm=False)
-
-            try:
-                method = Method(self.objc_image, self.meta, meth, vm_ea, uses_relative_methods, rms_are_direct)
-                methods.append(method)
-                for method_type in method.types:
-                    if method_type.type == EncodedType.STRUCT:
-                        self.struct_list.append(method_type.value)
-
-            except Exception as ex:
-                if not ignore.OBJC_ERRORS:
-                    raise ex
-                log.warning(f'Failed to load method in {self.name} with {str(ex)}')
-                self.load_errors.append(f'Failed to load a method with {str(ex)}')
-
-            if uses_relative_methods:
-                ea += objc2_meth_list_entry.SIZE
-                vm_ea += objc2_meth_list_entry.SIZE
-            else:
-                ea += objc2_meth.SIZE
-                vm_ea += objc2_meth.SIZE
-
-        return methods
+        return methlist.methods
 
     def _process_props(self) -> List['Property']:
         properties = []
@@ -776,6 +799,7 @@ class Category:
         loc = self.objc_image.get_int_at(ptr, 8, vm=True)
 
         self.struct: objc2_category = self.objc_image.load_struct(loc, objc2_category, vm=True)
+
         self.name = self.objc_image.get_cstr_at(self.struct.name, vm=True)
         self.classname = ""
         try:
@@ -783,6 +807,9 @@ class Category:
             self.classname = sym.name[1:]
         except:
             pass
+
+        self.load_errors = []
+        self.struct_list = []
 
         instmeths = self._process_methods(self.struct.inst_meths)
         classmeths = self._process_methods(self.struct.class_meths, True)
@@ -801,29 +828,12 @@ class Category:
         ea = methlist_head.off
         vm_ea = loc
 
-        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
-        rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
+        methlist = MethodList(self.objc_image, methlist_head, loc, meta, self.name)
 
-        ea += objc2_meth_list.SIZE
-        vm_ea += objc2_meth_list.SIZE
+        self.load_errors += methlist.load_errors
+        self.struct_list += methlist.struct_list
 
-        for i in range(1, methlist_head.count + 1):
-            if uses_relative_methods:
-                meth = self.objc_image.load_struct(ea, objc2_meth_list_entry, vm=False)
-            else:
-                meth = self.objc_image.load_struct(ea, objc2_meth, vm=False)
-            try:
-                methods.append(Method(self.objc_image, meta, meth, vm_ea, uses_relative_methods, rms_are_direct))
-            except Exception as ex:
-                log.warning(f'Failed to load method with {str(ex)}')
-            if uses_relative_methods:
-                ea += objc2_meth_list_entry.SIZE
-                vm_ea += objc2_meth_list_entry.SIZE
-            else:
-                ea += objc2_meth.SIZE
-                vm_ea += objc2_meth.SIZE
-
-        return methods
+        return methlist.methods
 
     def _process_props(self, location):
         properties = []
@@ -859,6 +869,9 @@ class Protocol:
         self.objc_image = objc_image
         self.name = objc_image.get_cstr_at(protocol.name, 0, vm=True)
 
+        self.load_errors = []
+        self.struct_list = []
+
         self.methods = self._process_methods(protocol.inst_meths)
         self.methods += self._process_methods(protocol.class_meths, True)
 
@@ -877,28 +890,12 @@ class Protocol:
         methlist_head = self.objc_image.load_struct(loc, objc2_meth_list)
         ea = methlist_head.off
 
-        uses_relative_methods = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
-        rms_are_direct = methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
+        methlist = MethodList(self.objc_image, methlist_head, vm_ea, meta, self.name)
 
-        ea += 8
-        vm_ea += 8
-        for i in range(1, methlist_head.count + 1):
-            if uses_relative_methods:
-                meth = self.objc_image.load_struct(ea, objc2_meth_list_entry, vm=False)
-            else:
-                meth = self.objc_image.load_struct(ea, objc2_meth, vm=False)
-            try:
-                methods.append(Method(self.objc_image, meta, meth, vm_ea, uses_relative_methods, rms_are_direct))
-            except Exception as ex:
-                log.warning(f'Failed to load method with {str(ex)}')
-            if uses_relative_methods:
-                ea += objc2_meth_list_entry.SIZE
-                vm_ea += objc2_meth_list_entry.SIZE
-            else:
-                ea += objc2_meth.SIZE
-                vm_ea += objc2_meth.SIZE
+        self.load_errors += methlist.load_errors
+        self.struct_list += methlist.struct_list
 
-        return methods
+        return methlist.methods
 
     def _process_props(self, location):
         properties = []
