@@ -64,13 +64,13 @@ written in pure, 100% python for the sake of platform independence when operatin
 this should run on any and all implementations of python3.
     
 Tested on:
-    * Windows/Windows on ARM64
-    * MacOS x86/arm64
-    * Linux/Linux ARM64
-    * iOS (iSH, ssh)
-    * Android (Termux)
-    * WebAssembly
-    * Brython
+* Windows/Windows on ARM64
+* MacOS x86/arm64
+* Linux/Linux ARM64
+* iOS (iSH, ssh)
+* Android (Termux)
+* WebAssembly
+* Brython
 
 #### Special thanks to
 
