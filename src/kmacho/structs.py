@@ -12,6 +12,7 @@
 #  Copyright (c) kat 2021.
 #
 
+# noinspection PyUnresolvedReferences
 class Struct:
     """
     Custom namedtuple-esque Struct representation. Can be unpacked from bytes or manually created with existing
@@ -24,6 +25,7 @@ class Struct:
 
     """
 
+    # noinspection PyProtectedMember
     @staticmethod
     def create_with_bytes(struct_class, raw, byte_order="little"):
         """
@@ -43,13 +45,12 @@ class Struct:
             size = instance._field_sizes[field]
             data = raw[current_off:current_off + size]
 
-            instance.__setattr__(field, int.from_bytes(data, byte_order))
-
+            instance.super.__setattr__(field, int.from_bytes(data, byte_order))
             inst_raw += data
             current_off += size
 
-        instance.raw = inst_raw
-        instance.initialized = True
+        instance.super.__setattr__('raw', inst_raw)
+        instance.super.__setattr__('initialized', True)
         return instance
 
     @staticmethod
@@ -65,6 +66,7 @@ class Struct:
 
         instance: Struct = struct_class(byte_order)
 
+        # noinspection PyProtectedMember
         for i, field in enumerate(instance._fields):
             instance.__setattr__(field, values[i])
 
@@ -86,6 +88,12 @@ class Struct:
         return text[:-2] + ')'
 
     def __init__(self, fields=None, sizes=None, byte_order="little"):
+
+        # We have to use the underlying superclass' __setattr__ to avoid using our own
+        # Our custom one checks whether a list contains something, which during init gets called
+        #   6 times. This exponentially multiplies how slow loading files with a shitload of
+        #   structs. Doing this saves about 5-10% off load times on larger files.
+
         if sizes is None:
             raise AssertionError(
                 "Do not use the bare Struct class; it must be implemented in an actual type; Missing Sizes")
@@ -94,8 +102,8 @@ class Struct:
             raise AssertionError(
                 "Do not use the bare Struct class; it must be implemented in an actual type; Missing Fields")
 
-        # Declare this first to avoid a recursion error
-        super().__setattr__('_fields', [])
+        super().__setattr__('super', super())
+        super().__setattr__('_fields', fields)
 
         super().__setattr__('byte_order', byte_order)
         super().__setattr__('initialized', False)
@@ -103,7 +111,6 @@ class Struct:
         super().__setattr__('_field_sizes', {})
 
         for index, i in enumerate(fields):
-            self._fields.append(i)
             self._field_sizes[i] = sizes[index]
 
         super().__setattr__('off', 0)
