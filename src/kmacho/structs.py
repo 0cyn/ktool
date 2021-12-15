@@ -43,7 +43,7 @@ class Struct:
             size = instance._field_sizes[field]
             data = raw[current_off:current_off + size]
 
-            instance._fields[field] = int.from_bytes(data, byte_order)
+            instance.__setattr__(field, int.from_bytes(data, byte_order))
 
             inst_raw += data
             current_off += size
@@ -66,7 +66,7 @@ class Struct:
         instance: Struct = struct_class(byte_order)
 
         for i, field in enumerate(instance._fields):
-            instance._fields[field] = values[i]
+            instance.__setattr__(field, values[i])
 
         instance._rebuild_raw()
         instance.initialized = True
@@ -81,7 +81,7 @@ class Struct:
     def __str__(self):
         text = f'{self.__class__.__name__}('
         for field in self._fields:
-            field_item = self._fields[field] if isinstance(self._fields[field], bytearray) else hex(self._fields[field])
+            field_item = self.__getattribute__(field) if isinstance(self.__getattribute__(field), bytearray) else hex(self.__getattribute__(field))
             text += f'{field}={field_item}, '
         return text[:-2] + ')'
 
@@ -95,33 +95,33 @@ class Struct:
                 "Do not use the bare Struct class; it must be implemented in an actual type; Missing Fields")
 
         # Declare this first to avoid a recursion error
-        self._fields = {}
+        super().__setattr__('_fields', [])
 
-        self.byte_order = byte_order
-        self.initialized = False
+        super().__setattr__('byte_order', byte_order)
+        super().__setattr__('initialized', False)
 
-        self._field_sizes = {}
+        super().__setattr__('_field_sizes', {})
 
         for index, i in enumerate(fields):
-            self._fields[i] = 0
+            self._fields.append(i)
             self._field_sizes[i] = sizes[index]
 
-        self.off = 0
-        self.raw = bytearray(b'')
+        super().__setattr__('off', 0)
+        super().__setattr__('raw', bytearray(b''))
 
     def _rebuild_raw(self):
         raw = bytearray()
         for field in self._fields:
             size = self._field_sizes[field]
 
-            field_dat = self._fields[field]
+            field_dat = self.__getattribute__(field)
 
             data = None
 
             if isinstance(field_dat, int):
                 data = field_dat.to_bytes(size, byteorder=self.byte_order)
             elif isinstance(field_dat, bytearray) or isinstance(field_dat, bytes):
-                data = self._fields[field]
+                data = self.__getattribute__(field)
 
             assert data is not None
 
@@ -129,16 +129,9 @@ class Struct:
 
         self.raw = raw
 
-    def __getattr__(self, item):
-        if item == '_fields':
-            return {}
-        if item in self._fields:
-            return self._fields[item]
-        raise AttributeError(f'{item} not in struct or internal properties')
-
     def __setattr__(self, key, value):
         if key in self._fields:
-            self._fields[key] = value
+            super().__setattr__(key, value)
             if self.initialized:
                 self._rebuild_raw()
         else:
