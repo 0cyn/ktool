@@ -81,7 +81,8 @@ class Struct:
     def __str__(self):
         text = f'{self.__class__.__name__}('
         for field in self._fields:
-            text += f'{field}={hex(self._fields[field])}, '
+            field_item = self._fields[field] if isinstance(self._fields[field], bytearray) else hex(self._fields[field])
+            text += f'{field}={field_item}, '
         return text[:-2] + ')'
 
     def __init__(self, fields=None, sizes=None, byte_order="little"):

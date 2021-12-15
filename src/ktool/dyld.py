@@ -245,86 +245,6 @@ class Image:
         """
         return self.slice.decode_uleb128(readHead)
 
-    def rm_load_command(self, index):
-        b_load_cmd = self.macho_header.load_commands.pop(index)
-
-        off = b_load_cmd.off + b_load_cmd.cmdsize
-        after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
-
-        self.slice.patch(b_load_cmd.off, after_bytes)
-        self.slice.patch(self.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize, b'\x00' * b_load_cmd.cmdsize)
-
-        dyld_head = self.macho_header.dyld_header
-        dyld_head.loadcnt -= 1
-        dyld_head.loadsize -= b_load_cmd.cmdsize
-
-        self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
-
-    def insert_lc(self, lc, fields, index=-1):
-        lc_type = LOAD_COMMAND_MAP[lc]
-
-        load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
-
-        off = dyld_header.SIZE
-        off += self.macho_header.dyld_header.loadsize
-        raw = load_cmd.raw
-        size = len(load_cmd.raw)
-
-        if index != -1:
-            b_load_cmd = self.macho_header.load_commands[index - 1]
-            off = b_load_cmd.off + b_load_cmd.cmdsize
-            after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
-            self.slice.patch(off, raw)
-            self.slice.patch(off + size, after_bytes)
-        else:
-            self.slice.patch(off, raw)
-
-        self.macho_header.load_commands.append(load_cmd)
-
-        dyld_head = self.macho_header.dyld_header
-        dyld_head.loadcnt += 1
-        dyld_head.loadsize += size
-
-        self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
-
-    def insert_lc_with_suf(self, lc, fields, suffix, index=-1):
-        lc_type = LOAD_COMMAND_MAP[lc]
-
-        load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
-        # log.debug(f'Fabricated Load Command {str(load_cmd)}')
-
-        encoded = suffix.encode('utf-8') + b'\x00'
-
-        cmd_size = lc_type.SIZE
-        cmd_size += len(encoded)
-        cmd_size = 0x8 * math.ceil(cmd_size / 0x8)
-        log.debug(f'Computed Struct Size of {cmd_size}')
-
-        load_cmd.cmdsize = cmd_size
-
-        off = dyld_header.SIZE
-        off += self.macho_header.dyld_header.loadsize
-        raw = load_cmd.raw + encoded + (b'\x00' * (cmd_size - (lc_type.SIZE + len(encoded))))
-        log.debug(f'Padding Size {(cmd_size - (lc_type.SIZE + len(encoded)))}')
-        size = len(raw)
-
-        if index != -1:
-            b_load_cmd = self.macho_header.load_commands[index - 1]
-            off = b_load_cmd.off + b_load_cmd.cmdsize
-            after_bytes = self.macho_header.raw_bytes()[off:self.macho_header.dyld_header.loadsize + 32]
-            self.slice.patch(off, raw)
-            self.slice.patch(off + size, after_bytes)
-        else:
-            self.slice.patch(off, raw)
-
-        self.macho_header.load_commands.append(load_cmd)
-
-        dyld_head = self.macho_header.dyld_header
-        dyld_head.loadcnt += 1
-        dyld_head.loadsize += size
-
-        self.slice.patch(self.macho_header.dyld_header.off, dyld_head.raw)
-
 
 class Dyld:
     """
@@ -487,6 +407,88 @@ class Dyld:
             for symbol in image.lazy_binding_table.symbol_table:
                 symbol.attr = 'Lazy'
                 image.imports.append(symbol)
+
+
+class LD64:
+    @classmethod
+    def insert_load_cmd(cls, image: Image, lc, fields, index=-1):
+        lc_type = LOAD_COMMAND_MAP[lc]
+
+        load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
+
+        off = dyld_header.SIZE
+        off += image.macho_header.dyld_header.loadsize
+        raw = load_cmd.raw
+        size = len(load_cmd.raw)
+
+        if index != -1:
+            b_load_cmd = image.macho_header.load_commands[index - 1]
+            off = b_load_cmd.off + b_load_cmd.cmdsize
+            after_bytes = image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + 32]
+            image.slice.patch(off, raw)
+            image.slice.patch(off + size, after_bytes)
+        else:
+            image.slice.patch(off, raw)
+
+        image.macho_header.load_commands.append(load_cmd)
+
+        image.macho_header.dyld_header.loadcnt += 1
+        image.macho_header.dyld_header.loadsize += size
+
+        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw)
+
+    @classmethod
+    def insert_load_cmd_with_str(cls, image: Image, lc, fields, suffix, index=-1):
+        lc_type = LOAD_COMMAND_MAP[lc]
+
+        load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
+        log.debug(f'Fabricated Load Command {str(load_cmd)}')
+
+        encoded = suffix.encode('utf-8') + b'\x00'
+
+        cmd_size = lc_type.SIZE
+        cmd_size += len(encoded)
+        cmd_size = 0x8 * math.ceil(cmd_size / 0x8)
+        log.debug_tm(f'Computed cmd size (w/ pad) Size of {cmd_size}')
+
+        load_cmd.cmdsize = cmd_size
+
+        off = dyld_header.SIZE
+        off += image.macho_header.dyld_header.loadsize
+        raw = load_cmd.raw + encoded + (b'\x00' * (cmd_size - (lc_type.SIZE + len(encoded))))
+        log.debug_tm(f'Padding Size {(cmd_size - (lc_type.SIZE + len(encoded)))}')
+        size = len(raw)
+
+        if index != -1:
+            b_load_cmd = image.macho_header.load_commands[index - 1]
+            off = b_load_cmd.off + b_load_cmd.cmdsize
+            after_bytes = image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + 32]
+            image.slice.patch(off, raw)
+            image.slice.patch(off + size, after_bytes)
+            image.macho_header.load_commands.insert(index, load_cmd)
+        else:
+            image.slice.patch(off, raw)
+            image.macho_header.load_commands.append(load_cmd)
+
+        image.macho_header.dyld_header.loadcnt += 1
+        image.macho_header.dyld_header.loadsize -= size
+
+        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw)
+
+    @classmethod
+    def remove_load_command(cls, image: Image, index):
+        b_load_cmd = image.macho_header.load_commands.pop(index)
+
+        off = b_load_cmd.off + b_load_cmd.cmdsize
+        after_bytes = image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + 32]
+
+        image.slice.patch(b_load_cmd.off, after_bytes)
+        image.slice.patch(image.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize, b'\x00' * b_load_cmd.cmdsize)
+
+        image.macho_header.dyld_header.loadcnt -= 1
+        image.macho_header.dyld_header.loadsize -= b_load_cmd.cmdsize
+
+        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw)
 
 
 class ExternalDylib:

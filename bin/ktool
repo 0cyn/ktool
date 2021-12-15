@@ -24,7 +24,6 @@ from argparse import ArgumentParser
 from collections import namedtuple
 from enum import Enum
 from typing import Union
-from pprint import pprint
 
 from kimg4.img4 import IM4P
 from packaging.version import Version
@@ -39,7 +38,8 @@ from ktool import (
     ignore,
     log,
     LogLevel,
-    Table, Image
+    Table, Image,
+    LD64
 )
 
 from ktool.exceptions import *
@@ -546,7 +546,8 @@ commands currently supported:
                     last_dylib_command_index = i + 1
 
             dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
-            image.insert_lc_with_suf(lc, [dylib_item.raw], args.payload, last_dylib_command_index)
+
+            LD64.insert_load_cmd_with_str(image, lc, [dylib_item.raw], args.payload, last_dylib_command_index)
 
             log.info("Reloading MachO Slice to verify integrity")
             image = process_patches(image)
@@ -594,11 +595,11 @@ Modify the install name of a image
                         break
 
                 dylib_item = Struct.create_with_values(dylib, [0x18, 2, 0, 0])
-                image.rm_load_command(id_dylib_index)
+                LD64.remove_load_command(image, id_dylib_index)
 
                 image = process_patches(image)
 
-                image.insert_lc_with_suf(LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
+                LD64.insert_load_cmd_with_str(image, LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
 
                 image = process_patches(image)
 
