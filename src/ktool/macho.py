@@ -327,6 +327,8 @@ class Slice:
 
         self.byte_order = "little" if self.get_int_at(0, 4, "little") == MH_MAGIC_64 else "big"
 
+        self._cstring_cache = {}
+
     def patch(self, address: int, raw: bytes):
         if self.macho_file.uses_mmaped_io:
             self.macho_file.file.seek(self.offset + address)
@@ -417,6 +419,9 @@ class Slice:
         :return:
         """
         addr = addr + self.offset
+        if addr in self._cstring_cache:
+            return self._cstring_cache[addr]
+
         self.macho_file.file.seek(addr)
 
         try:
@@ -426,7 +431,7 @@ class Slice:
             raise ex
 
         self.macho_file.file.seek(0)
-
+        self._cstring_cache[addr] = text
         return text
 
     def _bio_get_cstr_at(self, addr: int, limit: int = 0):
