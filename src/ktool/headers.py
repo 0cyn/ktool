@@ -67,6 +67,8 @@ class TypeResolver:
         self.local_classes = objc_image.classlist
         self.local_protos = objc_image.protolist
 
+        self._linked_cache = {}
+
     def find_linked(self, classname: str):
         """
         given a classname, return install name of a framework if that class was imported from it.
@@ -74,20 +76,30 @@ class TypeResolver:
         :param classname:
         :return:
         """
+
+        if classname in self._linked_cache:
+            return self._linked_cache[classname]
+
         for local in self.local_classes:
             if local.name == classname:
+                self._linked_cache[classname] = ""
                 return ""
         for local in self.local_protos:
             if local.name == classname[1:-1]:
+                self._linked_cache[classname] = "-Protocol"
                 return "-Protocol"
         if classname in self.classmap:
             try:
                 name = self.objc_image.image.linked[int(self.classmap[classname].ordinal) - 1].install_name
                 if '.dylib' in name:
+                    self._linked_cache[classname] = None
                     return None
+                self._linked_cache[classname] = name
                 return name
             except IndexError:
                 pass
+
+        self._linked_cache[classname] = None
         return None
 
 
