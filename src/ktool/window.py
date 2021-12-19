@@ -294,6 +294,9 @@ class RootBox:
     def __init__(self, stdscr):
         self.stdscr = stdscr
 
+    def coord_translate(self, x, y):
+        return x, y
+
     def write(self, x, y, string, attr):
         try:
             self.stdscr.addstr(y, x, string, attr)
@@ -317,6 +320,10 @@ class Box:
         self.y = y
         self.width = width
         self.height = height
+
+    def coord_translate(self, x, y):
+        px, py = self.parent.coord_translate(self.x, self.y)
+        return x - px, y - py
 
     def write(self, x, y, string, attr):
         self.parent.write(self.x + x, self.y + y, string, attr)
@@ -534,7 +541,15 @@ class View:
 
     def __init__(self):
         self.box = None
+        self.children = []
         self.draw = True
+
+    def add_subview(self, view):
+        if view not in self.children:
+            self.children.append(view)
+
+    def coord_translate(self, x, y):
+        return self.box.coord_translate(x, y)
 
     def redraw(self):
         """
@@ -571,6 +586,9 @@ class View:
         :param y: Y coordinate of the mouse-press
         :return: True or False; whether the keypress was handled by this View
         """
+        for child in self.children:
+            if child.handle_mouse(x, y):
+                return True
         return False
 
 
@@ -586,6 +604,31 @@ class ScrollView(View):
 
         # TODO: Implement
         self.scroll_cursor = 0
+
+
+class Button(View):
+    def __init__(self, parent, x, y, height):
+        super().__init__()
+        self.text = ""
+        self.box = Box(parent.box, x, y, 0, height)
+
+    def set_text(self, text):
+        self.text = text
+        self.box.width = len(text)
+
+    def redraw(self):
+        self.box.write(0, 0, self.text, curses.A_NORMAL)
+
+    def handle_mouse(self, x, y):
+        tx, ty = self.box.coord_translate(x, y)
+        if 0 <= tx <= self.box.width:
+            if 0 <= ty <= self.box.height:
+                self.action()
+                return True
+        return False
+
+    def action(self):
+        pass
 
 
 # # # # #
@@ -659,6 +702,15 @@ class TitleBar(View):
         self.add_menu_item(EditMenuItem())
         self.add_menu_item(DumpMenuItem())
 
+        self.exit_button = Button(self, 0, 0, 1)
+        self.exit_button.set_text(" Exit ")
+        self.exit_button.action = self.exit
+
+        self.add_subview(self.exit_button)
+
+    def exit(self):
+        raise ExitProgramException
+
     def add_menu_item(self, item):
         if len(self.menu_items) > 0:
             top_item = self.menu_items[-1]
@@ -669,6 +721,7 @@ class TitleBar(View):
         self.menu_item_xy_map[item] = [start_x, 0]
 
     def redraw(self):
+
         if not self.box:
             return
 
@@ -677,13 +730,15 @@ class TitleBar(View):
         self.box.write(0, 1, '┟' + ''.ljust(curses.COLS - 3, '━') + '┦', curses.color_pair(9))
         self.box.write(TitleBar.MENUS_START, 0, '╤', curses.color_pair(9))
         self.box.write(TitleBar.MENUS_START, 1, '┸', curses.color_pair(9))
-        self.box.write(self.box.width - 10, 0, '═ Exit ═', curses.A_NORMAL)
 
         x = TitleBar.MENUS_START + 3
         for item in self.menu_items:
             self.box.write(x, 0, item.rend_text, curses.A_NORMAL)
             self.box.write(x + 1, 0, item.rend_text[1], curses.A_UNDERLINE)
             x += item.rend_width + 2
+
+        for child in self.children:
+            child.redraw()
 
     def handle_key_press(self, key):
         if self.pres_menu_item_index < 0:
@@ -712,9 +767,10 @@ class TitleBar(View):
         handle = False
 
         if y < 1:
+            if super().handle_mouse(x, y):
+                return True
+
             handle = True
-            if -1 <= x - self.box.width + 5 <= 1:
-                raise ExitProgramException
 
             if x < 10:
                 raise PresentDebugMenuException
@@ -1795,6 +1851,8 @@ class KToolScreen:
 
         # Rebuild all of our contexts so they're drawn with updated screen width/height
         self.titlebar.box = Box(self.root, 0, 0, curses.COLS, 1)
+        self.titlebar.exit_button.box.x = curses.COLS - 10
+        self.titlebar.exit_button.box.parent = self.titlebar.box
 
         self.sidebar.box = Box(self.root, 0, 1, Sidebar.WIDTH, curses.LINES - 2)
 
