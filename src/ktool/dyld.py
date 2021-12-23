@@ -281,7 +281,10 @@ class Dyld:
         fixups = None
         log.info(f'registered {len(image.macho_header.load_commands)} Load Commands')
         for cmd in image.macho_header.load_commands:
-            load_command = LOAD_COMMAND(cmd.cmd)
+            try:
+                load_command = LOAD_COMMAND(cmd.cmd)
+            except ValueError:
+                continue
 
             if load_command == LOAD_COMMAND.SEGMENT_64:
                 log.debug("Loading SEGMENT_64")
