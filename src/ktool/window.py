@@ -1511,7 +1511,8 @@ class KToolMachOLoader:
         file_content_item.lines.append(f'Install Name: §35m{lib.install_name}§39m')
         file_content_item.lines.append(f'Filetype: §35m{lib.macho_header.filetype.name}§39m')
         file_content_item.lines.append(f'Flags: §35m{"§39m, §35m".join([i.name for i in lib.macho_header.flags])}§39m')
-        file_content_item.lines.append(f'UUID: §35m{lib.uuid.hex().upper()}§39m')
+        if lib.uuid:
+            file_content_item.lines.append(f'UUID: §35m{lib.uuid.hex().upper()}§39m')
         file_content_item.lines.append(f'Platform: §35m{lib.platform.name}§39m')
         file_content_item.lines.append(f'Minimum OS: §35m{lib.minos.x}.{lib.minos.y}.{lib.minos.z}§39m')
         file_content_item.lines.append(
@@ -1561,7 +1562,12 @@ class KToolMachOLoader:
 
             mmci.lines.append(hexdump)
 
-            lc_menu_item = SidebarMenuItem(LOAD_COMMAND(cmd.cmd).name, mmci, menuitem)
+            try:
+                item_name = LOAD_COMMAND(cmd.cmd).name
+            except ValueError:
+                item_name = str(cmd.cmd)
+
+            lc_menu_item = SidebarMenuItem(item_name, mmci, menuitem)
             menuitem.children.append(lc_menu_item)
 
         menuitem.parse_mmc()
