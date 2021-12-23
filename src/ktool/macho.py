@@ -325,6 +325,7 @@ class Slice:
         else:
             self.size = self.arch_struct.size
 
+        # noinspection PyArgumentList
         self.byte_order = "little" if self.get_int_at(0, 4, "little") == MH_MAGIC_64 else "big"
 
         self._cstring_cache = {}
@@ -474,7 +475,7 @@ class Slice:
         try:
             return CPUType(cpu_type)
         except KeyError:
-            log.error(f'Unknown CPU Type ({hex(self.arch_struct.cputype)}) ({self.arch_struct}). File an issue at '
+            log.error(f'Unknown CPU Type ({hex(self.arch_struct.cpu_type)}) ({self.arch_struct}). File an issue at '
                       f'https://github.com/kritantadev/ktool')
             return CPUType.ARM
 
