@@ -472,7 +472,6 @@ class Method(Constructable):
                     try:
                         imp = objc_image.get_int_at(vm_addr+8, 4, vm=True)
                         imp = usi32_to_si32(imp) + vm_addr + 8
-                        print(hex(imp))
                         if imp in objc_image.image.symbols:
                             sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
                         else:
