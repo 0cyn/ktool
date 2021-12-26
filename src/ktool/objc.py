@@ -15,8 +15,9 @@ from collections import namedtuple
 from enum import Enum
 from typing import List
 
+from kmacho.base import Constructable
 from .structs import *
-from .util import log, ignore
+from .util import log, ignore, usi32_to_si32, opts
 
 type_encodings = {
     "c": "char",
@@ -92,7 +93,6 @@ class ObjCImage:
             for sec in self.image.segments[seg].sections:
                 if sec == "__objc_classlist":
                     sect = self.image.segments[seg].sections[sec]
-        # sect: Section = self.image.segments['__DATA_CONST'].sections['__objc_classlist']
 
         if not sect:
             return []
@@ -120,7 +120,7 @@ class ObjCImage:
             for sec in self.image.segments[seg].sections:
                 if sec == "__objc_protolist":
                     sect = self.image.segments[seg].sections[sec]
-        # sect: Section = self.image.segments['__DATA_CONST'].sections['__objc_classlist']
+
         if not sect:
             return []
 
@@ -355,13 +355,30 @@ class TypeProcessor:
         return tokens
 
 
-class Ivar:
-    def __init__(self, objc_image: ObjCImage, objc_class, ivar: objc2_ivar, vmaddr: int):
-        self.name: str = objc_image.get_cstr_at(ivar.name, 0, True, "__objc_methname")
+class Ivar(Constructable):
+
+    @staticmethod
+    def from_image(objc_image: ObjCImage, ivar: objc2_ivar):
+        name: str = objc_image.get_cstr_at(ivar.name, 0, True, "__objc_methname")
         type_string: str = objc_image.get_cstr_at(ivar.type, 0, True, "__objc_methtype")
+        ivar = Ivar(name, type_string, objc_image.tp)
+        return ivar
+
+    @staticmethod
+    def from_values(name, type_encoding, type_processor=None):
+        if not type_processor:
+            type_processor = TypeProcessor()
+        return Ivar(name, type_encoding, type_processor)
+
+    def raw_bytes(self):
+        pass
+
+    def __init__(self, name, type_encoding, type_processor):
+        self.name: str = name
+        type_string: str = type_encoding
         self.is_id: bool = type_string[0] == "@"
         try:
-            self.type: str = self._renderable_type(objc_image.tp.process(type_string)[0])
+            self.type: str = self._renderable_type(type_processor.process(type_string)[0])
         except IndexError:
             self.type: str = '?'
 
@@ -413,13 +430,13 @@ class MethodList:
         for i in range(1, self.methlist_head.count + 1):
             if uses_relative_methods:
                 sel = self.objc_image.get_int_at(ea, 4, vm=False)
-                types = self.objc_image.get_int_at(ea+4, 4, vm=False)
+                types = self.objc_image.get_int_at(ea + 4, 4, vm=False)
             else:
                 sel = self.objc_image.get_int_at(ea, 8, vm=False)
-                types = self.objc_image.get_int_at(ea+8, 8, vm=False)
+                types = self.objc_image.get_int_at(ea + 8, 8, vm=False)
 
             try:
-                method = Method(self.objc_image, self.meta, sel, types, vm_ea, uses_relative_methods, rms_are_direct)
+                method = Method.from_image(self.objc_image, sel, types, self.meta, vm_ea, uses_relative_methods, rms_are_direct)
                 methods.append(method)
                 for method_type in method.types:
                     if method_type.type == EncodedType.STRUCT:
@@ -441,36 +458,72 @@ class MethodList:
         return methods
 
 
-class Method:
-    def __init__(self, objc_image: ObjCImage, meta, selector, types, vmaddr: int,
-                 uses_relative_method_selectors=False, relative_method_selectors_are_direct=False):
-        """
+class Method(Constructable):
+    @staticmethod
+    def from_image(objc_image: ObjCImage, sel_addr, types_addr, is_meta, vm_addr, rms, rms_are_direct):
+        if rms:
+            if rms_are_direct:
+                try:
+                    if opts.USE_SYMTAB_INSTEAD_OF_SELECTORS:
+                        raise AssertionError
+                    sel = objc_image.get_cstr_at(sel_addr + vm_addr, 0, vm=True, sectname="__objc_methname")
 
+                except Exception as ex:
+                    try:
+                        imp = objc_image.get_int_at(vm_addr+8, 4, vm=True)
+                        imp = usi32_to_si32(imp) + vm_addr + 8
+                        print(hex(imp))
+                        if imp in objc_image.image.symbols:
+                            sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
+                        else:
+                            raise ex
+                    except Exception:
+                        raise ex
+                type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True,
+                                                     sectname="__objc_methtype")
+            else:
+                selector_pointer = objc_image.get_int_at(sel_addr + vm_addr, 8, vm=True)
+                try:
+                    if opts.USE_SYMTAB_INSTEAD_OF_SELECTORS:
+                        raise AssertionError
+                    sel = objc_image.get_cstr_at(selector_pointer, 0, vm=True, sectname="__objc_methname")
+                except Exception as ex:
+                    try:
+                        imp = objc_image.get_int_at(vm_addr+8, 4, vm=True)
+                        # no idea if this is correct
+                        imp = usi32_to_si32(imp) + vm_addr + 8
+                        if imp in objc_image.image.symbols:
+                            sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
+                        else:
+                            raise ex
+                    except Exception:
+                        raise ex
+                type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True,
+                                                     sectname="__objc_methtype")
+        else:
+            sel = objc_image.get_cstr_at(sel_addr, 0, vm=True, sectname="__objc_methname")
+            type_string = objc_image.get_cstr_at(types_addr, 0, vm=True, sectname="__objc_methtype")
+        return Method(is_meta, sel, type_string, objc_image.tp)
+
+    @staticmethod
+    def from_values(sel, type_string, is_meta=False, type_processor=None):
+        if not type_processor:
+            type_processor = TypeProcessor()
+        return Method(is_meta, sel, type_string, type_processor)
+
+    def raw_bytes(self):
+        pass
+
+    def __init__(self, meta, sel, type_string, type_processor):
+        """
 
         :param objc_image:
         :param meta:
-        :param method:
-        :param vmaddr:
-        :param uses_relative_method_selectors:
-        :param relative_method_selectors_are_direct:
         """
         self.meta = meta
-
-        if uses_relative_method_selectors:
-            if relative_method_selectors_are_direct:
-                self.sel = objc_image.get_cstr_at(selector + vmaddr, 0, vm=True, sectname="__objc_methname")
-                self.type_string = objc_image.get_cstr_at(types + vmaddr + 4, 0, vm=True,
-                                                          sectname="__objc_methtype")
-            else:
-                selector_pointer = objc_image.get_int_at(selector + vmaddr, 8, vm=True)
-                self.sel = objc_image.get_cstr_at(selector_pointer, 0, vm=True, sectname="__objc_methname")
-                self.type_string = objc_image.get_cstr_at(types + vmaddr + 4, 0, vm=True,
-                                                          sectname="__objc_methtype")
-        else:
-            self.sel = objc_image.get_cstr_at(selector, 0, vm=True, sectname="__objc_methname")
-            self.type_string = objc_image.get_cstr_at(types, 0, vm=True, sectname="__objc_methtype")
-
-        self.types = objc_image.tp.process(self.type_string)
+        self.sel = sel
+        self.type_string = type_string
+        self.types = type_processor.process(type_string)
 
         self.return_string = self._renderable_type(self.types[0])
         self.arguments = [self._renderable_type(i) for i in self.types[1:]]
@@ -649,7 +702,7 @@ class Class:
             prop = self.objc_image.load_struct(ea, objc2_prop, vm=False)
 
             try:
-                property = Property(self.objc_image, prop, vm_ea)
+                property = Property.from_image(self.objc_image, prop)
                 properties.append(property)
                 if hasattr(property, 'attr'):
                     if property.attr.type.type == EncodedType.STRUCT:
@@ -695,7 +748,7 @@ class Class:
             ivar_loc = ea + objc2_ivar.SIZE * (i - 1)
             ivar = self.objc_image.load_struct(ivar_loc, objc2_ivar, vm=False)
             try:
-                ivar_object = Ivar(self.objc_image, self, ivar, ivar_loc)
+                ivar_object = Ivar.from_image(self.objc_image, ivar)
                 ivars.append(ivar_object)
             except Exception as ex:
                 if not ignore.OBJC_ERRORS:
@@ -717,21 +770,33 @@ attr_encodings = {
 property_attr = namedtuple("property_attr", ["type", "attributes", "ivar", "is_id", "typestr"])
 
 
-class Property:
-    def __init__(self, objc_image: ObjCImage, property: objc2_prop, vmaddr: int):
-        self.objc_image: ObjCImage = objc_image
-        self.property: objc2_prop = property
+class Property(Constructable):
 
-        self.name = objc_image.get_cstr_at(property.name, 0, True, "__objc_methname")
+    @staticmethod
+    def from_image(objc_image: ObjCImage, property: objc2_prop):
+        name = objc_image.get_cstr_at(property.name, 0, True, "__objc_methname")
+        attr_string = objc_image.get_cstr_at(property.attr, 0, True, "__objc_methname")
+        return Property(name, attr_string, objc_image.tp)
+
+    @staticmethod
+    def from_values(name, attr_string, type_processor=None):
+        if not type_processor:
+            type_processor = TypeProcessor()
+        return Property(name, attr_string, type_processor)
+
+    def raw_bytes(self):
+        pass
+
+    def __init__(self, name, attr_string, type_processor):
+        self.name = name
 
         try:
-            self.attr = self.decode_property_attributes(
-                self.objc_image.get_cstr_at(property.attr, 0, True, "__objc_methname"))
+            self.attr = self.decode_property_attributes(type_processor, attr_string)
         except IndexError:
             log.warn(
-                f'issue with property {self.name} in {self.objc_image.get_cstr_at(property.attr, 0, True, "__objc_methname")}')
+                f'issue with property {self.name}')
             return
-        # property_attr = namedtuple("property_attr", ["type", "attributes", "ivar"])
+
         self.type = self._renderable_type(self.attr.type)
         self.is_id = self.attr.is_id
         self.attributes = self.attr.attributes
@@ -766,7 +831,8 @@ class Property:
             return ptraddon + type.value.name
         return str(type)
 
-    def decode_property_attributes(self, type_str: str):
+    @staticmethod
+    def decode_property_attributes(type_processor, type_str: str):
         attribute_strings = type_str.split(',')
 
         ptype = ""
@@ -779,7 +845,7 @@ class Property:
         for attribute in attribute_strings:
             indicator = attribute[0]
             if indicator == "T":
-                ptype = self.objc_image.tp.process(attribute[1:])[0]
+                ptype = type_processor.process(attribute[1:])[0]
                 if ptype == "{":
                     print(attribute)
                 is_id = attribute[1] == "@"
@@ -792,7 +858,19 @@ class Property:
         return property_attr(ptype, property_attributes, ivar, is_id, type_str)
 
 
-class Category:
+class Category(Constructable):
+
+    @staticmethod
+    def from_image(objc_image: ObjCImage, category_ptr):
+        pass
+
+    @staticmethod
+    def from_values(*args, **kwargs):
+        pass
+
+    def raw_bytes(self):
+        pass
+
     def __init__(self, image, ptr):
         self.objc_image = image
         self.ptr = ptr
@@ -851,7 +929,7 @@ class Category:
         for i in range(1, proplist_head.count + 1):
             prop = self.objc_image.load_struct(ea, objc2_prop, vm=False)
             try:
-                properties.append(Property(self.objc_image, prop, vm_ea))
+                properties.append(Property.from_image(self.objc_image, prop))
             except Exception as ex:
                 log.warning(f'Failed to load property with {str(ex)}')
             ea += objc2_prop.SIZE
@@ -913,7 +991,7 @@ class Protocol:
         for i in range(1, proplist_head.count + 1):
             prop = self.objc_image.load_struct(ea, objc2_prop, vm=False)
             try:
-                properties.append(Property(self.objc_image, prop, vm_ea))
+                properties.append(Property.from_image(self.objc_image, prop))
             except Exception as ex:
                 log.warning(f'Failed to load property with {str(ex)}')
             ea += objc2_prop.SIZE

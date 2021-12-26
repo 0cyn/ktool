@@ -41,7 +41,7 @@ class ImageHeader(Constructable):
     """
 
     @staticmethod
-    def from_bytes(macho_slice) -> 'ImageHeader':
+    def from_image(macho_slice) -> 'ImageHeader':
 
         image_header = ImageHeader()
 
@@ -121,7 +121,7 @@ class Image:
         """
         self.slice: Slice = macho_slice
 
-        self.macho_header: ImageHeader = ImageHeader.from_bytes(macho_slice=macho_slice)
+        self.macho_header: ImageHeader = ImageHeader.from_image(macho_slice=macho_slice)
 
         self.linked = []  # TODO: Remove this field soon.
         self.linked_images: List[ExternalDylib] = []
@@ -150,6 +150,8 @@ class Image:
 
         self.imports: List[Symbol] = []
         self.exports: List[Symbol] = []
+
+        self.symbols: Dict[int, Symbol] = {}
 
         self.binding_table = None
         self.weak_binding_table = None
@@ -308,11 +310,11 @@ class Dyld:
 
                 if load_exports:
                     log.info("Loading Export Trie")
-                    image.export_trie = ExportTrie.from_bytes(image, cmd.export_off, cmd.export_size)
+                    image.export_trie = ExportTrie.from_image(image, cmd.export_off, cmd.export_size)
 
             elif load_command == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
                 log.info("Loading Export Trie")
-                image.export_trie = ExportTrie.from_bytes(image, cmd.dataoff, cmd.datasize)
+                image.export_trie = ExportTrie.from_image(image, cmd.dataoff, cmd.datasize)
 
             elif load_command == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
                 log.warning(
@@ -410,6 +412,10 @@ class Dyld:
             for symbol in image.lazy_binding_table.symbol_table:
                 symbol.attr = 'Lazy'
                 image.imports.append(symbol)
+
+        if image.symbol_table:
+            for symbol in image.symbol_table.table:
+                image.symbols[symbol.addr] = symbol
 
 
 class LD64:
@@ -627,7 +633,7 @@ export_node = namedtuple("export_node", ['text', 'offset', 'flags'])
 
 class ExportTrie(Constructable):
     @staticmethod
-    def from_bytes(image: Image, export_start: int, export_size: int) -> 'ExportTrie':
+    def from_image(image: Image, export_start: int, export_size: int) -> 'ExportTrie':
         trie = ExportTrie()
 
         endpoint = export_start + export_size

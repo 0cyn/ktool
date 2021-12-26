@@ -26,7 +26,7 @@ class Constructable(ABC):
 
     @staticmethod
     @abstractmethod
-    def from_bytes(*args, **kwargs):
+    def from_image(*args, **kwargs):
         """
         Base method for serializing an instance of the subclass based on raw bytes
 

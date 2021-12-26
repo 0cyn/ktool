@@ -28,7 +28,7 @@ from typing import Union
 from kimg4.img4 import IM4P
 from packaging.version import Version
 
-from kmacho import LOAD_COMMAND, dylib_command, dylib, Struct
+from kmacho import LOAD_COMMAND, dylib_command, dylib
 
 import ktool
 
@@ -38,12 +38,15 @@ from ktool import (
     ignore,
     log,
     LogLevel,
-    Table, Image,
+    Table,
     LD64
 )
 
+from ktool.swift import *
+
 from ktool.exceptions import *
 from ktool.generator import FatMachOGenerator
+from ktool.util import opts
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
 UPDATE_AVAILABLE = False
@@ -163,10 +166,11 @@ def main():
     parser = ArgumentParser(description="ktool")
 
     parser.add_argument('--bench', dest='bench', action='store_true')
+    parser.add_argument('--membench', dest='membench', action='store_true')
     parser.add_argument('-v', dest='logging_level', type=int)
     parser.add_argument('-f', dest='force_load', action='store_true')
     parser.add_argument('--no-mmap', dest='no_mmap', action='store_true', help='Disable mmaped IO')
-    parser.set_defaults(func=help_prompt, bench=False, force_load=False, no_mmap=False, logging_level=1)
+    parser.set_defaults(func=help_prompt, bench=False, membench=False, force_load=False, no_mmap=False, logging_level=1)
 
     subparsers = parser.add_subparsers(help='sub-command help')
 
@@ -246,13 +250,14 @@ def main():
     parser_dump.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
+    parser_dump.add_argument('--use-stab-for-sel', dest='usfs', action='store_true')
     parser_dump.add_argument('--hard-fail', dest='hard_fail', action='store_true')
     parser_dump.add_argument('--sorted', dest='sort_headers', action='store_true')
     parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
     parser_dump.add_argument('filename', nargs='?', default='')
 
-    parser_dump.set_defaults(func=dump, do_headers=False, sort_headers=False, do_tbd=False, slice_index=0, hard_fail=False)
+    parser_dump.set_defaults(func=dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0, hard_fail=False)
 
     # list command: Lists lists of things contained in lists in the image.
     parser_list = subparsers.add_parser('list', help='Print various lists')
@@ -261,12 +266,13 @@ def main():
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_list.add_argument('--classes', dest='get_classes', action='store_true', help='Print class list')
     parser_list.add_argument('--protocols', dest='get_protos', action='store_true', help='Print Protocol list')
+    parser_list.add_argument('--stypes', dest='get_swift_types', action='store_true', help='Print Swift Types')
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
     parser_list.add_argument('filename', nargs='?', default='')
 
     parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False,
-                             slice_index=0)
+                             slice_index=0, get_swift_types=False)
 
     # symbol command: prints various symbol tables
     parser_symbols = subparsers.add_parser('symbols', help='Print various symbols')
@@ -285,6 +291,7 @@ def main():
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
     # this means when that command is used, calling args.func() will branch off to that function.
+    parser.print_help = help_prompt
     args = parser.parse_args()
 
     global MAIN_PARSER
@@ -318,6 +325,19 @@ def main():
     if args.no_mmap:
         global MMAP_ENABLED
         MMAP_ENABLED = False
+
+    if args.membench:
+        import tracemalloc
+        tracemalloc.start(10)
+
+        args.func(args)
+
+        snapshot = tracemalloc.take_snapshot()
+        top_stats = snapshot.statistics('lineno')
+
+        print("[ Top 10 ]")
+        for stat in top_stats[:10]:
+            print(stat)
 
     if args.bench:
         # This will run the program as normal, but with profiling enabled
@@ -379,7 +399,8 @@ Global Flags:
     -v [-1 through 5] - -1 will even hide errors, 5 is labeled internally as "TOO_MUCH"
     --no-mmap - Disables mmaped IO. Only use this flag if your system doesn't support mmaped IO, using this flag will
                 cause the program to run *much* slower.
-    --bench - Run benchmarks. useful for developing/contributing.
+    --bench - Run speed benchmarks. useful for developing/contributing.
+    --membench - Run memory usage benchmarks
         """
     print(help_prompt.__doc__)
 
@@ -719,7 +740,7 @@ To print a list of Load Commands and their data
     ktool list --cmds [filename]
     """
 
-    require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs'])
+    require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types'])
 
     with open(args.filename, 'rb') as fd:
         image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
@@ -735,6 +756,8 @@ To print a list of Load Commands and their data
         elif args.get_classes:
             for obj_class in objc_image.classlist:
                 print(f'{obj_class.name}')
+        elif args.get_swift_types:
+            load_swift_types(image)
         elif args.get_protos:
             for objc_proto in objc_image.protolist:
                 print(f'{objc_proto.name}')
@@ -819,6 +842,9 @@ To dump .tbd files for a framework
 
         if args.hard_fail:
             ignore.OBJC_ERRORS = False
+
+        if args.usfs:
+            opts.USE_SYMTAB_INSTEAD_OF_SELECTORS = True
 
         with open(args.filename, 'rb') as fp:
             image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)

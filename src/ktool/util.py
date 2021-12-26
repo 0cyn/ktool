@@ -29,6 +29,10 @@ class ignore:
     OBJC_ERRORS = True
 
 
+class opts:
+    USE_SYMTAB_INSTEAD_OF_SELECTORS = False
+
+
 def macho_is_malformed():
     """Raise MalformedMachOException *if* we dont want to ignore bad mach-os
 
@@ -36,6 +40,19 @@ def macho_is_malformed():
     """
     if not ignore.MALFORMED:
         raise MalformedMachOException
+
+
+def usi32_to_si32(val):
+    """
+    Quick hack to read the signed val of an unsigned int (Image loads all ints from bytes as unsigned ints)
+
+    :param val:
+    :return:
+    """
+    bits = 32
+    if (val & (1 << (bits - 1))) != 0:  # if sign bit is set e.g., 8bit: 128-255
+        val = val - (1 << bits)         # compute negative value
+    return val                          # return positive value as is
 
 
 class TapiYAMLWriter:
