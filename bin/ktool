@@ -482,19 +482,19 @@ Print the symbol table
             image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False, use_mmaped_io=MMAP_ENABLED)
 
             import_symbols = {}
-            symbol = namedtuple('symbol', ['name', 'image', 'from_table'])
+            symbol = namedtuple('symbol', ['addr', 'name', 'image', 'from_table'])
 
-            for sym in image.imports:
+            for addr, sym in image.import_table.items():
                 try:
-                    import_symbols[sym.fullname] = symbol(sym.fullname, image.linked[int(sym.ordinal) - 1].install_name, sym.attr)
+                    import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, image.linked_images[int(sym.ordinal) - 1].install_name, sym.attr)
                 except IndexError:
-                    import_symbols[sym.fullname] = symbol(sym.fullname, "ordinal: " + str(int(sym.ordinal)), sym.attr)
+                    import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, "ordinal: " + str(int(sym.ordinal)), sym.attr)
 
             table = Table()
-            table.titles = ['Symbol', 'Image', 'Binding']
+            table.titles = ['Addr', 'Symbol', 'Image', 'Binding']
 
             for _, sym in import_symbols.items():
-                table.rows.append([sym.name, sym.image, sym.from_table])
+                table.rows.append([sym.addr, sym.name, sym.image, sym.from_table])
 
             print(table.render(get_terminal_size().columns))
 
@@ -506,21 +506,21 @@ Print the symbol table
             for sym in image.binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
                 except IndexError:
                     pass
             print('\nWeak Binding Info'.ljust(60, '-') + '\n')
             for sym in image.weak_binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
                 except IndexError:
                     pass
             print('\nLazy Binding Info'.ljust(60, '-') + '\n')
             for sym in image.lazy_binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
                 except IndexError:
                     pass
 

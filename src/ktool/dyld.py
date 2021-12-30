@@ -40,8 +40,8 @@ class ImageHeader(Constructable):
     It doesn't handle complex abstraction logic, it simply loads in the load commands as their raw structs
     """
 
-    @staticmethod
-    def from_image(macho_slice) -> 'ImageHeader':
+    @classmethod
+    def from_image(cls, macho_slice) -> 'ImageHeader':
 
         image_header = ImageHeader()
 
@@ -84,8 +84,8 @@ class ImageHeader(Constructable):
 
         return image_header
 
-    @staticmethod
-    def from_values(*args, **kwargs):
+    @classmethod
+    def from_values(cls, *args, **kwargs):
         pass
 
     def __init__(self):
@@ -105,9 +105,6 @@ class Image:
 
     It's the root object in the massive tree of information we're going to build up about the binary
 
-    This is an abstracted version, other classes will handle the raw struct interaction;
-        here, we facilitate that interaction within those classes and generate our abstract representation
-
     This class on its own does not handle populating its fields.
     The Dyld class set is responsible for loading in and processing the raw values to it.
     """
@@ -121,9 +118,9 @@ class Image:
         """
         self.slice: Slice = macho_slice
 
-        self.macho_header: ImageHeader = ImageHeader.from_image(macho_slice=macho_slice)
+        if self.slice:
+            self.macho_header: ImageHeader = ImageHeader.from_image(macho_slice=macho_slice)
 
-        self.linked = []  # TODO: Remove this field soon.
         self.linked_images: List[ExternalDylib] = []
 
         self.name = ""  # TODO: Remove this field soon.
@@ -152,6 +149,8 @@ class Image:
         self.exports: List[Symbol] = []
 
         self.symbols: Dict[int, Symbol] = {}
+        self.import_table: Dict[int, Symbol] = {}
+        self.export_table: Dict[int, Symbol] = {}
 
         self.binding_table = None
         self.weak_binding_table = None
@@ -161,6 +160,9 @@ class Image:
         self.symbol_table: Union[SymbolTable, None] = None
 
         self.struct_cache: Dict[int, Struct] = {}
+
+    def vm_check(self, address):
+        return self.vm.vm_check(address)
 
     def get_int_at(self, offset: int, length: int, vm=False, section_name=None):
         """
@@ -375,8 +377,6 @@ class Dyld:
             elif isinstance(cmd, dylib_command):
                 external_dylib = ExternalDylib(image, cmd)
 
-                image.linked.append(external_dylib)  # TODO: DEPRECATED
-
                 image.linked_images.append(external_dylib)
                 log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
@@ -401,17 +401,21 @@ class Dyld:
         if image.export_trie:
             for symbol in image.export_trie.symbols:
                 image.exports.append(symbol)
+                image.export_table[symbol.addr] = symbol
 
         if image.binding_table:
             for symbol in image.binding_table.symbol_table:
                 symbol.attr = ''
                 image.imports.append(symbol)
+                image.import_table[symbol.addr] = symbol
             for symbol in image.weak_binding_table.symbol_table:
                 symbol.attr = 'Weak'
                 image.imports.append(symbol)
+                image.import_table[symbol.addr] = symbol
             for symbol in image.lazy_binding_table.symbol_table:
                 symbol.attr = 'Lazy'
                 image.imports.append(symbol)
+                image.import_table[symbol.addr] = symbol
 
         if image.symbol_table:
             for symbol in image.symbol_table.table:
@@ -632,8 +636,8 @@ export_node = namedtuple("export_node", ['text', 'offset', 'flags'])
 
 
 class ExportTrie(Constructable):
-    @staticmethod
-    def from_image(image: Image, export_start: int, export_size: int) -> 'ExportTrie':
+    @classmethod
+    def from_image(cls, image: Image, export_start: int, export_size: int) -> 'ExportTrie':
         trie = ExportTrie()
 
         endpoint = export_start + export_size
@@ -649,8 +653,8 @@ class ExportTrie(Constructable):
 
         return trie
 
-    @staticmethod
-    def from_values(*args, **kwargs):
+    @classmethod
+    def from_values(cls, *args, **kwargs):
         pass
 
     def raw_bytes(self):
@@ -754,7 +758,7 @@ class BindingTable:
             segment = list(self.image.segments.values())[bind_command.seg_index]
             vm_address = segment.vm_address + bind_command.seg_offset
             try:
-                lib = self.image.linked[bind_command.lib_ordinal - 1].install_name
+                lib = self.image.linked_images[bind_command.lib_ordinal - 1].install_name
             except IndexError:
                 lib = str(bind_command.lib_ordinal)
             item = bind_command.name

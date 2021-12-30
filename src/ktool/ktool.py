@@ -115,7 +115,7 @@ def macho_verify(fp: Union[BinaryIO, MachOFile, Slice, Image]) -> None:
 
 
 def load_objc_metadata(image: Image) -> ObjCImage:
-    return ObjCImage(image)
+    return ObjCImage.from_image(image)
 
 
 def generate_headers(objc_image: ObjCImage, sort_items=False) -> Dict[str, str]:

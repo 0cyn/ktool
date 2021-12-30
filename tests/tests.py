@@ -12,7 +12,7 @@ import ktool
 from ktool.headers import HeaderGenerator
 from ktool.macho import MachOFile, MachOFileType
 from ktool.objc import ObjCImage
-from ktool.util import log, LogLevel
+from ktool.util import log, LogLevel, ignore
 
 
 # We need to be in the right directory so we can find the bins
@@ -55,6 +55,7 @@ class FrameworksTestCase(unittest.TestCase):
     def test_coherence(self):
         with open(scriptdir + '/bins/Coherence.dyldex', 'rb') as fd:
             HeaderGenerator(ObjCImage(ktool.load_image(fd)))
+            ktool.generate_headers(ktool.load_objc_metadata(ktool.load_image(fd)))
 
     def test_no_mmaped_support(self):
         with open(scriptdir + '/bins/Coherence.dyldex', 'rb') as fp:
@@ -63,19 +64,19 @@ class FrameworksTestCase(unittest.TestCase):
 
     def test_safari_shared(self):
         with open(scriptdir + '/bins/SafariShared.dyldex', 'rb') as fd:
-            HeaderGenerator(ObjCImage(ktool.load_image(fd)))
+            ktool.generate_headers(ktool.load_objc_metadata(ktool.load_image(fd)))
 
     def test_external_accesory(self):
         with open(scriptdir + '/bins/ExternalAccessory.dyldex', 'rb') as fd:
-            HeaderGenerator(ObjCImage(ktool.load_image(fd)))
+            ktool.generate_headers(ktool.load_objc_metadata(ktool.load_image(fd)))
 
     def test_soundanalysis(self):
         with open(scriptdir + '/bins/SoundAnalysis', 'rb') as fd:
-            HeaderGenerator(ObjCImage(ktool.load_image(fd)))
+            ktool.generate_headers(ktool.load_objc_metadata(ktool.load_image(fd)))
 
     def test_ktrace(self):
         with open(scriptdir + '/bins/ktrace.dyldex', 'rb') as fd:
-            ObjCImage(ktool.load_image(fd))
+            ktool.load_objc_metadata(ktool.load_image(fd))
 
     def test_pfui(self):
         with open(scriptdir + '/bins/PreferencesUI', 'rb') as fd:
@@ -83,15 +84,17 @@ class FrameworksTestCase(unittest.TestCase):
 
     def test_search(self):
         with open(scriptdir + '/bins/Search', 'rb') as fd:
-            ObjCImage(ktool.load_image(fd))
+            ktool.load_objc_metadata(ktool.load_image(fd))
 
     def test_sbh(self):
         with open(scriptdir + '/bins/SpringBoardHome', 'rb') as fd:
-            objc_lib = ObjCImage(ktool.load_image(fd))
+            objc_lib = ktool.load_objc_metadata(ktool.load_image(fd))
             self.assertGreater(len(objc_lib.classlist), 1)
             self.assertGreater(len(objc_lib.catlist), 1)
             self.assertGreater(len(objc_lib.classlist[0].methods), 4)
 
 
 if __name__ == '__main__':
+    ignore.OBJC_ERRORS = False
+
     unittest.main()

@@ -221,7 +221,6 @@ class log:
     LOG_FUNC = print
     LOG_ERR = print_err
 
-
     @staticmethod
     def get_class_from_frame(fr):
         fr: inspect.FrameInfo = fr

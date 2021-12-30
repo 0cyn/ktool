@@ -214,6 +214,13 @@ class _VirtualMemoryMap:
         else:
             return list(sortedmap.values())[0].vm_address
 
+    def vm_check(self, vm_address):
+        try:
+            self.get_file_address(vm_address)
+            return True
+        except ValueError:
+            return False
+
     def get_file_address(self, vm_address: int, segment_name=None) -> int:
         # This function gets called *a lot*
         # It needs to be fast as shit.

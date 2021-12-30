@@ -1601,7 +1601,7 @@ class KToolMachOLoader:
 
     @staticmethod
     def objc_items(lib, parent=None, callback=None):
-        objc_lib = ObjCImage(lib)
+        objc_lib = ObjCImage.from_image(lib)
 
         return [KToolMachOLoader.objc_headers(objc_lib, parent, callback)]
 

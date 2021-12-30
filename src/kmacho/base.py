@@ -24,9 +24,9 @@ class Constructable(ABC):
 
     """
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    def from_image(*args, **kwargs):
+    def from_image(cls, *args, **kwargs):
         """
         Base method for serializing an instance of the subclass based on raw bytes
 
@@ -35,9 +35,9 @@ class Constructable(ABC):
         :return:
         """
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    def from_values(*args, **kwargs):
+    def from_values(cls, *args, **kwargs):
         """
         Base method for serializing an instance of the subclass based on the required set of values to create it.
 

@@ -67,7 +67,7 @@ class TypeResolver:
         self.local_classes = objc_image.classlist
         self.local_protos = objc_image.protolist
 
-        self._linked_cache = {}
+        self._linked_cache = {'NSObject': '/System/Library/Frameworks/Foundation'}
 
     def find_linked(self, classname: str):
         """
@@ -90,7 +90,7 @@ class TypeResolver:
                 return "-Protocol"
         if classname in self.classmap:
             try:
-                name = self.objc_image.image.linked[int(self.classmap[classname].ordinal) - 1].install_name
+                name = self.objc_image.image.linked_images[int(self.classmap[classname].ordinal) - 1].install_name
                 if '.dylib' in name:
                     self._linked_cache[classname] = None
                     return None
@@ -111,12 +111,12 @@ class HeaderGenerator:
         self.headers = {}
 
         for objc_class in objc_image.classlist:
-            self.headers[objc_class.name + '.h'] = Header(self.type_resolver, objc_class)
+            self.headers[objc_class.name + '.h'] = Header(self.objc_image, self.type_resolver, objc_class)
         for objc_cat in objc_image.catlist:
             if objc_cat.classname != "":
-                self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(objc_cat)
+                self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(self.objc_image, objc_cat)
         for objc_proto in objc_image.protolist:
-            self.headers[objc_proto.name + '-Protocol.h'] = ProtocolHeader(objc_proto)
+            self.headers[objc_proto.name + '-Protocol.h'] = ProtocolHeader(self.objc_image, objc_proto)
 
         if self.objc_image.name == "":
             image_name = self.objc_image.image.slice.macho_file.filename
@@ -146,8 +146,9 @@ class StructHeader:
 
 
 class Header:
-    def __init__(self, type_resolver: TypeResolver, objc_class: Class):
+    def __init__(self, objc_image: 'ObjCImage', type_resolver, objc_class: Class):
         self.interface: Interface = Interface(objc_class)
+        self.objc_image = objc_image
         self.objc_class: Class = objc_class
 
         self.type_resolver: TypeResolver = type_resolver
@@ -172,7 +173,7 @@ class Header:
 
         :return: the header text
         """
-        text = [HeaderUtils.header_head(self.type_resolver.objc_image.image),
+        text = [HeaderUtils.header_head(self.objc_image.image),
                 "#ifndef " + self.objc_class.name.upper() + "_H",
                 "#define " + self.objc_class.name.upper() + "_H",
                 ""]
@@ -302,7 +303,8 @@ class Header:
 
 
 class CategoryHeader:
-    def __init__(self, objc_category: Category):
+    def __init__(self, objc_image, objc_category: Category):
+        self.objc_image = objc_image
         self.category = objc_category
 
         self.properties = objc_category.properties
@@ -322,7 +324,7 @@ class CategoryHeader:
 
         :return: category text
         """
-        text = [HeaderUtils.header_head(self.category.objc_image.image),
+        text = [HeaderUtils.header_head(self.objc_image.image),
                 "",
                 str(self.interface),
                 "",
@@ -332,7 +334,8 @@ class CategoryHeader:
 
 
 class ProtocolHeader:
-    def __init__(self, objc_protocol: Protocol):
+    def __init__(self, objc_image, objc_protocol: Protocol):
+        self.objc_image = objc_image
         self.protocol: Protocol = objc_protocol
 
         self.interface = ProtocolInterface(objc_protocol)
@@ -348,7 +351,7 @@ class ProtocolHeader:
 
         :return:
         """
-        text = [HeaderUtils.header_head(self.protocol.objc_image.image),
+        text = [HeaderUtils.header_head(self.objc_image.image),
                 "",
                 str(self.interface),
                 "",
@@ -458,9 +461,6 @@ class Interface:
             if bad:
                 continue
             self.methods.append(method)
-        if self.objc_class.metaclass is not None:
-            for method in self.objc_class.metaclass.methods:
-                self.methods.append(method)
 
 
 class StructDef:
