@@ -87,7 +87,9 @@ class ObjCImage(Constructable):
             cnt = sect.size // 0x8
             for i in range(0, cnt):
                 try:
-                    classes.append(Class.from_image(objc_image, sect.vm_address + i * 0x8))
+                    c = Class.from_image(objc_image, sect.vm_address + i * 0x8)
+                    if c:
+                        classes.append(c)
                 except Exception as ex:
                     if not ignore.OBJC_ERRORS:
                         raise ex
@@ -105,14 +107,15 @@ class ObjCImage(Constructable):
             cnt = sect.size // 0x8
             for i in range(0, cnt):
                 ptr = sect.vm_address + i * 0x8
-                loc = image.get_int_at(ptr, 0x8, vm=True)
-                try:
-                    proto = image.load_struct(loc, objc2_prot, vm=True)
-                    protos.append(Protocol.from_image(objc_image, proto))
-                except Exception as ex:
-                    if not ignore.OBJC_ERRORS:
-                        raise ex
-                    log.error("Failed to load a protocol with " + str(ex))
+                if objc_image.vm_check(ptr):
+                    loc = image.get_int_at(ptr, 0x8, vm=True)
+                    try:
+                        proto = image.load_struct(loc, objc2_prot, vm=True)
+                        protos.append(Protocol.from_image(objc_image, proto))
+                    except Exception as ex:
+                        if not ignore.OBJC_ERRORS:
+                            raise ex
+                        log.error("Failed to load a protocol with " + str(ex))
 
         objc_image.protolist = protos
 
@@ -597,8 +600,11 @@ class Class(Constructable):
             objc2_class_location = objc_image.get_int_at(class_ptr, 8, vm=False)
         else:
             objc2_class_location = objc_image.get_int_at(class_ptr, 8, vm=True)
+
         if objc2_class_location == 0 or not objc_image.vm_check(objc2_class_location):
+            log.error("Loading a class failed")
             return None
+
         objc2_class_item: objc2_class = objc_image.load_struct(objc2_class_location, objc2_class, vm=True)
 
         superclass = None

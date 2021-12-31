@@ -645,7 +645,8 @@ class ExportTrie(Constructable):
         symbols = []
 
         for node in nodes:
-            symbols.append(Symbol(image, fullname=node.text, addr=node.offset))
+            if node.text:
+                symbols.append(Symbol(image, fullname=node.text, addr=node.offset))
 
         trie.nodes = nodes
         trie.symbols = symbols
