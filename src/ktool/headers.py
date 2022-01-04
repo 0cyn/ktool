@@ -32,14 +32,14 @@ class HeaderUtils:
         """
         try:
             prefix = "// Headers generated with ktool v" + KTOOL_VERSION + "\n"
-            prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
+            prefix += "// https://github.com/cxnder/ktool | pip3 install k2l\n"
             prefix += f'// Platform: {image.platform.name} | '
             prefix += f'Minimum OS: {image.minos.x}.{image.minos.y}.{image.minos.z} | '
             prefix += f'SDK: {image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}\n\n' 
             return prefix
         except AttributeError:
             prefix = "// Headers generated with ktool v" + KTOOL_VERSION + "\n"
-            prefix += "// https://github.com/kritantadev/ktool | pip3 install k2l\n"
+            prefix += "// https://github.com/cxnder/ktool | pip3 install k2l\n"
             prefix += "// Issue loading image metadata\n\n"
             return prefix
 
