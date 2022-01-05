@@ -43,7 +43,7 @@ class MachOFile:
         if use_mmaped_io:
             global mmap
             import mmap
-            self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_COPY)
+            self.file = mmap.mmap(file.fileno(), 0, flags=mmap.MAP_SHARED, access=mmap.ACCESS_COPY)
             self._get_bytes_at = self._mmaped_get_bytes_at
             self._get_at = self._mmaped_get_at
 

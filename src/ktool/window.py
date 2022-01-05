@@ -45,7 +45,7 @@ from ktool.macho import MachOFile
 from ktool.dyld import Dyld
 from ktool.objc import ObjCImage
 from ktool.headers import HeaderGenerator
-from ktool.util import Table
+from ktool.util import Table, THREAD_COUNT
 
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
@@ -1664,7 +1664,7 @@ class KToolMachOLoader:
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers')
         futures = []
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=THREAD_COUNT) as executor:
             for header_name, header in generator.headers.items():
                 futures.append(executor.submit(KToolMachOLoader.get_header_item, header.text, header_name, menuitem))
             i += 1

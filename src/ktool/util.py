@@ -23,6 +23,7 @@ from .exceptions import *
 import pkg_resources
 
 KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
+THREAD_COUNT = os.cpu_count() - 1
 
 
 class ignore:
@@ -50,7 +51,7 @@ class Queue:
 
     def go(self):
         futures = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
             for item in self.items:
                 futures.append(executor.submit(item.func, *item.args))
 
