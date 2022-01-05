@@ -13,12 +13,12 @@
 #
 from collections import namedtuple
 from enum import Enum
-from typing import List
+from typing import List, Dict
 
 from kmacho.base import Constructable
 from .dyld import Image
 from .structs import *
-from .util import log, ignore, usi32_to_si32, opts
+from .util import log, ignore, usi32_to_si32, opts, Queue, QueueItem
 
 type_encodings = {
     "c": "char",
@@ -57,6 +57,9 @@ class ObjCImage(Constructable):
 
         objc_image = ObjCImage(image)
 
+        cat_prot_queue = Queue()
+        class_queue = Queue()
+
         sect = None
         for seg in image.segments:
             for sec in image.segments[seg].sections:
@@ -68,13 +71,15 @@ class ObjCImage(Constructable):
             count = sect.size // 0x8
             for offset in range(0, count):
                 try:
-                    cats.append(Category.from_image(objc_image, sect.vm_address + offset * 0x8))
+                    # cats.append(Category.from_image(objc_image, sect.vm_address + offset * 0x8))
+                    item = QueueItem()
+                    item.func = Category.from_image
+                    item.args = [objc_image, sect.vm_address + offset * 0x8]
+                    cat_prot_queue.items.append(item)
                 except Exception as ex:
                     if not ignore.OBJC_ERRORS:
                         raise ex
                     log.error(f'Failed to load a category! Ex: {str(ex)}')
-
-            objc_image.catlist = cats
 
         sect = None
         for seg in image.segments:
@@ -87,14 +92,15 @@ class ObjCImage(Constructable):
             cnt = sect.size // 0x8
             for i in range(0, cnt):
                 try:
-                    c = Class.from_image(objc_image, sect.vm_address + i * 0x8)
-                    if c:
-                        classes.append(c)
+                    # c = Class.from_image(objc_image, sect.vm_address + i * 0x8)
+                    item = QueueItem()
+                    item.func = Class.from_image
+                    item.args = [objc_image, sect.vm_address + i * 0x8]
+                    class_queue.items.append(item)
                 except Exception as ex:
                     if not ignore.OBJC_ERRORS:
                         raise ex
                     log.error(f'Failed to load a class! Ex: {str(ex)}')
-            objc_image.classlist = classes
 
         sect = None
         for seg in image.segments:
@@ -111,13 +117,33 @@ class ObjCImage(Constructable):
                     loc = image.get_int_at(ptr, 0x8, vm=True)
                     try:
                         proto = image.load_struct(loc, objc2_prot, vm=True)
-                        protos.append(Protocol.from_image(objc_image, proto))
+                        # protos.append(Protocol.from_image(objc_image, proto))
+                        item = QueueItem()
+                        item.func = Protocol.from_image
+                        item.args = [objc_image, proto, loc]
+                        cat_prot_queue.items.append(item)
                     except Exception as ex:
                         if not ignore.OBJC_ERRORS:
                             raise ex
                         log.error("Failed to load a protocol with " + str(ex))
 
-        objc_image.protolist = protos
+        cat_prot_queue.go()
+
+        for val in cat_prot_queue.returns:
+            if val:
+                if isinstance(val, Protocol):
+                    objc_image.protolist.append(val)
+                    objc_image.prot_map[val.loc] = val
+                else:
+                    objc_image.catlist.append(val)
+                    objc_image.cat_map[val.loc] = val
+
+        class_queue.go()
+
+        for val in class_queue.returns:
+            if val:
+                objc_image.classlist.append(val)
+                objc_image.class_map[val.loc] = val
 
         return objc_image
 
@@ -148,6 +174,10 @@ class ObjCImage(Constructable):
         self.classlist = []
         self.catlist = []
         self.protolist = []
+
+        self.class_map: Dict[int, 'Class'] = {}
+        self.cat_map: Dict[int, 'Category'] = {}
+        self.prot_map: Dict[int, 'Protocol'] = {}
 
     def vm_check(self, address):
         return self.image.vm.vm_check(address)
@@ -593,6 +623,9 @@ class Class(Constructable):
 
     @classmethod
     def from_image(cls, objc_image: ObjCImage, class_ptr: int, meta=False) -> 'Class':
+        if class_ptr in objc_image.class_map:
+            return objc_image.class_map[class_ptr]
+
         load_errors = []
         struct_list = []
 
@@ -680,14 +713,17 @@ class Class(Constructable):
             ea = protlist.off
             for i in range(1, protlist.cnt + 1):
                 prot_loc = objc_image.get_int_at(ea + i * 8, 8, vm=False)
-                prot = objc_image.load_struct(prot_loc, objc2_prot, vm=True)
-                try:
-                    prots.append(Protocol.from_image(objc_image, prot))
-                except Exception as ex:
-                    if not ignore.OBJC_ERRORS:
-                        raise ex
-                    log.warning(f'Failed to load protocol with {str(ex)}')
-                    load_errors.append(f'Failed to load a protocol with {str(ex)}')
+                if prot_loc in objc_image.prot_map:
+                    prots.append(objc_image.prot_map[prot_loc])
+                else:
+                    prot = objc_image.load_struct(prot_loc, objc2_prot, vm=True)
+                    try:
+                        prots.append(Protocol.from_image(objc_image, prot))
+                    except Exception as ex:
+                        if not ignore.OBJC_ERRORS:
+                            raise ex
+                        log.warning(f'Failed to load protocol with {str(ex)}')
+                        load_errors.append(f'Failed to load a protocol with {str(ex)}')
 
         ivars = []
         if objc2_class_ro_item.ivars != 0:
@@ -705,7 +741,7 @@ class Class(Constructable):
                     log.warning(f'Failed to load ivar with {str(ex)}')
                     load_errors.append(f'Failed to load an ivar with {str(ex)}')
 
-        return cls(name, meta, superclass_name, methods, properties, ivars, prots, load_errors, struct_list)
+        return cls(name, meta, superclass_name, methods, properties, ivars, prots, load_errors, struct_list, loc=objc2_class_location)
 
     @classmethod
     def from_values(cls, name, superclass_name, methods: List[Method], properties: List['Property'], ivars: List['Ivar'], 
@@ -715,7 +751,7 @@ class Class(Constructable):
     def raw_bytes(self):
         pass
 
-    def __init__(self, name, is_meta, superclass_name, methods, properties, ivars, protocols, load_errors=None, structs=None):
+    def __init__(self, name, is_meta, superclass_name, methods, properties, ivars, protocols, load_errors=None, structs=None, loc=0):
         if structs is None:
             structs = []
         if load_errors is None:
@@ -723,6 +759,7 @@ class Class(Constructable):
         self.name = name
         self.meta = is_meta
         self.superclass = superclass_name
+        self.loc = loc
 
         self.load_errors = load_errors
         self.struct_list = structs
@@ -899,7 +936,7 @@ class Category(Constructable):
                     log.warning(f'Failed to load property with {str(ex)}')
                 ea += objc2_prop.SIZE
 
-        return cls(classname, name, methods, properties)
+        return cls(classname, name, methods, properties, loc=loc)
 
     @classmethod
     def from_values(cls, classname, name, methods, properties, load_errors=None, struct_list=None):
@@ -908,13 +945,14 @@ class Category(Constructable):
     def raw_bytes(self):
         pass
 
-    def __init__(self, classname, name, methods, properties, load_errors=None, struct_list=None):
+    def __init__(self, classname, name, methods, properties, load_errors=None, struct_list=None, loc=0):
         if load_errors is None:
             load_errors = []
         if struct_list is None:
             struct_list = []
         self.name = name
         self.classname = classname
+        self.loc = loc
 
         self.load_errors = load_errors
         self.struct_list = struct_list
@@ -927,7 +965,10 @@ class Category(Constructable):
 class Protocol(Constructable):
 
     @classmethod
-    def from_image(cls, objc_image: 'ObjCImage', protocol: objc2_prot):
+    def from_image(cls, objc_image: 'ObjCImage', protocol: objc2_prot, loc):
+        if loc in objc_image.prot_map:
+            return objc_image.prot_map[loc]
+
         name = objc_image.get_cstr_at(protocol.name, 0, vm=True)
         load_errors = []
         struct_list = []
@@ -971,7 +1012,7 @@ class Protocol(Constructable):
                     log.warning(f'Failed to load property with {str(ex)}')
                 ea += objc2_prop.SIZE
 
-        return cls(name, methods, opt_methods, properties, load_errors, struct_list)
+        return cls(name, methods, opt_methods, properties, load_errors, struct_list, loc=loc)
 
     @classmethod
     def load_methods(cls, objc_image, name, loc, meta=False):
@@ -992,13 +1033,14 @@ class Protocol(Constructable):
     def raw_bytes(self):
         pass
 
-    def __init__(self, name, methods, opt_methods, properties, load_errors=None, struct_list=None):
+    def __init__(self, name, methods, opt_methods, properties, load_errors=None, struct_list=None, loc=0):
         if struct_list is None:
             struct_list = []
         if load_errors is None:
             load_errors = []
 
         self.name = name
+        self.loc = loc
 
         self.load_errors = load_errors
         self.struct_list = struct_list

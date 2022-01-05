@@ -11,11 +11,12 @@
 #
 #  Copyright (c) kat 2021.
 #
-
+import concurrent.futures
 import inspect
 import os
 import sys
 from enum import Enum
+from typing import List
 
 from .exceptions import *
 
@@ -31,6 +32,29 @@ class ignore:
 
 class opts:
     USE_SYMTAB_INSTEAD_OF_SELECTORS = False
+
+
+class QueueItem:
+    def __init__(self):
+        self.args = []
+        self.func = None
+
+
+class Queue:
+    def __init__(self):
+        self.items: List[QueueItem] = []
+        self.returns: List = []
+
+    def process_item(self, item: QueueItem):
+        return item.func(*item.args)
+
+    def go(self):
+        futures = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            for item in self.items:
+                futures.append(executor.submit(item.func, *item.args))
+
+        self.returns = [f.result() for f in futures]
 
 
 def macho_is_malformed():
