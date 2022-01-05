@@ -45,17 +45,20 @@ class Queue:
     def __init__(self):
         self.items: List[QueueItem] = []
         self.returns: List = []
+        self.multithread = False
 
     def process_item(self, item: QueueItem):
         return item.func(*item.args)
 
     def go(self):
-        futures = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
-            for item in self.items:
-                futures.append(executor.submit(item.func, *item.args))
-
-        self.returns = [f.result() for f in futures]
+        if self.multithread:
+            futures = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
+                for item in self.items:
+                    futures.append(executor.submit(item.func, *item.args))
+            self.returns = [f.result() for f in futures]
+        else:
+            self.returns = [self.process_item(item) for item in self.items]
 
 
 def macho_is_malformed():

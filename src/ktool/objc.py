@@ -59,6 +59,9 @@ class ObjCImage(Constructable):
 
         cat_prot_queue = Queue()
         class_queue = Queue()
+        if not image.slice.macho_file.uses_mmaped_io:
+            cat_prot_queue.multithread = False
+            class_queue.multithread = False
 
         sect = None
         for seg in image.segments:
@@ -664,8 +667,10 @@ class Class(Constructable):
                     superclass_name = 'NSObject'
 
         objc2_class_ro_item = objc_image.load_struct(objc2_class_item.info, objc2_class_ro, vm=True)
-
-        name = objc_image.get_cstr_at(objc2_class_ro_item.name, 0, vm=True)
+        if not meta:
+            name = objc_image.get_cstr_at(objc2_class_ro_item.name, 0, vm=True)
+        else:
+            name = ""
 
         methods = []
         properties = []
@@ -718,7 +723,9 @@ class Class(Constructable):
                 else:
                     prot = objc_image.load_struct(prot_loc, objc2_prot, vm=True)
                     try:
-                        prots.append(Protocol.from_image(objc_image, prot))
+                        p = Protocol.from_image(objc_image, prot, prot_loc)
+                        prots.append(p)
+                        objc_image.prot_map[prot_loc] = p
                     except Exception as ex:
                         if not ignore.OBJC_ERRORS:
                             raise ex
