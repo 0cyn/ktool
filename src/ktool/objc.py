@@ -645,26 +645,27 @@ class Class(Constructable):
 
         superclass = None
 
-        if objc2_class_location+8 in objc_image.image.import_table:
-            symbol = objc_image.image.import_table[objc2_class_location+8]
-            superclass_name = symbol.name[1:]
-        elif objc2_class_item.superclass in objc_image.image.export_table:
-            symbol = objc_image.image.export_table[objc2_class_item.superclass]
-            superclass_name = symbol.name[1:]
-        else:
-            if objc_image.vm_check(objc2_class_item.superclass):
-                try:
-                    superclass = Class.from_image(objc_image, objc2_class_location + 8)
-                except:
-                    pass
-            if superclass is not None:
-                superclass_name = superclass.name
+        if not meta:
+            if objc2_class_location+8 in objc_image.image.import_table:
+                symbol = objc_image.image.import_table[objc2_class_location+8]
+                superclass_name = symbol.name[1:]
+            elif objc2_class_item.superclass in objc_image.image.export_table:
+                symbol = objc_image.image.export_table[objc2_class_item.superclass]
+                superclass_name = symbol.name[1:]
             else:
-                if objc2_class_item.superclass in objc_image.image.import_table:
-                    symbol = objc_image.image.import_table[objc2_class_item.superclass]
-                    superclass_name = symbol.name[1:]
+                if objc_image.vm_check(objc2_class_item.superclass):
+                    try:
+                        superclass = Class.from_image(objc_image, objc2_class_location + 8)
+                    except:
+                        pass
+                if superclass is not None:
+                    superclass_name = superclass.name
                 else:
-                    superclass_name = 'NSObject'
+                    if objc2_class_item.superclass in objc_image.image.import_table:
+                        symbol = objc_image.image.import_table[objc2_class_item.superclass]
+                        superclass_name = symbol.name[1:]
+                    else:
+                        superclass_name = 'NSObject'
 
         objc2_class_ro_item = objc_image.load_struct(objc2_class_item.info, objc2_class_ro, vm=True)
         if not meta:
