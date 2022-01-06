@@ -666,7 +666,8 @@ class Class(Constructable):
                         superclass_name = symbol.name[1:]
                     else:
                         superclass_name = 'NSObject'
-
+        else:
+            superclass_name = ''
         objc2_class_ro_item = objc_image.load_struct(objc2_class_item.info, objc2_class_ro, vm=True)
         if not meta:
             name = objc_image.get_cstr_at(objc2_class_ro_item.name, 0, vm=True)
