@@ -125,8 +125,6 @@ def generate_headers(objc_image: ObjCImage, sort_items=False) -> Dict[str, str]:
         for objc_class in objc_image.classlist:
             objc_class.methods.sort(key=lambda h: h.signature)
             objc_class.properties.sort(key=lambda h: h.name)
-            if objc_class.metaclass is not None:
-                objc_class.metaclass.methods.sort(key=lambda h: h.signature)
 
         for objc_proto in objc_image.protolist:
             objc_proto.methods.sort(key=lambda h: h.signature)
