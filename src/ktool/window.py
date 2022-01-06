@@ -1575,8 +1575,8 @@ class KToolMachOLoader:
 
     @staticmethod
     def symtab(lib, parent=None, callback=None):
-        mmci = MainMenuContentItem()
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Symtab')
+        mmci = MainMenuContentItem()
         tab = Table()
         tab.titles = ['Address', 'Name']
         for sym in lib.symbol_table.table:
@@ -1643,14 +1643,13 @@ class KToolMachOLoader:
         return menuitem
 
     @staticmethod
-    def get_header_item(text, name, menuitem):
+    def get_header_item(text, name):
         mmci = MainMenuContentItem()
         formatter = Terminal256Formatter() if KToolMachOLoader.SUPPORTS_256 else TerminalFormatter()
         text = highlight(text, ObjectiveCLexer(), formatter)
         lines = text.split('\n')
         mmci.lines = lines
-        h_menu_item = SidebarMenuItem(name, mmci, menuitem)
-        h_menu_item.parse_mmc()
+        h_menu_item = SidebarMenuItem(name, mmci, None)
         return h_menu_item
 
     @staticmethod
@@ -1661,15 +1660,22 @@ class KToolMachOLoader:
         menuitem = SidebarMenuItem("ObjC Headers", hnci, parent)
         count = len(generator.headers.keys())
         i = 1
-        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers')
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nInitial Syntax Highlighting')
         futures = []
 
         with concurrent.futures.ProcessPoolExecutor(max_workers=THREAD_COUNT) as executor:
             for header_name, header in generator.headers.items():
-                futures.append(executor.submit(KToolMachOLoader.get_header_item, header.text, header_name, menuitem))
+                futures.append(executor.submit(KToolMachOLoader.get_header_item, str(header.text), str(header_name)))
             i += 1
+        items = [f.result() for f in futures]
+        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nRendering color schema')
+        for item in items:
+            item.parent = menuitem
+            with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
+                futures.append(executor.submit(item.parse_mmc))
 
-        menuitem.children = [f.result() for f in futures]
+        [f.result() for f in futures]
+        menuitem.children = items
 
         menuitem.parse_mmc()
         return menuitem
