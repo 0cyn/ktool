@@ -69,6 +69,7 @@ class TypeResolver:
 
         self._linked_cache = {'NSObject': '/System/Library/Frameworks/Foundation'}
 
+    # noinspection PyTypeChecker
     def find_linked(self, classname: str):
         """
         given a classname, return install name of a framework if that class was imported from it.

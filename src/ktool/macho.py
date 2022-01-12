@@ -53,6 +53,7 @@ class MachOFile:
             self._get_at = self._bio_get_at
 
         self.slices = []
+        # noinspection PyTypeChecker
         self.magic = self._get_at(0, 4)
         self.type = self._load_filetype()
 
@@ -394,6 +395,7 @@ class Slice:
         addr = addr + self.offset
         return self.macho_file.file[addr:addr + count]
 
+    # noinspection PyUnusedLocal
     def _bio_get_bytes_at(self, addr: int, count: int, endian="little"):
         addr = addr + self.offset
         self.macho_file.file.seek(addr)
@@ -418,6 +420,7 @@ class Slice:
         data = self.macho_file.file.read(count)
         return data.decode().rstrip('\x00')
 
+    # noinspection PyUnusedLocal
     def _mmap_get_cstr_at(self, addr: int, limit: int = 0) -> str:
         """
         Get C-style null-terminated string at set address.
@@ -442,6 +445,7 @@ class Slice:
         self._cstring_cache[addr] = text
         return text
 
+    # noinspection PyUnusedLocal
     def _bio_get_cstr_at(self, addr: int, limit: int = 0):
         # this function will likely be a bit slower than the mmaped one, and will probably bottleneck things, oh well.
         # I'm unsure if there's any possible faster approach than this.

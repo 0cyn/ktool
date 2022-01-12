@@ -816,7 +816,7 @@ class FooterBar(View):
             (17, 21): evening
         }
         for key, val in msgmap.items():
-            if self.now.hour in range(key[0], key[1]+1):
+            if self.now.hour in range(key[0], key[1] + 1):
                 self.hi_text = f' {val} '
 
     def redraw(self):
@@ -1504,6 +1504,7 @@ class KToolMachOLoader:
         ssmi.parse_mmc()
         return ssmi
 
+    # noinspection PyUnusedLocal
     @staticmethod
     def _file(lib, parent=None, callback=None):
         file_content_item = MainMenuContentItem()
@@ -1560,6 +1561,7 @@ class KToolMachOLoader:
             hexdump = HexDumpTable()
             hexdump.hex = bytearray(raw)
 
+            # noinspection PyTypeChecker
             mmci.lines.append(hexdump)
 
             try:
@@ -1588,6 +1590,7 @@ class KToolMachOLoader:
         menuitem.parse_mmc()
         return menuitem
 
+    # noinspection PyUnusedLocal
     @staticmethod
     def vm_map(lib, parent=None, callback=None):
         mmci = MainMenuContentItem()
@@ -1614,9 +1617,8 @@ class KToolMachOLoader:
         table.titles = ['Address', 'Symbol', 'Binding']
 
         for symbol in lib.imports:
-            table.rows.append([hex(symbol.addr), symbol.fullname, symbol.attr.ljust(8)])  # pad the size of the attribute
-                                                                                           # to 10; this is so the addr
-                                                                                           # doesn't get wrapped
+            table.rows.append(
+                [hex(symbol.addr), symbol.fullname, symbol.attr.ljust(8)])
         mmci.lines.append(table)
 
         menuitem = SidebarMenuItem("Imports", mmci, parent)
@@ -1660,7 +1662,8 @@ class KToolMachOLoader:
         menuitem = SidebarMenuItem("ObjC Headers", hnci, parent)
         count = len(generator.headers.keys())
         i = 1
-        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nInitial Syntax Highlighting')
+        callback(
+            f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nInitial Syntax Highlighting')
         futures = []
 
         with concurrent.futures.ProcessPoolExecutor(max_workers=THREAD_COUNT) as executor:
@@ -1668,7 +1671,8 @@ class KToolMachOLoader:
                 futures.append(executor.submit(KToolMachOLoader.get_header_item, str(header.text), str(header_name)))
             i += 1
         items = [f.result() for f in futures]
-        callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nRendering color schema')
+        callback(
+            f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nRendering color schema')
         for item in items:
             item.parent = menuitem
             with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
@@ -1821,7 +1825,8 @@ class KToolScreen:
 
             filename_base = os.path.basename(filename)
 
-            self.sidebar.add_menu_item(SidebarMenuItem(f'{filename_base}', MainMenuContentItem(MAIN_TEXT.split('\n')), None))
+            self.sidebar.add_menu_item(
+                SidebarMenuItem(f'{filename_base}', MainMenuContentItem(MAIN_TEXT.split('\n')), None))
 
             for item in KToolMachOLoader.contents_for_file(fd, self.update_load_status):
                 self.sidebar.add_menu_item(item)
@@ -1884,11 +1889,11 @@ class KToolScreen:
         self.debug_menu.box = Box(self.root, 5, 5, curses.COLS - 10, curses.LINES - 10)
         self.debug_menu.scroll_view = Box(self.root, 7, 6, curses.COLS - 12, curses.LINES - 12)
 
-        ls = self.debug_menu.scroll_view_text_buffer.lines if  self.debug_menu.scroll_view_text_buffer else []
+        ls = self.debug_menu.scroll_view_text_buffer.lines if self.debug_menu.scroll_view_text_buffer else []
         self.debug_menu.scroll_view_text_buffer = ScrollingDisplayBuffer(self.debug_menu.scroll_view, 0, 0,
                                                                          curses.COLS - 22, curses.LINES - 12)
         self.debug_menu.scroll_view_text_buffer.render_attr = curses.color_pair(1)
-        self.debug_menu.scroll_view_text_buffer.lines = ls # ?? We shouldn't need to do this
+        self.debug_menu.scroll_view_text_buffer.lines = ls  # ?? We shouldn't need to do this
         self.debug_menu.parse_lines()
 
         self.file_browser.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)

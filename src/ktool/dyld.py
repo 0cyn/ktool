@@ -375,6 +375,7 @@ class Dyld:
                 log.info(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
 
             elif isinstance(cmd, dylib_command):
+                # noinspection PyTypeChecker
                 external_dylib = ExternalDylib(image, cmd)
 
                 image.linked_images.append(external_dylib)

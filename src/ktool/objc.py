@@ -13,7 +13,7 @@
 #
 from collections import namedtuple
 from enum import Enum
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from kmacho.base import Constructable
 from .dyld import Image
@@ -59,6 +59,7 @@ class ObjCImage(Constructable):
 
         cat_prot_queue = Queue()
         class_queue = Queue()
+
         if not image.slice.macho_file.uses_mmaped_io:
             cat_prot_queue.multithread = False
             class_queue.multithread = False
@@ -69,12 +70,11 @@ class ObjCImage(Constructable):
                 if sec == "__objc_catlist":
                     sect = image.segments[seg].sections[sec]
 
-        cats = []  # meow
+        # cats = []  # meow
         if sect is not None:
             count = sect.size // 0x8
             for offset in range(0, count):
                 try:
-                    # cats.append(Category.from_image(objc_image, sect.vm_address + offset * 0x8))
                     item = QueueItem()
                     item.func = Category.from_image
                     item.args = [objc_image, sect.vm_address + offset * 0x8]
@@ -90,7 +90,6 @@ class ObjCImage(Constructable):
                 if sec == "__objc_classlist":
                     sect = image.segments[seg].sections[sec]
 
-        classes = []
         if sect is not None:
             cnt = sect.size // 0x8
             for i in range(0, cnt):
@@ -111,7 +110,6 @@ class ObjCImage(Constructable):
                 if sec == "__objc_protolist":
                     sect = image.segments[seg].sections[sec]
 
-        protos = []
         if sect is not None:
             cnt = sect.size // 0x8
             for i in range(0, cnt):
@@ -120,7 +118,6 @@ class ObjCImage(Constructable):
                     loc = image.get_int_at(ptr, 0x8, vm=True)
                     try:
                         proto = image.load_struct(loc, objc2_prot, vm=True)
-                        # protos.append(Protocol.from_image(objc_image, proto))
                         item = QueueItem()
                         item.func = Protocol.from_image
                         item.args = [objc_image, proto, loc]
@@ -345,6 +342,7 @@ class TypeProcessor:
     def process(self, type_to_process: str):
         if type_to_process in self.type_cache:
             return self.type_cache[type_to_process]
+        # noinspection PyBroadException
         try:
             tokens = self.tokenize(type_to_process)
             types = []
@@ -360,7 +358,7 @@ class TypeProcessor:
                     pc = 0
             self.type_cache[type_to_process] = types
             return types
-        except:
+        except Exception:
             pass
 
     @staticmethod
@@ -409,7 +407,6 @@ class Ivar(Constructable):
         name: str = objc_image.get_cstr_at(ivar.name, 0, True, "__objc_methname")
         type_string: str = objc_image.get_cstr_at(ivar.type, 0, True, "__objc_methtype")
         return cls(name, type_string, objc_image.tp)
-
 
     @classmethod
     def from_values(cls, name, type_encoding, type_processor=None):
@@ -485,7 +482,8 @@ class MethodList:
                 types = self.objc_image.get_int_at(ea + 8, 8, vm=False)
 
             try:
-                method = Method.from_image(self.objc_image, sel, types, self.meta, vm_ea, uses_relative_methods, rms_are_direct)
+                method = Method.from_image(self.objc_image, sel, types, self.meta, vm_ea, uses_relative_methods,
+                                           rms_are_direct)
                 methods.append(method)
                 for method_type in method.types:
                     if method_type.type == EncodedType.STRUCT:
@@ -519,7 +517,7 @@ class Method(Constructable):
 
                 except Exception as ex:
                     try:
-                        imp = objc_image.get_int_at(vm_addr+8, 4, vm=True)
+                        imp = objc_image.get_int_at(vm_addr + 8, 4, vm=True)
                         imp = usi32_to_si32(imp) + vm_addr + 8
                         if imp in objc_image.image.symbols:
                             sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
@@ -537,7 +535,7 @@ class Method(Constructable):
                     sel = objc_image.get_cstr_at(selector_pointer, 0, vm=True, sectname="__objc_methname")
                 except Exception as ex:
                     try:
-                        imp = objc_image.get_int_at(vm_addr+8, 4, vm=True)
+                        imp = objc_image.get_int_at(vm_addr + 8, 4, vm=True)
                         # no idea if this is correct
                         imp = usi32_to_si32(imp) + vm_addr + 8
                         if imp in objc_image.image.symbols:
@@ -563,11 +561,6 @@ class Method(Constructable):
         pass
 
     def __init__(self, meta, sel, type_string, type_processor):
-        """
-
-        :param objc_image:
-        :param meta:
-        """
         self.meta = meta
         self.sel = sel
         self.type_string = type_string
@@ -625,7 +618,7 @@ class Class(Constructable):
     """
 
     @classmethod
-    def from_image(cls, objc_image: ObjCImage, class_ptr: int, meta=False) -> 'Class':
+    def from_image(cls, objc_image: ObjCImage, class_ptr: int, meta=False) -> Optional['Class']:
         if class_ptr in objc_image.class_map:
             return objc_image.class_map[class_ptr]
 
@@ -646,17 +639,18 @@ class Class(Constructable):
         superclass = None
 
         if not meta:
-            if objc2_class_location+8 in objc_image.image.import_table:
-                symbol = objc_image.image.import_table[objc2_class_location+8]
+            if objc2_class_location + 8 in objc_image.image.import_table:
+                symbol = objc_image.image.import_table[objc2_class_location + 8]
                 superclass_name = symbol.name[1:]
             elif objc2_class_item.superclass in objc_image.image.export_table:
                 symbol = objc_image.image.export_table[objc2_class_item.superclass]
                 superclass_name = symbol.name[1:]
             else:
                 if objc_image.vm_check(objc2_class_item.superclass):
+                    # noinspection PyBroadException
                     try:
                         superclass = Class.from_image(objc_image, objc2_class_location + 8)
-                    except:
+                    except Exception:
                         pass
                 if superclass is not None:
                     superclass_name = superclass.name
@@ -750,17 +744,20 @@ class Class(Constructable):
                     log.warning(f'Failed to load ivar with {str(ex)}')
                     load_errors.append(f'Failed to load an ivar with {str(ex)}')
 
-        return cls(name, meta, superclass_name, methods, properties, ivars, prots, load_errors, struct_list, loc=objc2_class_location)
+        return cls(name, meta, superclass_name, methods, properties, ivars, prots, load_errors, struct_list,
+                   loc=objc2_class_location)
 
     @classmethod
-    def from_values(cls, name, superclass_name, methods: List[Method], properties: List['Property'], ivars: List['Ivar'], 
+    def from_values(cls, name, superclass_name, methods: List[Method], properties: List['Property'],
+                    ivars: List['Ivar'],
                     protocols: List['Protocol'], load_errors=None, structs=None):
         return cls(name, False, superclass_name, methods, properties, ivars, protocols, load_errors, structs)
 
     def raw_bytes(self):
         pass
 
-    def __init__(self, name, is_meta, superclass_name, methods, properties, ivars, protocols, load_errors=None, structs=None, loc=0):
+    def __init__(self, name, is_meta, superclass_name, methods, properties, ivars, protocols, load_errors=None,
+                 structs=None, loc=0):
         if structs is None:
             structs = []
         if load_errors is None:
@@ -859,15 +856,15 @@ class Property(Constructable):
         return ret
 
     @staticmethod
-    def _renderable_type(type: Type):
-        if type.type == EncodedType.NORMAL:
-            return str(type)
-        elif type.type == EncodedType.STRUCT:
+    def _renderable_type(_type: Type):
+        if _type.type == EncodedType.NORMAL:
+            return str(_type)
+        elif _type.type == EncodedType.STRUCT:
             ptraddon = ""
-            for i in range(0, type.pointer_count):
+            for i in range(0, _type.pointer_count):
                 ptraddon += '*'
-            return ptraddon + type.value.name
-        return str(type)
+            return ptraddon + _type.value.name
+        return str(_type)
 
     @staticmethod
     def decode_property_attributes(type_processor, type_str: str):
@@ -905,7 +902,7 @@ class Category(Constructable):
         name = objc_image.get_cstr_at(struct.name, vm=True)
         classname = ""
         try:
-            sym = objc_image.image.import_table[loc+8]
+            sym = objc_image.image.import_table[loc + 8]
             classname = sym.name[1:]
         except KeyError:
             pass

@@ -79,8 +79,8 @@ def usi32_to_si32(val):
     """
     bits = 32
     if (val & (1 << (bits - 1))) != 0:  # if sign bit is set e.g., 8bit: 128-255
-        val = val - (1 << bits)         # compute negative value
-    return val                          # return positive value as is
+        val = val - (1 << bits)  # compute negative value
+    return val  # return positive value as is
 
 
 class TapiYAMLWriter:
@@ -148,7 +148,7 @@ class Table:
             return ""
 
         # Initialize an array with zero for each column
-        column_maxes = [0 for i in self.rows[0]]
+        column_maxes = [0 for _ in self.rows[0]]
 
         # Iterate through each row,
         for row in self.rows:
