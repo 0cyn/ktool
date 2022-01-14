@@ -131,6 +131,7 @@ class LOAD_COMMAND(IntEnum):
 
 
 LOAD_COMMAND_MAP = {
+    LOAD_COMMAND.SEGMENT: segment_command,
     LOAD_COMMAND.SYMTAB: symtab_command,
     LOAD_COMMAND.DYSYMTAB: dysymtab_command,
     LOAD_COMMAND.LOAD_DYLIB: dylib_command,

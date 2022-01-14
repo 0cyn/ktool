@@ -125,6 +125,7 @@ class Segment:
 
     def __init__(self, image, cmd):
         self.image = image
+        self.is64 = isinstance(cmd, segment_command_64)
         self.cmd = cmd
         self.vm_address = cmd.vmaddr
         self.file_address = cmd.fileoff
@@ -140,15 +141,14 @@ class Segment:
 
     def _process_sections(self) -> Dict[str, Section]:
         sections = {}
-        ea = self.cmd.off + segment_command_64.SIZE
+        ea = self.cmd.off + self.cmd.SIZE
 
-        for section in range(0, self.cmd.nsects):
-            sect = self.image.load_struct(ea, section_64)
-            section = Section(self, sect)
-            sections[section.name] = section
-            ea += section_64.SIZE
+        for sect in range(0, self.cmd.nsects):
+            sect = self.image.load_struct(ea, section_64 if self.is64 else section)
+            sect = Section(self, sect)
+            sections[sect.name] = sect
+            ea += section_64.SIZE if self.is64 else section.SIZE
 
-        ea += segment_command_64.SIZE
         return sections
 
 

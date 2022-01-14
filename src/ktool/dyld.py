@@ -24,7 +24,7 @@ from kmacho import (
     BINDING_OPCODE,
     LOAD_COMMAND_MAP,
     BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB,
-    BIND_SUBOPCODE_THREADED_APPLY
+    BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64
 )
 from kmacho.structs import *
 from kmacho.base import Constructable
@@ -46,7 +46,12 @@ class ImageHeader(Constructable):
         image_header = ImageHeader()
 
         offset = 0
+
         header: dyld_header = macho_slice.load_struct(offset, dyld_header)
+        if header.magic == MH_MAGIC_64:
+            header: dyld_header_64 = macho_slice.load_struct(offset, dyld_header_64)
+            image_header.is64 = True
+
         raw = header.raw
 
         image_header.filetype = MH_FILETYPE(header.filetype)
@@ -89,6 +94,7 @@ class ImageHeader(Constructable):
         pass
 
     def __init__(self):
+        self.is64 = False
         self.dyld_header = None
         self.filetype = MH_FILETYPE(0)
         self.flags: List[MH_FILETYPE] = []
@@ -290,7 +296,7 @@ class Dyld:
             except ValueError:
                 continue
 
-            if load_command == LOAD_COMMAND.SEGMENT_64:
+            if load_command == LOAD_COMMAND.SEGMENT_64 or load_command == LOAD_COMMAND.SEGMENT:
                 log.debug("Loading SEGMENT_64")
                 segment = Segment(image, cmd)
 
@@ -621,12 +627,15 @@ class SymbolTable:
         symbol_table = []
         read_address = self.cmd.symoff
         for i in range(0, self.cmd.nsyms):
-            symbol_table.append(self.image.load_struct(read_address + symtab_entry.SIZE * i, symtab_entry))
+            typing = symtab_entry if self.image.macho_header.is64 else symtab_entry_32
+            entry = self.image.load_struct(read_address + typing.SIZE * i, typing)
+            symbol_table.append(entry)
+            log.debug_tm(str(entry))
 
         table = []
         for sym in symbol_table:
             symbol = Symbol(self.image, self.cmd, sym)
-            # log.debug(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
+            log.debug_tm(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
             table.append(symbol)
             if sym.type == 0xf:
                 self.ext.append(symbol)

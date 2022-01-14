@@ -743,10 +743,12 @@ To print a list of Load Commands and their data
     require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types'])
 
     with open(args.filename, 'rb') as fd:
-        image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
 
         if not args.get_lcs and not args.get_linked:
+            image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
             objc_image = ktool.load_objc_metadata(image)
+        else:
+            image = ktool.load_image(fd, args.slice_index, False, False, False)
 
         print(f'\n{args.filename} '.ljust(60, '-') + '\n')
 

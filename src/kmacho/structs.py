@@ -178,7 +178,16 @@ class fat_arch(Struct):
 
 
 class dyld_header(Struct):
-    _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags', 'void']
+    _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags']
+    _SIZES = [4, 4, 4, 4, 4, 4, 4]
+    SIZE = sum(_SIZES)
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+
+
+class dyld_header_64(Struct):
+    _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags', 'reserved']
     _SIZES = [4, 4, 4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
@@ -195,10 +204,30 @@ class unk_command(Struct):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
+class segment_command(Struct):
+    _FIELDNAMES = ['cmd', 'cmdsize', 'segname', 'vmaddr', 'vmsize', 'fileoff', 'filesize', 'maxprot',
+                   'initprot', 'nsects', 'flags']
+    _SIZES = [4, 4, 16, 4, 4, 4, 4, 4, 4, 4, 4]
+    SIZE = sum(_SIZES)
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+
+
 class segment_command_64(Struct):
     _FIELDNAMES = ['cmd', 'cmdsize', 'segname', 'vmaddr', 'vmsize', 'fileoff', 'filesize', 'maxprot',
                    'initprot', 'nsects', 'flags']
     _SIZES = [4, 4, 16, 8, 8, 8, 8, 4, 4, 4, 4]
+    SIZE = sum(_SIZES)
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+
+
+class section(Struct):
+    _FIELDNAMES = ['sectname', 'segname', 'addr', 'size', 'offset', 'align', 'reloff',
+                   'nreloc', 'flags', 'reserved1', 'reserved2']
+    _SIZES = [16, 16, 4, 4, 4, 4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
 
     def __init__(self, byte_order="little"):
@@ -331,6 +360,15 @@ class dyld_info_command(Struct):
                    'weak_bind_off', 'weak_bind_size', 'lazy_bind_off', 'lazy_bind_size',
                    'export_off', 'export_size']
     _SIZES = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+    SIZE = sum(_SIZES)
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+
+
+class symtab_entry_32(Struct):
+    _FIELDNAMES = ["str_index", "type", "sect_index", "desc", "value"]
+    _SIZES = [4, 1, 1, 2, 4]
     SIZE = sum(_SIZES)
 
     def __init__(self, byte_order="little"):
