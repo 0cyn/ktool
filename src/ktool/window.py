@@ -1665,11 +1665,16 @@ class KToolMachOLoader:
         callback(
             f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nInitial Syntax Highlighting')
         futures = []
-
-        with concurrent.futures.ProcessPoolExecutor(max_workers=THREAD_COUNT) as executor:
-            for header_name, header in generator.headers.items():
-                futures.append(executor.submit(KToolMachOLoader.get_header_item, str(header.text), str(header_name)))
-            i += 1
+        try:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=THREAD_COUNT) as executor:
+                for header_name, header in generator.headers.items():
+                    futures.append(executor.submit(KToolMachOLoader.get_header_item, str(header.text), str(header_name)))
+                i += 1
+        except ImportError:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
+                for header_name, header in generator.headers.items():
+                    futures.append(executor.submit(KToolMachOLoader.get_header_item, str(header.text), str(header_name)))
+                i += 1
         items = [f.result() for f in futures]
         callback(
             f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nRendering color schema')
