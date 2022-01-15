@@ -1697,10 +1697,12 @@ class KToolMachOLoader:
 
 
 class KToolScreen:
-    def __init__(self):
+    def __init__(self, hard_fail=False):
 
         self.supports_color = False
         self.supported_colors = 0
+        self.hard_fail = hard_fail
+        KToolMachOLoader.HARD_FAIL = hard_fail
 
         self.stdscr = self.setup()
 

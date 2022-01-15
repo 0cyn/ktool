@@ -178,8 +178,9 @@ def main():
     parser_open = subparsers.add_parser('open', help='open ktool GUI and browse file')
 
     parser_open.add_argument('filename', nargs='?', default='')
+    parser_open.add_argument('--hard-fail', dest='hard_fail', action='store_true')
 
-    parser_open.set_defaults(func=_open)
+    parser_open.set_defaults(func=_open, hard_fail=False)
 
     # insert command: optool replacement
     parser_insert = subparsers.add_parser('insert', help='Insert data into MachO Binary')
@@ -416,7 +417,7 @@ def process_patches(image) -> 'Image':
 def _open(args):
     try:
         log.LOG_LEVEL = LogLevel.DEBUG
-        screen = KToolScreen()
+        screen = KToolScreen(args.hard_fail)
         log.LOG_FUNC = screen.ktool_dbg_print_func
         log.LOG_ERR = screen.ktool_dbg_print_err_func
         screen.load_file(args.filename)
