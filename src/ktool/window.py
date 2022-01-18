@@ -1582,7 +1582,7 @@ class KToolMachOLoader:
         tab = Table()
         tab.titles = ['Address', 'Name']
         for sym in lib.symbol_table.table:
-            tab.rows.append([hex(sym.addr), sym.fullname])
+            tab.rows.append([hex(sym.address), sym.fullname])
         mmci.lines.append(tab)
 
         menuitem = SidebarMenuItem("Symbol Table", mmci, parent)
@@ -1618,7 +1618,7 @@ class KToolMachOLoader:
 
         for symbol in lib.imports:
             table.rows.append(
-                [hex(symbol.addr), symbol.fullname, symbol.attr.ljust(8)])
+                [hex(symbol.address), symbol.fullname, symbol.attr.ljust(8)])
         mmci.lines.append(table)
 
         menuitem = SidebarMenuItem("Imports", mmci, parent)
@@ -1635,7 +1635,7 @@ class KToolMachOLoader:
         table.titles = ['Address', 'Symbol']
 
         for symbol in lib.exports:
-            table.rows.append([hex(symbol.addr), symbol.fullname])
+            table.rows.append([hex(symbol.address), symbol.fullname])
 
         mmci.lines.append(table)
 

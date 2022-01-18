@@ -462,7 +462,7 @@ Print the symbol table
             table.titles = ['Address', 'Symbol']
 
             for symbol in image.exports:
-                table.rows.append([hex(symbol.addr), symbol.fullname])
+                table.rows.append([hex(symbol.address), symbol.fullname])
 
             print(table.render(get_terminal_size().columns))
 
@@ -474,7 +474,7 @@ Print the symbol table
             table.titles = ['Address', 'Name']
 
             for sym in image.symbol_table.table:
-                table.rows.append([hex(sym.addr), sym.fullname])
+                table.rows.append([hex(sym.address), sym.fullname])
 
             print(table.render(get_terminal_size().columns))
 
@@ -507,21 +507,21 @@ Print the symbol table
             for sym in image.binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.address).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.dec_type}')
                 except IndexError:
                     pass
             print('\nWeak Binding Info'.ljust(60, '-') + '\n')
             for sym in image.weak_binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.address).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.dec_type}')
                 except IndexError:
                     pass
             print('\nLazy Binding Info'.ljust(60, '-') + '\n')
             for sym in image.lazy_binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.addr).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.type}')
+                        f'{hex(sym.address).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.dec_type}')
                 except IndexError:
                     pass
 

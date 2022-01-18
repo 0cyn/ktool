@@ -297,7 +297,7 @@ class Dyld:
                 continue
 
             if load_command == LOAD_COMMAND.SEGMENT_64 or load_command == LOAD_COMMAND.SEGMENT:
-                log.debug("Loading SEGMENT_64")
+                log.debug("Loading Segment")
                 segment = Segment(image, cmd)
 
                 log.info(f'Loaded Segment {segment.name}')
@@ -333,6 +333,9 @@ class Dyld:
                 if load_symtab:
                     log.info("Loading Symbol Table")
                     image.symbol_table = SymbolTable(image, cmd)
+
+            elif load_command == LOAD_COMMAND.DYSYMTAB:
+                cmd = cmd
 
             elif load_command == LOAD_COMMAND.UUID:
                 image.uuid = cmd.uuid.to_bytes(16, "little")
@@ -408,25 +411,25 @@ class Dyld:
         if image.export_trie:
             for symbol in image.export_trie.symbols:
                 image.exports.append(symbol)
-                image.export_table[symbol.addr] = symbol
+                image.export_table[symbol.address] = symbol
 
         if image.binding_table:
             for symbol in image.binding_table.symbol_table:
                 symbol.attr = ''
                 image.imports.append(symbol)
-                image.import_table[symbol.addr] = symbol
+                image.import_table[symbol.address] = symbol
             for symbol in image.weak_binding_table.symbol_table:
                 symbol.attr = 'Weak'
                 image.imports.append(symbol)
-                image.import_table[symbol.addr] = symbol
+                image.import_table[symbol.address] = symbol
             for symbol in image.lazy_binding_table.symbol_table:
                 symbol.attr = 'Lazy'
                 image.imports.append(symbol)
-                image.import_table[symbol.addr] = symbol
+                image.import_table[symbol.address] = symbol
 
         if image.symbol_table:
             for symbol in image.symbol_table.table:
-                image.symbols[symbol.addr] = symbol
+                image.symbols[symbol.address] = symbol
 
 
 class LD64:
@@ -556,52 +559,69 @@ class SymbolType(Enum):
     UNK = 4
 
 
-class Symbol:
+class Symbol(Constructable):
     """
     This class can represent several types of symbols.
 
-    It can represent an external or internal symbol declaration and is used for both across the image
-
-    .external is a BOOL that can be used to check whether it's an external or internal declaration
-
-    .fullname contains the full name of the symbol (e.g. _OBJC_CLASS_$_MyDumbClassnameHere)
-
-    .name contains the (somewhat) processed name of the symbol (e.g. _MyDumbClassnameHere for an @interface
-    MyDumbClassnameHere)
-
-    .type contains a SymbolType if it was able to figure one out
-
-    .addr contains the address of the symbol in the image
-
     """
 
-    def __init__(self, image: Image, cmd=None, entry=None, fullname=None, ordinal=None, addr=None, attr=None):
-        if fullname:
-            self.fullname = fullname
-        else:
-            self.fullname = image.get_cstr_at(entry.str_index + cmd.stroff)
-        if '_$_' in self.fullname:
-            if self.fullname.startswith('_OBJC_CLASS_$'):
-                self.type = SymbolType.CLASS
-            elif self.fullname.startswith('_OBJC_METACLASS_$'):
-                self.type = SymbolType.METACLASS
-            elif self.fullname.startswith('_OBJC_IVAR_$'):
-                self.type = SymbolType.IVAR
+    @classmethod
+    def from_image(cls, image, cmd, entry):
+        fullname = image.get_cstr_at(entry.str_index + cmd.stroff)
+        addr = entry.value
+        symbol = cls.from_values(fullname, addr)
+
+        N_STAB = 0xe0
+        N_PEXT = 0x10
+        N_TYPE = 0x0e
+        N_EXT = 0x01
+
+        type_masked = N_TYPE & entry.type
+        for name, flag in {'N_UNDF':0x0, 'N_ABS': 0x2, 'N_SECT':0xe, 'N_PBUD':0xc, 'N_INDR':0xa}.items():
+            if type_masked & flag:
+                symbol.types.append(name)
+
+        if entry.type & N_EXT:
+            symbol.external = True
+
+        return symbol
+
+    @classmethod
+    def from_values(cls, fullname, value, external=False, ordinal=0):
+
+        if '_$_' in fullname:
+            if fullname.startswith('_OBJC_CLASS_$'):
+                dec_type = SymbolType.CLASS
+            elif fullname.startswith('_OBJC_METACLASS_$'):
+                dec_type = SymbolType.METACLASS
+            elif fullname.startswith('_OBJC_IVAR_$'):
+                dec_type = SymbolType.IVAR
             else:
-                self.type = SymbolType.UNK
-            self.name = self.fullname.split('$')[1]
+                dec_type = SymbolType.UNK
+            name = fullname.split('$')[1]
         else:
-            self.name = self.fullname
-            self.type = SymbolType.FUNC
-        if entry:
-            self.external = False
-            self.addr = entry.value
-        else:
-            self.external = True
-            self.addr = addr
-        self.entry = entry
+            name = fullname
+            dec_type = SymbolType.FUNC
+
+        return cls(fullname, name=name, dec_type=dec_type, external=external, value=value, ordinal=ordinal)
+
+    def raw_bytes(self):
+        pass
+
+    def __init__(self, fullname=None, name=None, dec_type=None, external=False, value=0, ordinal=0):
+        self.fullname = fullname
+        self.name = name
+        self.dec_type = dec_type
+
+        self.address = value
+
+        self.entry = None
         self.ordinal = ordinal
-        self.attr = attr
+
+        self.types = []
+        self.external = external
+
+        self.attr = None
 
 
 class SymbolTable:
@@ -634,8 +654,8 @@ class SymbolTable:
 
         table = []
         for sym in symbol_table:
-            symbol = Symbol(self.image, self.cmd, sym)
-            log.debug_tm(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.type}')
+            symbol = Symbol.from_image(self.image, self.cmd, sym)
+            log.debug_tm(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.dec_type}')
             table.append(symbol)
             if sym.type == 0xf:
                 self.ext.append(symbol)
@@ -656,7 +676,7 @@ class ExportTrie(Constructable):
 
         for node in nodes:
             if node.text:
-                symbols.append(Symbol(image, fullname=node.text, addr=node.offset))
+                symbols.append(Symbol.from_values(node.text, node.offset, False))
 
         trie.nodes = nodes
         trie.symbols = symbols
@@ -758,7 +778,7 @@ class BindingTable:
         table = []
         for act in self.actions:
             if act.item:
-                sym = Symbol(self.image, fullname=act.item, ordinal=act.libname, addr=act.vmaddr)
+                sym = Symbol.from_values(act.item, act.vmaddr, external=True, ordinal=act.libname)
                 table.append(sym)
                 self.lookup_table[act.vmaddr] = sym
         return table

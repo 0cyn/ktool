@@ -58,7 +58,7 @@ class TypeResolver:
         self.classmap = {}
         try:
             for sym in objc_image.image.binding_table.symbol_table:
-                if sym.type == SymbolType.CLASS:
+                if sym.dec_type == SymbolType.CLASS:
                     self.classmap[sym.name[1:]] = sym
                     classes.append(sym)
         except AttributeError:
