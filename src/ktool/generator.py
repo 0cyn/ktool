@@ -67,11 +67,11 @@ class TBDGenerator:
             ivars = []
 
             for sym in self.image.exports:
-                if sym.type == SymbolType.FUNC:
+                if sym.dec_type == SymbolType.FUNC:
                     symbols.append(sym.name)
-                elif sym.type == SymbolType.CLASS:
+                elif sym.dec_type == SymbolType.CLASS:
                     classes.append(sym.name)
-                elif sym.type == SymbolType.IVAR:
+                elif sym.dec_type == SymbolType.IVAR:
                     ivars.append(sym.name)
 
             export_dict['symbols'] = symbols
