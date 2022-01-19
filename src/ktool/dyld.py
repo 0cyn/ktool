@@ -569,6 +569,7 @@ class Symbol(Constructable):
     def from_image(cls, image, cmd, entry):
         fullname = image.get_cstr_at(entry.str_index + cmd.stroff)
         addr = entry.value
+
         symbol = cls.from_values(fullname, addr)
 
         N_STAB = 0xe0

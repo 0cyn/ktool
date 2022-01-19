@@ -50,6 +50,8 @@ from ktool.util import Table, THREAD_COUNT
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
 
+BOX_CHARS = ['┦', '─', '━', '│', '┃', '┄', '┅', '┆', '┇', '┈', '┉', '┊', '┋', '┌', '┍', '┎', '┏', '┐', '┑', '┒', '┓', '└', '┕', '┖', '┗', '┘', '┙', '┚', '┛', '├', '┝', '┞', '┟', '┠', '┡', '┢', '┣', '┤', '┥', '┦', '┧', '┨', '┩', '┪', '┫', '┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷', '┸', '┹', '┺', '┻', '┼', '┽', '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅', '╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒', '╓', '╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡', '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩', '╪', '╫', '╬', '╭', '╮', '╯', '╰', '╱', '╲', '╳', '╴', '╵', '╶', '╷', '╸', '╹', '╺', '╻', '╼', '╽', '╾', '╿']
+
 SIDEBAR_WIDTH = 40
 
 MAIN_TEXT = """ktool ------
@@ -245,13 +247,12 @@ class HexDumpTable(Table):
 
     def __init__(self):
         super().__init__()
-        self.titles = ['', '']
+        self.titles = ['Raw Data', 'ASCII']
         self.hex = bytearray(b'')
 
-    def render(self, width):
-        maxwid = width / 2
-        renwid = maxwid - (maxwid % 10)
-        col_count = renwid / 10
+    def fetch(self, row_start, row_count, screen_width):
+
+        col_count = 2
         self.rows = []
 
         stack = ""
@@ -259,12 +260,12 @@ class HexDumpTable(Table):
         stack_div = ""
         decode_stack_div = ""
 
-        for i, byte in enumerate(self.hex):
+        for i, byte in enumerate(self.hex[row_start*8:row_start*8+row_count*8]):
             stack_div += hex(byte)[2:].rjust(2, '0')
-            decode_stack_div += byte.to_bytes(1, 'big').decode('ascii') if byte in range(32, 127) else '.'
+            decode_stack_div += byte.to_bytes(1, 'big').decode('ascii') + ' ' if byte in range(32, 127) else '. '
             if len(stack_div) >= 8:
                 stack += stack_div + '  '
-                decode_stack += decode_stack_div + ' '
+                decode_stack += decode_stack_div + '  '
                 stack_div = ""
                 decode_stack_div = ""
             if len(stack) >= 10 * col_count:
@@ -274,8 +275,14 @@ class HexDumpTable(Table):
 
         self.rows.append([stack, decode_stack])
 
-        return super().render(width)
+        if not len(self.column_maxes) > 0:
+            self.preheat()
 
+        fetched = super().fetch(0, row_count, screen_width)
+
+        self.rendered_row_cache = {}
+
+        return fetched
 
 # # # # #
 #
@@ -408,8 +415,8 @@ class ScrollingDisplayBuffer:
             wrapped_lines = []
             for line in self.lines:
                 if isinstance(line, Table):
-                    wrapped_lines += [i[0:self.width] for i in line.render(self.width).split('\n')]
-                    self.pinned_lines = [0]
+                    wrapped_lines.append(line)
+                    self.filled_line_count = -1
                     continue
                 if not isinstance(line, AttributedString):
                     line = AttributedString(line)
@@ -467,7 +474,8 @@ class ScrollingDisplayBuffer:
 
                 wrapped_lines += lines
 
-            self.filled_line_count = len(wrapped_lines)
+            if not self.filled_line_count == -1:
+                self.filled_line_count = len(wrapped_lines)
             self.processed_lines = wrapped_lines
 
         else:
@@ -521,10 +529,36 @@ class ScrollingDisplayBuffer:
         end_line = start_line + self.height - 1
         pincount = 0
         pins = []
-        for i in self.pinned_lines:
-            pincount += 1
-            pins.append(lines[i])
-        return pins + lines[start_line + pincount:end_line]
+
+        prop_lines = [*lines]
+
+        for line in lines:
+            if isinstance(line, Table):
+                prop_lines = []
+                table_lines = [i[0:self.width] for i in
+                               line.fetch(start_line, int(self.height), self.width - (20 if ATTR_STRING_DEBUG else 1)).split('\n')]
+                table_attr_lines = []
+
+                for _line in table_lines:
+                    procline = ""
+                    grey = False
+                    for character in _line:
+                        if character in BOX_CHARS:
+                            if not grey:
+                                procline += '§31m'
+                            grey = True
+                        else:
+                            if grey:
+                                procline += '§39m'
+                            grey = False
+                        procline += character
+                    _line = procline + ' §39m'
+                    table_attr_lines.append(AttributedString.ansi_to_attrstr(_line))
+                prop_lines += table_attr_lines
+                start_line = 0
+                end_line = self.height - 1
+
+        return pins + prop_lines[start_line + pincount:end_line]
 
 
 # # # # #
@@ -1113,9 +1147,12 @@ class MainScreen(ScrollView):
             self.scroll_view_text_buffer.draw_lines()
             return True
         elif key == curses.KEY_DOWN:
-            self.scroll_view_text_buffer.scrollcursor = min(
-                self.scroll_view_text_buffer.filled_line_count - self.scroll_view_text_buffer.height + 1,
-                self.scroll_view_text_buffer.scrollcursor + 1)
+            if self.scroll_view_text_buffer.filled_line_count == -1:
+                self.scroll_view_text_buffer.scrollcursor += 1
+            else:
+                self.scroll_view_text_buffer.scrollcursor = min(
+                    self.scroll_view_text_buffer.filled_line_count - self.scroll_view_text_buffer.height + 1,
+                    self.scroll_view_text_buffer.scrollcursor + 1)
             self.scroll_view_text_buffer.draw_lines()
             return True
         elif key == ord("d"):
@@ -1473,7 +1510,7 @@ class KToolMachOLoader:
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nLoading Segments & Generating Hexdumps')
         smmci = MainMenuContentItem()
         ssmi = SidebarMenuItem("Segments", smmci, parent)
-        table = Table()
+        table = Table(True)
         table.titles = ['Segment Name', 'VM Address', 'Size', 'File Address']
 
         for segname, segm in lib.segments.items():
@@ -1579,7 +1616,7 @@ class KToolMachOLoader:
     def symtab(lib, parent=None, callback=None):
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Symtab')
         mmci = MainMenuContentItem()
-        tab = Table()
+        tab = Table(True)
         tab.titles = ['Address', 'Name']
         for sym in lib.symbol_table.table:
             tab.rows.append([hex(sym.address), sym.fullname])
@@ -1613,7 +1650,7 @@ class KToolMachOLoader:
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Imports')
         mmci = MainMenuContentItem()
 
-        table = Table()
+        table = Table(True)
         table.titles = ['Address', 'Symbol', 'Binding']
 
         for symbol in lib.imports:
@@ -1631,7 +1668,7 @@ class KToolMachOLoader:
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Exports')
         mmci = MainMenuContentItem()
 
-        table = Table()
+        table = Table(True)
         table.titles = ['Address', 'Symbol']
 
         for symbol in lib.exports:

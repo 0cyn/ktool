@@ -464,7 +464,7 @@ Print the symbol table
             for symbol in image.exports:
                 table.rows.append([hex(symbol.address), symbol.fullname])
 
-            print(table.render(get_terminal_size().columns))
+            print(table.fetch_all(get_terminal_size().columns))
 
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:
@@ -476,7 +476,7 @@ Print the symbol table
             for sym in image.symbol_table.table:
                 table.rows.append([hex(sym.address), sym.fullname])
 
-            print(table.render(get_terminal_size().columns))
+            print(table.fetch_all(get_terminal_size().columns-1))
 
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
@@ -497,7 +497,7 @@ Print the symbol table
             for _, sym in import_symbols.items():
                 table.rows.append([sym.addr, sym.name, sym.image, sym.from_table])
 
-            print(table.render(get_terminal_size().columns))
+            print(table.fetch_all(get_terminal_size().columns))
 
     elif args.get_actions:
         with open(args.filename, 'rb') as fd:
