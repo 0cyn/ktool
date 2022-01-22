@@ -284,6 +284,20 @@ class HexDumpTable(Table):
 
         return fetched
 
+
+class LazilyProcessedTextBuffer:
+    def __init__(self):
+        self.lines = []
+        self.processed = False
+
+        self.target = None
+        self.target_args = []
+
+    def go(self):
+        self.lines = self.target(*self.target_args)
+        self.processed = True
+
+
 # # # # #
 #
 # Lower Level Display Abstraction
@@ -413,6 +427,12 @@ class ScrollingDisplayBuffer:
         self.pinned_lines = []
         if self.wrap:
             wrapped_lines = []
+
+            if isinstance(self.lines[0], LazilyProcessedTextBuffer):
+                if not self.lines[0].processed:
+                    self.lines[0].go()
+                self.lines = self.lines[0].lines + self.lines[1:]
+
             for line in self.lines:
                 if isinstance(line, Table):
                     wrapped_lines.append(line)
@@ -1692,35 +1712,40 @@ class KToolMachOLoader:
         return h_menu_item
 
     @staticmethod
+    def get_header_text(text):
+        formatter = Terminal256Formatter() if KToolMachOLoader.SUPPORTS_256 else TerminalFormatter()
+        text = highlight(text, ObjectiveCLexer(), formatter)
+
+        lines = []
+
+        for item in text.split('\n'):
+            lines.append(AttributedString.ansi_to_attrstr(item))
+        return lines
+
+    @staticmethod
     def objc_headers(objc_lib, parent=None, callback=None):
         generator = HeaderGenerator(objc_lib)
         hnci = MainMenuContentItem()
         hnci.lines = generator.headers.keys()
         menuitem = SidebarMenuItem("ObjC Headers", hnci, parent)
         count = len(generator.headers.keys())
-        i = 1
         callback(
-            f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nInitial Syntax Highlighting')
-        futures = []
-        try:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=THREAD_COUNT) as executor:
-                for header_name, header in generator.headers.items():
-                    futures.append(executor.submit(KToolMachOLoader.get_header_item, str(header.text), str(header_name)))
-                i += 1
-        except ImportError:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
-                for header_name, header in generator.headers.items():
-                    futures.append(executor.submit(KToolMachOLoader.get_header_item, str(header.text), str(header_name)))
-                i += 1
-        items = [f.result() for f in futures]
-        callback(
-            f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\nRendering color schema')
-        for item in items:
-            item.parent = menuitem
-            with concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
-                futures.append(executor.submit(item.parse_mmc))
+            f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers')
 
-        [f.result() for f in futures]
+        items = []
+        i = 1
+        for header_name, header in generator.headers.items():
+            callback(
+                f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing {count} ObjC Headers\n{i}/{count}')
+            mmci = MainMenuContentItem()
+            buffer = LazilyProcessedTextBuffer()
+            buffer.target = KToolMachOLoader.get_header_text
+            buffer.target_args = [str(header)]
+            mmci.lines = [buffer]
+            sbmi = SidebarMenuItem(header_name, mmci, menuitem)
+            items.append(sbmi)
+            i += 1
+
         menuitem.children = items
 
         menuitem.parse_mmc()

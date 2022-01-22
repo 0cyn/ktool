@@ -130,9 +130,11 @@ class TapiYAMLWriter:
 
 class Table:
     """
-    Renderable Table
+    ASCII Table Renderer
     .titles = a list of titles for each column
     .rows is a list of lists, each "sublist" representing each column, .e.g self.rows.append(['col1thing', 'col2thing'])
+
+    .column_pad (default is 2 (without dividers))
 
     This can be used with and without curses;
         you just need to set the max width it can be rendered at on the render call.
@@ -145,14 +147,21 @@ class Table:
         self.dividers = dividers
         self.column_pad = 3 if dividers else 2
 
+        # Holds the maximum length of the fields within the seperate columns
         self.column_maxes = []
+        # Most recently calculated maxes (not thread safe)
         self.most_recent_adjusted_maxes = []
 
+        # width-based caches for loaded and rendered columns
         self.rendered_row_cache = {}
         self.header_cache = {}
 
     def preheat(self):
+        """
+        Call this whenever there's a second to do so, to pre-run a few width-independent calculations
 
+        :return:
+        """
         self.column_maxes = [0 for _ in self.titles]
         self.most_recent_adjusted_maxes = [*self.column_maxes]
 
@@ -170,10 +179,28 @@ class Table:
             self.column_maxes[i] = max(self.column_maxes[i], len(title) + 1 + len(self.titles))
 
     def fetch_all(self, screen_width):
+        """
+        Render the entirety of the table for a screen width
+
+        (avoid calling this in GUI, only use it in CLI)
+
+        :param screen_width:
+        :return:
+        """
         # This function effectively replaces the previous usage of .render() and does it all in one go.
         return self.fetch(0, len(self.rows), screen_width)
 
     def fetch(self, row_start, row_count, screen_width):
+        """
+        Cache-based batch processing and rendering
+
+        Will spit out a generated table for screen_width containing row_count rows.
+
+        :param row_start: Start index to load
+        :param row_count: Amount from index to load
+        :param screen_width: Screen width
+        :return:
+        """
         if row_count == 0:
             return ""
         rows = []
@@ -227,6 +254,14 @@ class Table:
         return rows_text
 
     def render(self, _rows, width, row_start):
+        """
+        Render a list of rows for screen_width
+
+        :param _rows: list of rows to be rendered
+        :param width: Screen width
+        :param row_start: Starting index of rows (for the sake of cacheing)
+        :return:
+        """
 
         width -= 1
 
@@ -240,9 +275,6 @@ class Table:
 
         # Minimum Column Size
         col_min = min(column_maxes)
-
-        #while sum(column_maxes) < width:
-        #    column_maxes = [i + 1 for i in column_maxes]
 
         # Iterate through column maxes, subtracting one from each until they fit within the passed width arg
         last_sum = 0
