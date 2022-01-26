@@ -29,7 +29,7 @@ from kmacho import (
 from kmacho.structs import *
 from kmacho.base import Constructable
 from .macho import _VirtualMemoryMap, Segment, Slice
-from .util import log, macho_is_malformed
+from .util import log, macho_is_malformed, ignore
 
 
 class ImageHeader(Constructable):
@@ -72,10 +72,20 @@ class ImageHeader(Constructable):
             try:
                 load_cmd = Struct.create_with_bytes(LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)], cmd_raw)
                 load_cmd.off = offset
-            except ValueError:
+            except ValueError as ex:
+                if not ignore.MALFORMED:
+                    raise ex
                 unk_lc = macho_slice.load_struct(offset, unk_command)
                 load_cmd = unk_lc
-            except KeyError:
+            except KeyError as ex:
+                if not ignore.MALFORMED:
+                    log.error()
+                    log.error(f'Load Command {str(LOAD_COMMAND(cmd))} doesn\'t have a mapped struct type')
+                    log.error('*Please* file an issue on the github @ https://github.com/cxnder/ktool')
+                    log.error()
+                    log.error(f'Run with the -f flag before the subcommand to try and force loading anyways')
+                    log.error()
+                    raise ex
                 unk_lc = macho_slice.load_struct(offset, unk_command)
                 load_cmd = unk_lc
 
@@ -297,15 +307,13 @@ class Dyld:
                 continue
 
             if load_command == LOAD_COMMAND.SEGMENT_64 or load_command == LOAD_COMMAND.SEGMENT:
-                log.debug("Loading Segment")
+                log.debug_tm("Loading Segment")
                 segment = Segment(image, cmd)
 
                 log.info(f'Loaded Segment {segment.name}')
 
                 image.vm.add_segment(segment)
                 image.segments[segment.name] = segment
-
-                log.debug(f'Added {segment.name} to VM Map')
 
             elif load_command == LOAD_COMMAND.DYLD_INFO_ONLY:
                 image.info = cmd
@@ -381,14 +389,14 @@ class Dyld:
 
             elif load_command == LOAD_COMMAND.ID_DYLIB:
                 image.dylib = ExternalDylib(image, cmd)
-                log.info(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
+                log.debug(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
 
             elif isinstance(cmd, dylib_command):
                 # noinspection PyTypeChecker
                 external_dylib = ExternalDylib(image, cmd)
 
                 image.linked_images.append(external_dylib)
-                log.info(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
+                log.debug(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
 
     @staticmethod
     def _process_image(image: Image) -> None:
@@ -506,7 +514,8 @@ class LD64:
         after_bytes = image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + 32]
 
         image.slice.patch(b_load_cmd.off, after_bytes)
-        image.slice.patch(image.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize, b'\x00' * b_load_cmd.cmdsize)
+        image.slice.patch(image.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize,
+                          b'\x00' * b_load_cmd.cmdsize)
 
         image.macho_header.dyld_header.loadcnt -= 1
         image.macho_header.dyld_header.loadsize -= b_load_cmd.cmdsize
@@ -578,7 +587,7 @@ class Symbol(Constructable):
         N_EXT = 0x01
 
         type_masked = N_TYPE & entry.type
-        for name, flag in {'N_UNDF':0x0, 'N_ABS': 0x2, 'N_SECT':0xe, 'N_PBUD':0xc, 'N_INDR':0xa}.items():
+        for name, flag in {'N_UNDF': 0x0, 'N_ABS': 0x2, 'N_SECT': 0xe, 'N_PBUD': 0xc, 'N_INDR': 0xa}.items():
             if type_masked & flag:
                 symbol.types.append(name)
 

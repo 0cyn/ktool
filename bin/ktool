@@ -440,16 +440,13 @@ def symbols(args):
 List symbol imports/exports
 
 Print the list of imported symbols
-
-    ktool symbols --imports [filename]
+> ktool symbols --imports [filename]
 
 Print the list of exported symbols
-
-    ktool symbols --exports [filename]
+> ktool symbols --exports [filename]
 
 Print the symbol table
-
-    ktool symbols --symtab [filename]
+> ktool symbols --symtab [filename]
     """
 
     require_args(args, one_of=['get_imports', 'get_actions', 'get_exports', 'get_symtab'])
@@ -532,8 +529,7 @@ def insert(args):
 Utils for inserting load commands into mach-o binaries
 
 insert a LOAD_DYLIB command
-
-    ktool insert --lc load --payload /Dylib/Install/Name/Here.dylib --out <output filename> [filename]
+> ktool insert --lc load --payload /Dylib/Install/Name/Here.dylib --out <output filename> [filename]
 
 commands currently supported:
     load: LOAD_DYLIB
@@ -593,8 +589,7 @@ def edit(args):
 Utils for editing MachO Binaries
 
 Modify the install name of a image
-
-    ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
+> ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
     """
 
     require_args(args, one_of=['iname', 'apad'])
@@ -645,10 +640,10 @@ def img4(args):
 IMG4 Utilities
 
 Getting keybags
-    ktool img4 --kbag <filename>
+> ktool img4 --kbag <filename>
 
 Decrypting an im4p
-    ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
+> ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
     """
 
     require_args(args, one_of=['get_kbag', 'do_decrypt'])
@@ -678,12 +673,10 @@ def lipo(args):
 Utilities for combining/separating slices in fat MachO files.
 
 Extract a slice from a fat binary
-
-    ktool lipo --extract [slice_name] [filename]
+> ktool lipo --extract [slice_name] [filename]
 
 Create a fat Macho Binary from multiple thin binaries
-
-    ktool lipo --create [--out filename] [filenames]
+> ktool lipo --create [--out filename] [filenames]
     """
 
     require_args(args, one_of=['combine', 'extract'])
@@ -725,20 +718,16 @@ def _list(args):
 Tools for printing various lists
 
 To print the list of classes
-
-    ktool list --classes [filename]
+> ktool list --classes [filename]
 
 To print the list of protocols
-
-    ktool list --protocols [filename]
+> ktool list --protocols [filename]
 
 To print a  list of linked libraries
-
-    ktool list --linked [filename]
+> ktool list --linked [filename]
 
 To print a list of Load Commands and their data
-
-    ktool list --cmds [filename]
+> ktool list --cmds [filename]
     """
 
     require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types'])
@@ -774,8 +763,7 @@ def _file(args):
 ----------
 
 Print basic information about a file (e.g 'Thin MachO Binary')
-
-    ktool file [filename]
+> ktool file [filename]
     """
     with open(args.filename, 'rb') as fp:
         macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
@@ -799,8 +787,7 @@ def info(args):
 Some misc info about the target mach-o
 
 Print generic info about a MachO file
-
-    ktool info [--slice n] [filename]
+> ktool info [--slice n] [filename]
 
 Print VM -> Slice -> Filename address mapping for a slice
 of a MachO file
@@ -830,12 +817,10 @@ def dump(args):
 Tools to reconstruct certain files from compiled MachOs
 
 To dump a set of headers for a bin/framework
-
-    ktool dump --headers --out <directory> [filename]
+> ktool dump --headers --out <directory> [filename]
 
 To dump .tbd files for a framework
-
-    ktool dump --tbd [filename]
+> ktool dump --tbd [filename]
     """
 
     require_args(args, one_of=['do_headers', 'do_tbd'])

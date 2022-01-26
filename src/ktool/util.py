@@ -410,36 +410,36 @@ class log:
         return 'ktool.' + filename + ":" + line_name + ":" + call_from + '()'
 
     @staticmethod
-    def debug(msg: str):
+    def debug(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
             log.LOG_FUNC(f'DEBUG - {log.line()} - {msg}')
 
     @staticmethod
-    def debug_more(msg: str):
+    def debug_more(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG_MORE.value:
             log.LOG_FUNC(f'DEBUG-2 - {log.line()} - {msg}')
 
     @staticmethod
-    def debug_tm(msg: str):
+    def debug_tm(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG_TOO_MUCH.value:
             log.LOG_FUNC(f'DEBUG-3 - {log.line()} - {msg}')
 
     @staticmethod
-    def info(msg: str):
+    def info(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.INFO.value:
             log.LOG_FUNC(f'INFO - {log.line()} - {msg}')
 
     @staticmethod
-    def warn(msg: str):
+    def warn(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.WARN.value:
             log.LOG_ERR(f'WARN - {log.line()} - {msg}')
 
     @staticmethod
-    def warning(msg: str):
+    def warning(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.WARN.value:
             log.LOG_ERR(f'WARN - {log.line()} - {msg}')
 
     @staticmethod
-    def error(msg: str):
+    def error(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.ERROR.value:
             log.LOG_ERR(f'ERROR - {log.line()} - {msg}')

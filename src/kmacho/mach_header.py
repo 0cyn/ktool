@@ -136,6 +136,7 @@ LOAD_COMMAND_MAP = {
     LOAD_COMMAND.DYSYMTAB: dysymtab_command,
     LOAD_COMMAND.LOAD_DYLIB: dylib_command,
     LOAD_COMMAND.ID_DYLIB: dylib_command,
+    LOAD_COMMAND.REEXPORT_DYLIB: dylib_command,
     LOAD_COMMAND.LOAD_DYLINKER: dylinker_command,
     LOAD_COMMAND.SUB_CLIENT: sub_client_command,
     LOAD_COMMAND.LOAD_WEAK_DYLIB: dylib_command,

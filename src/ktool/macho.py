@@ -48,7 +48,11 @@ class MachOFile:
             self._get_at = self._mmaped_get_at
 
         else:
+            log.debug_tm("mmapped IO disabled")
             self.file = file
+
+            self.file_data = bytearray(file.read())
+            log.debug_tm("BIO Buffer Size: " + hex(len(self.file_data)))
             self._get_bytes_at = self._bio_get_bytes_at
             self._get_at = self._bio_get_at
 
@@ -85,10 +89,7 @@ class MachOFile:
         return struct
 
     def _bio_get_bytes_at(self, addr: int, count: int):
-        self.file.seek(addr)
-        data = self.file.read(count)
-        self.file.seek(0)
-        return data
+        return bytes(self.file_data[addr:addr+count])
 
     def _mmaped_get_bytes_at(self, addr: int, count: int):
         return self.file[addr: addr + count]
@@ -365,7 +366,7 @@ class Slice:
                 return self.macho_file.file[0:self.size]
             return self.macho_file.file[self.offset:self.offset + self.arch_struct.size]
         else:
-            data = bytearray(self.get_bytes_at(self.offset, self.size))
+            data = self.macho_file.file_data[self.offset:self.offset+self.size]
             for patch_loc in self.patches:
                 i = 0
                 patch_data = self.patches[patch_loc]
@@ -388,7 +389,6 @@ class Slice:
         return int.from_bytes(self.macho_file.file[addr:addr + count], endian)
 
     def _bio_get_int_at(self, addr: int, count: int, endian="little"):
-        addr = addr + self.offset
         return int.from_bytes(self._bio_get_bytes_at(addr, count), endian)
 
     def _mmap_get_bytes_at(self, addr: int, count: int):
@@ -398,10 +398,7 @@ class Slice:
     # noinspection PyUnusedLocal
     def _bio_get_bytes_at(self, addr: int, count: int, endian="little"):
         addr = addr + self.offset
-        self.macho_file.file.seek(addr)
-        data = self.macho_file.file.read(count)
-        self.macho_file.file.seek(0)
-        return data
+        return self.macho_file.file_data[addr:addr + count]
 
     def _mmap_get_str_at(self, addr: int, count: int) -> str:
         """
@@ -449,16 +446,22 @@ class Slice:
     def _bio_get_cstr_at(self, addr: int, limit: int = 0):
         # this function will likely be a bit slower than the mmaped one, and will probably bottleneck things, oh well.
         # I'm unsure if there's any possible faster approach than this.
-        addr = addr + self.offset
-        self.macho_file.file.seek(addr)
+        ea = addr + self.offset
+
         cnt = 0
         while True:
-            if self.macho_file.file.read(1) != b"\x00":
-                cnt += 1
-            else:
-                break
+            try:
+                # print(self.macho_file.file_data[ea])
+                if self.macho_file.file_data[ea] != 0:
+                    cnt += 1
+                    ea += 1
+                else:
+                    break
+            except IndexError as ex:
+                log.error(f'Requested cstring at {hex(addr)}')
+                log.error(f'ea: {hex(ea)} // buffer len: {hex(len(self.macho_file.file_data))}')
+                raise ex
         text = self._bio_get_bytes_at(addr, cnt).decode()
-        self.macho_file.file.seek(0)
         return text
 
     def decode_uleb128(self, readHead: int) -> Tuple[int, int]:

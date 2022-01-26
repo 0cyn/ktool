@@ -28,7 +28,6 @@
 #
 # # # # #
 
-import concurrent.futures
 import curses
 import os
 from datetime import datetime
@@ -45,7 +44,7 @@ from ktool.macho import MachOFile
 from ktool.dyld import Dyld
 from ktool.objc import ObjCImage
 from ktool.headers import HeaderGenerator
-from ktool.util import Table, THREAD_COUNT
+from ktool.util import Table
 
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
@@ -1720,6 +1719,7 @@ class KToolMachOLoader:
 
         for item in text.split('\n'):
             lines.append(AttributedString.ansi_to_attrstr(item))
+
         return lines
 
     @staticmethod
@@ -1987,8 +1987,6 @@ class KToolScreen:
 
         self.stdscr.erase()
 
-        # Mainscreen always needs to be rendered after these two;
-        # its title bar does out-of-bounds rendering over self.titlebar and the sidebar
         self.update_mainscreen_text()
 
         self.footerbar.debug_text = f'{curses.COLS}x{curses.LINES} | {self.sidebar.selected_index} | {self.last_mouse_event} | self.titlebar.pres_menu_item = {str(self.titlebar.pres_menu_item)} '
