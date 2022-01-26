@@ -371,7 +371,7 @@ def main():
 
 
 def help_prompt():
-    """Usage: ktool [command] <flags> [filename]
+    """Usage: ktool <global flags> [command] <flags> [filename]
 
 Commands:
 
@@ -397,11 +397,7 @@ Run `ktool [command]` for info/examples on using that command
 
 Global Flags:
     -f - Force Load (ignores malformations in the MachO and tries to load whatever it can)
-    -v [-1 through 5] - -1 will even hide errors, 5 is labeled internally as "TOO_MUCH"
-    --no-mmap - Disables mmaped IO. Only use this flag if your system doesn't support mmaped IO, using this flag will
-                cause the program to run *much* slower.
-    --bench - Run speed benchmarks. useful for developing/contributing.
-    --membench - Run memory usage benchmarks
+    -v [-1 through 5] - Log verbosiy. -1 completely silences logging.
         """
     print(help_prompt.__doc__)
 

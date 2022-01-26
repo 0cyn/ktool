@@ -43,9 +43,20 @@ class MachOFile:
         if use_mmaped_io:
             global mmap
             import mmap
-            self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_COPY)
-            self._get_bytes_at = self._mmaped_get_bytes_at
-            self._get_at = self._mmaped_get_at
+            try:
+                self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_COPY)
+                self._get_bytes_at = self._mmaped_get_bytes_at
+                self._get_at = self._mmaped_get_at
+            except:
+                log.warning("mmap Failed - Swapped to fallback IO method")
+                self.uses_mmaped_io = False
+                log.debug_tm("mmapped IO disabled")
+                self.file = file
+
+                self.file_data = bytearray(file.read())
+                log.debug_tm("BIO Buffer Size: " + hex(len(self.file_data)))
+                self._get_bytes_at = self._bio_get_bytes_at
+                self._get_at = self._bio_get_at
 
         else:
             log.debug_tm("mmapped IO disabled")
