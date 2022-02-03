@@ -241,6 +241,9 @@ class _VirtualMemoryMap:
         if vm_address in self.cache:
             return self.cache[vm_address]
 
+        if segment_name and segment_name not in self.map:
+            segment_name = None
+
         if segment_name is not None:
             o = self.map[segment_name]
 
@@ -441,7 +444,11 @@ class Slice:
         if addr in self._cstring_cache:
             return self._cstring_cache[addr]
 
-        self.macho_file.file.seek(addr)
+        try:
+            self.macho_file.file.seek(addr)
+        except ValueError as ex:
+            log.error(f'OOB Seek to {hex(addr)} in slice {hex(self.offset)} size:{hex(self.size)}')
+            raise ex
 
         try:
             text = self.macho_file.file[addr:self.macho_file.file.find(b"\x00")].decode()

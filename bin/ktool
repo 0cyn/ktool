@@ -46,7 +46,7 @@ from ktool.swift import *
 
 from ktool.exceptions import *
 from ktool.generator import FatMachOGenerator
-from ktool.util import opts
+from ktool.util import opts, version_output
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
 UPDATE_AVAILABLE = False
@@ -169,8 +169,9 @@ def main():
     parser.add_argument('--membench', dest='membench', action='store_true')
     parser.add_argument('-v', dest='logging_level', type=int)
     parser.add_argument('-f', dest='force_load', action='store_true')
+    parser.add_argument('-V', dest='get_vers', action='store_true')
     parser.add_argument('--no-mmap', dest='no_mmap', action='store_true', help='Disable mmaped IO')
-    parser.set_defaults(func=help_prompt, bench=False, membench=False, force_load=False, no_mmap=False, logging_level=1)
+    parser.set_defaults(func=help_prompt, bench=False, membench=False, force_load=False, no_mmap=False, logging_level=1, get_vers=False)
 
     subparsers = parser.add_subparsers(help='sub-command help')
 
@@ -303,6 +304,10 @@ def main():
         # it should have time to complete by the time the rest of our code is finished
         download_thread = threading.Thread(target=check_for_update, name="UpdateChecker")
         download_thread.start()
+
+    if args.get_vers:
+        version_output()
+        exit()
 
     if not hasattr(args, 'filename'):
         # this is our default function, bc it has no .filename attribute default set

@@ -12,6 +12,32 @@
 #  Copyright (c) kat 2021.
 #
 
+uint8_t = 1
+uint16_t = 2
+uint32_t = 4
+uint64_t = 8
+
+int8_t = -1
+int16_t = -2
+int32_t = -4
+int64_t = -8
+
+
+def uint_to_int(uint, bits):
+    """
+    Assume an int was read from binary as an unsigned int,
+
+    decode it as a two's compliment signed integer
+
+    :param uint:
+    :param bits:
+    :return:
+    """
+    if (uint & (1 << (bits - 1))) != 0:  # if sign bit is set e.g., 8bit: 128-255
+        uint = uint - (1 << bits)  # compute negative value
+    return uint  # return positive value as is
+
+
 # noinspection PyUnresolvedReferences
 class Struct:
     """
@@ -43,14 +69,26 @@ class Struct:
 
         for field in instance._fields:
             size = instance._field_sizes[field]
+            signed = False
+
+            if size < 0:
+                size = abs(size)
+                signed = True
+
             data = raw[current_off:current_off + size]
 
-            instance.super.__setattr__(field, int.from_bytes(data, byte_order))
+            field_value = int.from_bytes(data, byte_order)
+
+            if signed:
+                field_value = uint_to_int(field_value, size * 8)
+
+            setattr(instance, field, field_value)
             inst_raw += data
             current_off += size
 
-        instance.super.__setattr__('raw', inst_raw)
-        instance.super.__setattr__('initialized', True)
+        instance.raw = inst_raw
+        instance.initialized = True
+
         return instance
 
     @staticmethod
@@ -83,16 +121,12 @@ class Struct:
     def __str__(self):
         text = f'{self.__class__.__name__}('
         for field in self._fields:
-            field_item = self.__getattribute__(field) if isinstance(self.__getattribute__(field), bytearray) else hex(self.__getattribute__(field))
+            field_item = self.__getattribute__(field) if isinstance(self.__getattribute__(field), bytearray) else hex(
+                self.__getattribute__(field))
             text += f'{field}={field_item}, '
         return text[:-2] + ')'
 
-    def __init__(self, fields=None, sizes=None, byte_order="little"):
-
-        # We have to use the underlying superclass' __setattr__ to avoid using our own
-        # Our custom one checks whether a list contains something, which during init gets called
-        #   6 times. This exponentially multiplies how slow loading files with a shitload of
-        #   structs. Doing this saves about 5-10% off load times on larger files.
+    def __init__(self, fields=None, sizes=None, byte_order="little", no_patch=False):
 
         if sizes is None:
             raise AssertionError(
@@ -102,19 +136,20 @@ class Struct:
             raise AssertionError(
                 "Do not use the bare Struct class; it must be implemented in an actual type; Missing Fields")
 
-        super().__setattr__('super', super())
-        super().__setattr__('_fields', fields)
+        self.initialized = False
+        self.no_patch = False
 
-        super().__setattr__('byte_order', byte_order)
-        super().__setattr__('initialized', False)
+        self.super = super()
+        self._fields = fields
+        self.byte_order = byte_order
 
-        super().__setattr__('_field_sizes', {})
+        self._field_sizes = {}
 
         for index, i in enumerate(fields):
             self._field_sizes[i] = sizes[index]
 
-        super().__setattr__('off', 0)
-        super().__setattr__('raw', bytearray(b''))
+        self.off = 0
+        self.raw = bytearray()
 
     def _rebuild_raw(self):
         raw = bytearray()
@@ -137,12 +172,14 @@ class Struct:
         self.raw = raw
 
     def __setattr__(self, key, value):
+        super().__setattr__(key, value)
+        if not self.initialized:
+            return
+        if self.no_patch:
+            return
         if key in self._fields:
-            super().__setattr__(key, value)
             if self.initialized:
                 self._rebuild_raw()
-        else:
-            super().__setattr__(key, value)
 
 
 class fat_header(Struct):
@@ -175,6 +212,11 @@ class fat_arch(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cpu_type = 0
+        self.cpu_subtype = 0
+        self.offset = 0
+        self.size = 0
+        self.align = 0
 
 
 class dyld_header(Struct):
@@ -184,6 +226,13 @@ class dyld_header(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.magic = 0
+        self.cpu_type = 0
+        self.cpu_subtype = 0
+        self.filetype = 0
+        self.loadcnt = 0
+        self.loadsize = 0
+        self.flags = 0
 
 
 class dyld_header_64(Struct):
@@ -193,6 +242,14 @@ class dyld_header_64(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.magic = 0
+        self.cpu_type = 0
+        self.cpu_subtype = 0
+        self.filetype = 0
+        self.loadcnt = 0
+        self.loadsize = 0
+        self.flags = 0
+        self.reserved = 0
 
 
 class unk_command(Struct):
@@ -202,6 +259,8 @@ class unk_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
 
 
 class segment_command(Struct):
@@ -212,6 +271,17 @@ class segment_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.segname = 0
+        self.vmaddr = 0
+        self.vmsize = 0
+        self.fileoff = 0
+        self.filesize = 0
+        self.maxprot = 0
+        self.initprot = 0
+        self.nsects = 0
+        self.flags = 0
 
 
 class segment_command_64(Struct):
@@ -222,6 +292,17 @@ class segment_command_64(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.segname = 0
+        self.vmaddr = 0
+        self.vmsize = 0
+        self.fileoff = 0
+        self.filesize = 0
+        self.maxprot = 0
+        self.initprot = 0
+        self.nsects = 0
+        self.flags = 0
 
 
 class section(Struct):
@@ -232,6 +313,17 @@ class section(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.sectname = 0
+        self.segname = 0
+        self.addr = 0
+        self.size = 0
+        self.offset = 0
+        self.align = 0
+        self.reloff = 0
+        self.nreloc = 0
+        self.flags = 0
+        self.reserved1 = 0
+        self.reserved2 = 0
 
 
 class section_64(Struct):
@@ -242,6 +334,18 @@ class section_64(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.sectname = 0
+        self.segname = 0
+        self.addr = 0
+        self.size = 0
+        self.offset = 0
+        self.align = 0
+        self.reloff = 0
+        self.nreloc = 0
+        self.flags = 0
+        self.reserved1 = 0
+        self.reserved2 = 0
+        self.reserved3 = 0
 
 
 class symtab_command(Struct):
@@ -251,6 +355,12 @@ class symtab_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.symoff = 0
+        self.nsyms = 0
+        self.stroff = 0
+        self.strsize = 0
 
 
 class dysymtab_command(Struct):
@@ -263,6 +373,26 @@ class dysymtab_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.ilocalsym = 0
+        self.nlocalsym = 0
+        self.iextdefsym = 0
+        self.nextdefsym = 0
+        self.iundefsym = 0
+        self.nundefsym = 0
+        self.tocoff = 0
+        self.ntoc = 0
+        self.modtaboff = 0
+        self.nmodtab = 0
+        self.extrefsymoff = 0
+        self.nextrefsyms = 0
+        self.indirectsymoff = 0
+        self.nindirectsyms = 0
+        self.extreloff = 0
+        self.nextrel = 0
+        self.locreloff = 0
+        self.nlocrel = 0
 
 
 class dylib(Struct):
@@ -272,6 +402,10 @@ class dylib(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.name = 0
+        self.timestamp = 0
+        self.current_version = 0
+        self.compatibility_version = 0
 
 
 class dylib_command(Struct):
@@ -281,6 +415,9 @@ class dylib_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.dylib = 0
 
 
 class dylinker_command(Struct):
@@ -290,6 +427,9 @@ class dylinker_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.name = 0
 
 
 class sub_client_command(Struct):
@@ -299,6 +439,9 @@ class sub_client_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.offset = 0
 
 
 class uuid_command(Struct):
@@ -308,6 +451,9 @@ class uuid_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.uuid = 0
 
 
 class build_version_command(Struct):
@@ -317,6 +463,12 @@ class build_version_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.platform = 0
+        self.minos = 0
+        self.sdk = 0
+        self.ntools = 0
 
 
 class entry_point_command(Struct):
@@ -326,6 +478,10 @@ class entry_point_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.entryoff = 0
+        self.stacksize = 0
 
 
 class rpath_command(Struct):
@@ -335,6 +491,9 @@ class rpath_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.path = 0
 
 
 class source_version_command(Struct):
@@ -344,6 +503,9 @@ class source_version_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.version = 0
 
 
 class linkedit_data_command(Struct):
@@ -353,6 +515,10 @@ class linkedit_data_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.dataoff = 0
+        self.datasize = 0
 
 
 class dyld_info_command(Struct):
@@ -364,6 +530,18 @@ class dyld_info_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdisze = 0
+        self.rebase_off = 0
+        self.rebase_size = 0
+        self.bind_off = 0
+        self.bind_size = 0
+        self.weak_bind_off = 0
+        self.weak_bind_size = 0
+        self.lazy_bind_off = 0
+        self.lazy_bind_size = 0
+        self.export_off = 0
+        self.export_size = 0
 
 
 class symtab_entry_32(Struct):
@@ -373,6 +551,11 @@ class symtab_entry_32(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.str_index = 0
+        self.type = 0
+        self.sect_index = 0
+        self.desc = 0
+        self.value = 0
 
 
 class symtab_entry(Struct):
@@ -382,6 +565,11 @@ class symtab_entry(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.str_index = 0
+        self.type = 0
+        self.sect_index = 0
+        self.desc = 0
+        self.value = 0
 
 
 class version_min_command(Struct):
@@ -391,3 +579,36 @@ class version_min_command(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.version = 0
+        self.reserved = 0
+
+
+class encryption_info_command(Struct):
+    _FIELDNAMES = ["cmd", "cmdsize", "cryptoff", "cryptsize", "cryptid"]
+    _SIZES = [4, 4, 4, 4, 4]
+    SIZE = sum(_SIZES)
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.cryptoff = 0
+        self.cryptsize = 0
+        self.cryptid = 0
+
+
+class encryption_info_command_64(Struct):
+    _FIELDNAMES = ["cmd", "cmdsize", "cryptoff", "cryptsize", "cryptid", "pad"]
+    _SIZES = [4, 4, 4, 4, 4, 4]
+    SIZE = sum(_SIZES)
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.cryptoff = 0
+        self.cryptsize = 0
+        self.cryptid = 0
+        self.pad = 0

@@ -27,7 +27,7 @@ class dyld_chained_fixups_header(Struct):
 
 
 class dyld_chained_starts_in_image(Struct):
-    _FIELDNAMES = ['seg_count', 'seg_info_count']
+    _FIELDNAMES = ['seg_count', 'seg_info_offset']
     _SIZES = [4, 4]
     SIZE = sum(_SIZES)
 

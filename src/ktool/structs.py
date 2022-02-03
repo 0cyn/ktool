@@ -22,6 +22,11 @@ class objc2_class(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.isa = 0
+        self.superclass = 0
+        self.cache = 0
+        self.vtable = 0
+        self.info = 0
 
 
 class objc2_class_ro(Struct):
@@ -32,6 +37,17 @@ class objc2_class_ro(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.flags = 0
+        self.ivar_base_start = 0
+        self.ivar_base_size = 0
+        self.reserved = 0
+        self.ivar_lyt = 0
+        self.name = 0
+        self.base_meths = 0
+        self.base_prots = 0
+        self.ivars = 0
+        self.weak_ivar_lyt = 0
+        self.base_props = 0
 
 
 class objc2_meth(Struct):
@@ -41,6 +57,9 @@ class objc2_meth(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.selector = 0
+        self.types = 0
+        self.imp = 0
 
 
 class objc2_meth_list_entry(Struct):
@@ -50,6 +69,9 @@ class objc2_meth_list_entry(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.selector = 0
+        self.types = 0
+        self.imp = 0
 
 
 class objc2_meth_list(Struct):
@@ -59,6 +81,8 @@ class objc2_meth_list(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.entrysize = 0
+        self.count = 0
 
 
 class objc2_prop_list(Struct):
@@ -68,6 +92,8 @@ class objc2_prop_list(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.entrysize = 0
+        self.count = 0
 
 
 class objc2_prop(Struct):
@@ -78,6 +104,8 @@ class objc2_prop(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
+        self.name = 0
+        self.attr = 0
 
 class objc2_prot_list(Struct):
     _FIELDNAMES = ['cnt']
@@ -86,6 +114,7 @@ class objc2_prot_list(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cnt = 0
 
 
 class objc2_prot(Struct):
@@ -96,6 +125,16 @@ class objc2_prot(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.isa = 0
+        self.name = 0
+        self.prots = 0
+        self.inst_meths = 0
+        self.class_meths = 0
+        self.opt_inst_meths = 0
+        self.opt_class_meths = 0
+        self.inst_props = 0
+        self.cb = 0
+        self.flags = 0
 
 
 class objc2_ivar_list(Struct):
@@ -105,6 +144,8 @@ class objc2_ivar_list(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.entrysize = 0
+        self.cnt = 0
 
 
 class objc2_ivar(Struct):
@@ -114,6 +155,8 @@ class objc2_ivar(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.offs = 0
+        self.name = 0
 
 
 class objc2_category(Struct):
@@ -123,3 +166,9 @@ class objc2_category(Struct):
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.name = 0
+        self.s_class = 0
+        self.inst_meths = 0
+        self.class_meths = 0
+        self.prots = 0
+        self.props = 0

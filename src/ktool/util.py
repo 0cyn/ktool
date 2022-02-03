@@ -15,6 +15,7 @@ import concurrent.futures
 import inspect
 import os
 import sys
+import time
 from enum import Enum
 from typing import List
 
@@ -24,6 +25,44 @@ import pkg_resources
 
 KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
 THREAD_COUNT = os.cpu_count() - 1
+
+
+def version_output():
+
+    UP = "\x1B[3A"
+    CLR = "\x1B[0K"
+
+    CSET = """                     ___====-_  _-====___
+               _--^^^#####//      \\\\#####^^^--_
+            _-^##########// (    ) \\\\##########^-_
+           -############//  |\\^^/|  \\\\############-
+         _/############//   (@::@)   \\\\############\\_
+        /#############((     \\\\//     ))#############\\
+       -###############\\\\    (oo)    //###############-
+      -#################\\\\  /    \\  //#################-
+     -###################\\\\/      \\//###################-
+    _#/|##########/\\######(   /\\   )######/\\##########|\\#_
+    |/ |#/\\#/\\#/\\/  \\#/\\##\\  |  |  /##/\\#/  \\/\\#/\\#/\\#| \\|
+    `  |/  V  V  `   V  \\#\\| |  | |/#/  V   '  V  V  \\|  '
+       `   `  `      `   / | |  | | \\   '      '  '   '
+                        (  | |  | |  )    {}
+       {}__\\ | |  | | /__   {}
+                      (vvv(VVV)(VVV)vvv)  {}"""
+
+    lcount = CSET.count('\n')
+    print('\n' * (lcount + 2))
+
+    for i in range(10):
+        cset_proc = CSET.format({i}, f'ktool v{KTOOL_VERSION}'.ljust(16, ' '), 'a', 's')
+        clines = cset_proc.split("\n")
+        cset_proc = ''.join([f'{i}{CLR}\n' for i in clines]) + '\n'
+        for i in range(lcount-6):
+            print(f'{UP}')
+        print(cset_proc)
+        time.sleep(0.5)
+
+    for i in range(lcount - 6):
+        print(f'{UP}')
 
 
 class ignore:
@@ -68,6 +107,21 @@ def macho_is_malformed():
     """
     if not ignore.MALFORMED:
         raise MalformedMachOException
+
+
+def uint_to_int(uint, bits):
+    """
+    Assume an int was read from binary as an unsigned int,
+
+    decode it as a two's compliment signed integer
+
+    :param uint:
+    :param bits:
+    :return:
+    """
+    if (uint & (1 << (bits - 1))) != 0:  # if sign bit is set e.g., 8bit: 128-255
+        uint = uint - (1 << bits)  # compute negative value
+    return uint  # return positive value as is
 
 
 def usi32_to_si32(val):
@@ -235,12 +289,15 @@ class Table:
             title_row = ''
             for i, title in enumerate(self.titles):
                 if self.dividers:
-                    title_row += '│ ' + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[:-(self.column_pad - 1)]
+                    try:
+                        title_row += '│ ' + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[:-(self.column_pad - 1)]
+                    except IndexError:
+                        # I have no idea what causes this
+                        title_row = ""
                 else:
                     try:
                         title_row += ' ' + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[:-(self.column_pad - 1)]
                     except IndexError:
-                        # I have no idea what causes this
                         title_row = ""
             header_text = ""
             if self.dividers:

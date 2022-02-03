@@ -370,26 +370,26 @@ class TypeProcessor:
         # Makes every character a token, except root structs
         #   which it compiles into a full string with the contents and tacks onto said list
         tokens = []
-        b = False
-        bc = 0
-        bu = ""
+        parsing_brackets = False
+        bracket_count = 0
+        buffer = ""
         for c in type_to_tokenize:
-            if b:
-                bu += c
+            if parsing_brackets:
+                buffer += c
                 if c == "{":
-                    bc += 1
+                    bracket_count += 1
                 elif c == "}":
-                    bc -= 1
-                    if bc == 0:
-                        tokens.append(bu)
-                        b = False
-                        bu = ""
+                    bracket_count -= 1
+                    if bracket_count == 0:
+                        tokens.append(buffer)
+                        parsing_brackets = False
+                        buffer = ""
             elif c in type_encodings or c == "^":
                 tokens.append(c)
             elif c == "{":
-                bu += "{"
-                b = True
-                bc += 1
+                buffer += "{"
+                parsing_brackets = True
+                bracket_count += 1
             elif c == '"':
                 try:
                     tokens = [type_to_tokenize.split('@', 1)[1]]
@@ -420,6 +420,10 @@ class Ivar(Constructable):
     def __init__(self, name, type_encoding, type_processor):
         self.name: str = name
         type_string: str = type_encoding
+        if len(type_string) == 0:
+            self.is_id = False
+            self.type = '?'
+            return
         self.is_id: bool = type_string[0] == "@"
         try:
             self.type: str = self._renderable_type(type_processor.process(type_string)[0])
@@ -662,9 +666,16 @@ class Class(Constructable):
                         superclass_name = 'NSObject'
         else:
             superclass_name = ''
-        objc2_class_ro_item = objc_image.load_struct(objc2_class_item.info, objc2_class_ro, vm=True)
+
+        ro_location = objc2_class_item.info >> (1<<1) << 2
+        # log.info(hex(ro_location))
+        objc2_class_ro_item = objc_image.load_struct(ro_location, objc2_class_ro, vm=True)
         if not meta:
-            name = objc_image.get_cstr_at(objc2_class_ro_item.name, 0, vm=True)
+            try:
+                name = objc_image.get_cstr_at(objc2_class_ro_item.name, 0, vm=True)
+            except ValueError as ex:
+                log.warning(f'Classname out of bounds')
+
         else:
             name = ""
 

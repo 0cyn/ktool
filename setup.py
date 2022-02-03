@@ -5,7 +5,7 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
 setup(name='k2l',
-      version='0.20.1',
+      version='0.21.0',
       description='Static mach-o/img4 analysis tool.',
       long_description=long_description,
       long_description_content_type='text/markdown',
@@ -13,10 +13,11 @@ setup(name='k2l',
       author='kritanta',
       url='https://github.com/cxnder/ktool',
       install_requires=['pyaes', 'kimg4', 'Pygments', 'packaging'],
-      packages=['kmacho', 'ktool'],
+      packages=['kmacho', 'ktool', 'kswift'],
       package_dir={
             'kmacho': 'src/kmacho',
-            'ktool': 'src/ktool'
+            'ktool': 'src/ktool',
+            'kswift': 'src/kswift'
       },
       classifiers=[
             'Programming Language :: Python :: 3',

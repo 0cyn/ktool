@@ -44,6 +44,7 @@ from ktool.macho import MachOFile
 from ktool.dyld import Dyld
 from ktool.objc import ObjCImage
 from ktool.headers import HeaderGenerator
+from ktool.swift import load_swift_types, SwiftClass
 from ktool.util import Table
 
 VERT_LINE = '│'
@@ -1521,6 +1522,14 @@ class KToolMachOLoader:
                 raise ex
             else:
                 pass
+
+        try:
+            slice_item.children += KToolMachOLoader.swift_items(loaded_image, slice_item, callback)
+        except Exception as ex:
+            if KToolMachOLoader.HARD_FAIL:
+                raise ex
+            else:
+                pass
         slice_item.show_children = True
         return slice_item
 
@@ -1663,6 +1672,48 @@ class KToolMachOLoader:
         objc_lib = ObjCImage.from_image(lib)
 
         return [KToolMachOLoader.objc_headers(objc_lib, parent, callback)]
+
+    @staticmethod
+    def swift_items(lib, parent=None, callback=None):
+        return [KToolMachOLoader.swift_types(lib, parent, callback)]
+
+    @staticmethod
+    def swift_types(lib, parent=None, callback=None):
+        callback(f'Loading Swift Types')
+        root_mmci = MainMenuContentItem()
+
+        types = load_swift_types(lib)
+
+        root_mmci.lines = [f'{i.name}::{i.__class__.__name__}' for i in types]
+
+        smi = SidebarMenuItem("Swift Types", root_mmci, parent)
+
+        for _type in types:
+            mmci = MainMenuContentItem()
+            mmci.lines.append(f'{_type.__class__.__name__}')
+            mmci.lines.append(f'')
+            if isinstance(_type, SwiftClass):
+                mmci.lines.append(str(_type.class_desc))
+                mmci.lines.append(f'')
+                mmci.lines.append(str([str(i) for i in _type.field_desc.fields]))
+                mmci.lines.append(f'')
+                mmci.lines.append(str([str(i) for i in _type.ivars]))
+                mmci.lines.append(f'')
+            else:
+                mmci.lines.append(str(_type.typedesc))
+                mmci.lines.append('')
+                mmci.lines.append(str(_type.field_desc.desc))
+                mmci.lines.append(f'')
+                mmci.lines.append(str([str(i) for i in _type.field_desc.fields]))
+                mmci.lines.append(f'')
+
+            ssmi = SidebarMenuItem(_type.name, mmci, smi)
+
+            smi.children.append(ssmi)
+
+        smi.parse_mmc()
+        return smi
+
 
     @staticmethod
     def imports(lib, parent=None, callback=None):

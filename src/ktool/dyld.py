@@ -28,6 +28,7 @@ from kmacho import (
 )
 from kmacho.structs import *
 from kmacho.base import Constructable
+from kmacho.fixups import *
 from .macho import _VirtualMemoryMap, Segment, Slice
 from .util import log, macho_is_malformed, ignore
 
@@ -333,9 +334,9 @@ class Dyld:
                 image.export_trie = ExportTrie.from_image(image, cmd.dataoff, cmd.datasize)
 
             elif load_command == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
-                log.warning(
-                    "image uses LC_DYLD_CHAINED_FIXUPS; This is not yet supported in ktool, off-image symbol resolution (superclasses, etc) will not work")
-                pass
+                if load_imports:
+                    pass
+                    # fixups = ChainedFixups.from_image(image, cmd)
 
             elif load_command == LOAD_COMMAND.SYMTAB:
                 if load_symtab:
@@ -656,20 +657,110 @@ class SymbolTable:
     def _load_symbol_table(self) -> List[Symbol]:
         symbol_table = []
         read_address = self.cmd.symoff
+        typing = symtab_entry if self.image.macho_header.is64 else symtab_entry_32
+
         for i in range(0, self.cmd.nsyms):
-            typing = symtab_entry if self.image.macho_header.is64 else symtab_entry_32
             entry = self.image.load_struct(read_address + typing.SIZE * i, typing)
-            symbol_table.append(entry)
+            symbol = Symbol.from_image(self.image, self.cmd, entry)
+            symbol_table.append(symbol)
+            if entry.type == 0xf:
+                # TODO: not only is this inaccurate, we already have processing for the accurate way to do this
+                self.ext.append(symbol)
+            log.debug_tm(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.dec_type}')
             log.debug_tm(str(entry))
 
-        table = []
-        for sym in symbol_table:
-            symbol = Symbol.from_image(self.image, self.cmd, sym)
-            log.debug_tm(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.dec_type}')
-            table.append(symbol)
-            if sym.type == 0xf:
-                self.ext.append(symbol)
-        return table
+        return symbol_table
+
+
+class ChainedFixups(Constructable):
+    @classmethod
+    def from_image(cls, image: Image, chained_fixup_cmd: linkedit_data_command):
+        cf_starts_in_image = chained_fixup_cmd.dataoff
+        header = image.load_struct(cf_starts_in_image, dyld_chained_fixups_header, vm=False)
+
+        segments_addr = header.off + header.starts_offset
+
+        seg_starts = image.load_struct(header.off + header.starts_offset, dyld_chained_starts_in_image, vm=False)
+        segments = []
+        for i in range(seg_starts.seg_count):
+            s = image.get_int_at((i * 4) + (header.off + header.starts_offset + 4), 4, vm=False)
+            segments.append(s)
+
+        # TODO: use my worse implementation instead
+        import struct
+
+        for i in range(seg_starts.seg_count):
+            if segments[i] == 0:
+                continue
+
+            starts_addr = segments_addr + segments[i]
+
+            # rather than figure out what's going on here; steal actae0n's code
+            starts_in_segment_data = image.get_bytes_at(starts_addr, 24)
+
+            starts_in_segment = struct.unpack("<IHHQIHH", starts_in_segment_data)
+
+            # Give them nice names for my brain cells lol
+            page_count = starts_in_segment[5]
+            page_size = starts_in_segment[1]
+            segment_offset = starts_in_segment[3]
+            pointer_type = starts_in_segment[2]
+
+            # read the array of page_starts from dyld_chained_starts_in_segment
+            page_starts_data = image.get_bytes_at(starts_addr + 22, page_count * 2)
+            page_starts = struct.unpack("<" + ("H" * page_count), page_starts_data)
+
+            # handle each page start
+            for (j, start) in enumerate(page_starts):
+                # DYLD_CHAINED_PTR_START_NONE, denotes a page with no fixups
+                if start == 0xFFFF:
+                    continue
+
+                # The chain entry address is the offset into the raw view
+                chain_entry_addr = (
+                        segment_offset + (j * page_size) + start
+                )
+                print(f"[*] Chain start at {hex(chain_entry_addr)}")
+
+                j += 1
+                while True:
+                    content = image.get_int_at(chain_entry_addr, 8)
+                    offset = content & 0xFFFFFFFF
+                    nxt = (content >> 51) & 2047
+                    bind = (content >> 62) & 1
+
+                    # handle symbol binding
+                    if bind == 1:
+                        # In the binding case, `offset` is an entry in the imports table
+                        # The import entry is a DYLD_CHAINED_IMPORT. The low 23 bits contain
+                        # the offset into the symbol table to lookup (DYLD_CHAINED_IMPORT.name_offset)
+                        import_entry = image.get_int_at(header.imports_offset + offset * 4, 4)
+                        sym_name_offset = import_entry >> 9
+                        sym_name_addr = header.off + header.symbols_offset + sym_name_offset
+
+                        # Get the symbol name at the desginated address
+                        sym_name = image.get_cstr_at(
+                            sym_name_addr)
+
+                        log.error(f"[*] Binding {sym_name} at {hex(chain_entry_addr)}")
+                        # sym_ref: CoreSymbol = bv.get_symbol_by_raw_name(sym_name)
+
+                    # next tells us how many u32 until the next chain entry
+                    skip = nxt * 4
+                    chain_entry_addr += skip
+                    # if skip == 0, chain is done
+                    if skip == 0:
+                        break
+
+    @classmethod
+    def from_values(cls, *args, **kwargs):
+        pass
+
+    def raw_bytes(self):
+        pass
+
+    def __init__(self):
+        pass
 
 
 export_node = namedtuple("export_node", ['text', 'offset', 'flags'])
