@@ -188,6 +188,7 @@ class _VirtualMemoryMap:
         self.slice = macho_slice
         self.map = {}
         self.stats = {}
+        self.vm_base_addr = 0
         self.sorted_map = {}
         self.cache = {}
 
@@ -221,11 +222,11 @@ class _VirtualMemoryMap:
         Method selector dumping uses this
         :return:
         """
-        sortedmap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vm_address)}
+        sortedmap = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
         if list(sortedmap.keys())[0] == "__PAGEZERO":
-            return list(sortedmap.values())[1].vm_address
+            return list(sortedmap.values())[1].vmaddr
         else:
-            return list(sortedmap.values())[0].vm_address
+            return list(sortedmap.values())[0].vmaddr
 
     def vm_check(self, vm_address):
         try:
@@ -237,7 +238,9 @@ class _VirtualMemoryMap:
     def get_file_address(self, vm_address: int, segment_name=None) -> int:
         # This function gets called *a lot*
         # It needs to be fast as shit.
+
         vm_address = 0x0000FFFFFFFFF & vm_address
+
         if vm_address in self.cache:
             return self.cache[vm_address]
 
@@ -267,7 +270,6 @@ class _VirtualMemoryMap:
                     for o in self.map.values():
                         # noinspection PyChainedComparisons
                         if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                            # self.stats[o.name] += 1
                             file_addr = o.fileaddr + vm_address - o.vmaddr
                             self.cache[vm_address] = file_addr
                             return file_addr
@@ -275,7 +277,6 @@ class _VirtualMemoryMap:
         for o in self.map.values():
             # noinspection PyChainedComparisons
             if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                # self.stats[o.name] += 1
                 file_addr = o.fileaddr + vm_address - o.vmaddr
                 self.cache[vm_address] = file_addr
                 return file_addr
@@ -283,6 +284,8 @@ class _VirtualMemoryMap:
         raise ValueError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
 
     def add_segment(self, segment: Segment):
+        if segment.file_address == 0 and segment.size != 0:
+            self.vm_base_addr = segment.vm_address
         if len(segment.sections) == 0:
             seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,
                              segment.name)
@@ -301,17 +304,7 @@ class _VirtualMemoryMap:
 
 
 class Slice:
-    """
-
-    """
-
     def __init__(self, macho_file: MachOFile, arch_struct: fat_arch = None, offset=0):
-        """
-
-        :param macho_file:
-        :param arch_struct:
-        :param offset:
-        """
         self.macho_file: MachOFile = macho_file
         self.arch_struct: fat_arch = arch_struct
 
@@ -339,6 +332,7 @@ class Slice:
             self.offset = offset
 
         self.size = 0
+
         if self.offset == 0:
             f = self.macho_file.file_object
             old_file_position = f.tell()
@@ -379,6 +373,7 @@ class Slice:
             if self.offset == 0:
                 return self.macho_file.file[0:self.size]
             return self.macho_file.file[self.offset:self.offset + self.arch_struct.size]
+
         else:
             data = self.macho_file.file_data[self.offset:self.offset+self.size]
             for patch_loc in self.patches:
@@ -400,6 +395,7 @@ class Slice:
 
     def _mmap_get_int_at(self, addr: int, count: int, endian="little"):
         addr = addr + self.offset
+
         return int.from_bytes(self.macho_file.file[addr:addr + count], endian)
 
     def _bio_get_int_at(self, addr: int, count: int, endian="little"):
@@ -407,40 +403,32 @@ class Slice:
 
     def _mmap_get_bytes_at(self, addr: int, count: int):
         addr = addr + self.offset
+
         return self.macho_file.file[addr:addr + count]
 
     # noinspection PyUnusedLocal
     def _bio_get_bytes_at(self, addr: int, count: int, endian="little"):
         addr = addr + self.offset
+
         return self.macho_file.file_data[addr:addr + count]
 
     def _mmap_get_str_at(self, addr: int, count: int) -> str:
-        """
-        Decode String with known length
-
-        :param addr:
-        :param count:
-        :return:
-        """
         addr = addr + self.offset
+
         return self.macho_file.file[addr:addr + count].decode().rstrip('\x00')
 
     def _bio_get_str_at(self, addr: int, count: int):
         addr = addr + self.offset
+
         self.macho_file.file.seek(addr)
         data = self.macho_file.file.read(count)
+
         return data.decode().rstrip('\x00')
 
     # noinspection PyUnusedLocal
     def _mmap_get_cstr_at(self, addr: int, limit: int = 0) -> str:
-        """
-        Get C-style null-terminated string at set address.
-
-        :param addr:
-        :param limit:
-        :return:
-        """
         addr = addr + self.offset
+
         if addr in self._cstring_cache:
             return self._cstring_cache[addr]
 
@@ -458,6 +446,7 @@ class Slice:
 
         self.macho_file.file.seek(0)
         self._cstring_cache[addr] = text
+
         return text
 
     # noinspection PyUnusedLocal
@@ -466,20 +455,26 @@ class Slice:
         # I'm unsure if there's any possible faster approach than this.
         ea = addr + self.offset
 
+        if addr in self._cstring_cache:
+            return self._cstring_cache[addr]
+
         cnt = 0
         while True:
             try:
-                # print(self.macho_file.file_data[ea])
                 if self.macho_file.file_data[ea] != 0:
                     cnt += 1
                     ea += 1
                 else:
                     break
+
             except IndexError as ex:
-                log.error(f'Requested cstring at {hex(addr)}')
                 log.error(f'ea: {hex(ea)} // buffer len: {hex(len(self.macho_file.file_data))}')
                 raise ex
+
         text = self._bio_get_bytes_at(addr, cnt).decode()
+
+        self._cstring_cache[addr] = text
+
         return text
 
     def decode_uleb128(self, readHead: int) -> Tuple[int, int]:
@@ -504,23 +499,17 @@ class Slice:
     def _load_type(self) -> CPUType:
         cpu_type = self.arch_struct.cpu_type
 
-        try:
-            return CPUType(cpu_type)
-        except KeyError:
-            log.error(f'Unknown CPU Type ({hex(self.arch_struct.cpu_type)}) ({self.arch_struct}). File an issue at '
-                      f'https://github.com/kritantadev/ktool')
-            return CPUType.ARM
+        return CPUType(cpu_type)
 
     def _load_subtype(self, cputype: CPUType):
         cpu_subtype = self.arch_struct.cpu_subtype
 
-        subtype_ret = None
-
         try:
             sub = CPU_SUBTYPES[cputype]
             return sub(cpu_subtype)
+
         except KeyError:
             log.error(f'Unknown CPU SubType ({hex(cpu_subtype)}) ({self.arch_struct}). File an issue at '
-                      f'https://github.com/kritantadev/ktool')
-            exit()
-        return subtype_ret
+                      f'https://github.com/cxnder/ktool')
+
+            return CPUSubTypeARM64.ALL

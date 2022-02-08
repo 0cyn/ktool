@@ -140,7 +140,6 @@ class Image:
 
         self.linked_images: List[ExternalDylib] = []
 
-        self.name = ""  # TODO: Remove this field soon.
         self.base_name = ""  # copy of self.name
         self.install_name = ""
 
@@ -168,6 +167,8 @@ class Image:
         self.symbols: Dict[int, Symbol] = {}
         self.import_table: Dict[int, Symbol] = {}
         self.export_table: Dict[int, Symbol] = {}
+
+        self.function_starts: List[int] = []
 
         self.binding_table = None
         self.weak_binding_table = None
@@ -328,6 +329,18 @@ class Dyld:
                 if load_exports:
                     log.info("Loading Export Trie")
                     image.export_trie = ExportTrie.from_image(image, cmd.export_off, cmd.export_size)
+
+            elif load_command == LOAD_COMMAND.FUNCTION_STARTS:
+                fs_start = cmd.dataoff
+                fs_size = cmd.datasize
+                read_head = fs_start
+
+                fs_addr = image.vm.vm_base_addr
+
+                while read_head < fs_start + fs_size:
+                    fs_r_addr, read_head = image.decode_uleb128(read_head)
+                    fs_addr += fs_r_addr
+                    image.function_starts.append(fs_addr)
 
             elif load_command == LOAD_COMMAND.LC_DYLD_EXPORTS_TRIE:
                 log.info("Loading Export Trie")
@@ -663,9 +676,10 @@ class SymbolTable:
             entry = self.image.load_struct(read_address + typing.SIZE * i, typing)
             symbol = Symbol.from_image(self.image, self.cmd, entry)
             symbol_table.append(symbol)
-            if entry.type == 0xf:
-                # TODO: not only is this inaccurate, we already have processing for the accurate way to do this
+
+            if symbol.external:
                 self.ext.append(symbol)
+
             log.debug_tm(f'Symbol Table: Loaded symbol:{symbol.name} ordinal:{symbol.ordinal} type:{symbol.dec_type}')
             log.debug_tm(str(entry))
 

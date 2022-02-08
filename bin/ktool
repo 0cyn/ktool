@@ -28,9 +28,7 @@ from typing import Union
 from kimg4.img4 import IM4P
 from packaging.version import Version
 
-from kmacho import LOAD_COMMAND, dylib_command, dylib
-
-import ktool
+from kmacho import LOAD_COMMAND
 
 from ktool import (
     MachOFileType,
@@ -271,6 +269,7 @@ def main():
     parser_list.add_argument('--stypes', dest='get_swift_types', action='store_true', help='Print Swift Types')
     parser_list.add_argument('--linked', dest='get_linked', action='store_true', help='Print list of linked libraries')
     parser_list.add_argument('--cmds', dest='get_lcs', action='store_true', help="Print Load Commands")
+    parser_list.add_argument('--funcs', dest='get_fstarts', action='store_true', help="Print Function Starts")
     parser_list.add_argument('filename', nargs='?', default='')
 
     parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False,
@@ -345,7 +344,7 @@ def main():
         for stat in top_stats[:10]:
             print(stat)
 
-    if args.bench:
+    elif args.bench:
         # This will run the program as normal, but with profiling enabled
         # It will print what are arguably the 10 routines contributing the most to slowdowns.
         import cProfile
@@ -356,6 +355,7 @@ def main():
         ps = pstats.Stats(profile)
         ps.sort_stats('time', 'cumtime')  # who named this
         ps.print_stats(10)
+
     else:
         try:
             args.func(args)
@@ -654,6 +654,7 @@ Decrypting an im4p
             im4p = IM4P(fp.read())
             for bag in im4p.kbag.keybags:
                 print(f'{bag.iv.hex()}{bag.key.hex()}')
+
     if args.do_decrypt:
         require_args(args, always=['aes_key', 'aes_iv'])
 
@@ -729,9 +730,12 @@ To print a  list of linked libraries
 
 To print a list of Load Commands and their data
 > ktool list --cmds [filename]
+
+Print the list of function starts
+> ktool list --funcs [filename]
     """
 
-    require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types'])
+    require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types', 'get_fstarts'])
 
     with open(args.filename, 'rb') as fd:
 
@@ -757,6 +761,9 @@ To print a list of Load Commands and their data
         elif args.get_linked:
             for external_library in image.linked_images:
                 print('(Weak) ' + external_library.install_name if external_library.weak else '' + external_library.install_name)
+        elif args.get_fstarts:
+            for addr in image.function_starts:
+                print(f'Addr: {hex(addr)} -> {image.symbols[addr].fullname if addr in image.symbols else ""}')
 
 
 def _file(args):
