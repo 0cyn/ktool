@@ -57,7 +57,7 @@ class TypeResolver:
         classes = []
         self.classmap = {}
         try:
-            for sym in objc_image.image.binding_table.symbol_table:
+            for sym in objc_image.image.imports:
                 if sym.dec_type == SymbolType.CLASS:
                     self.classmap[sym.name[1:]] = sym
                     classes.append(sym)

@@ -87,7 +87,10 @@ class Struct:
             current_off += size
 
         instance.raw = inst_raw
+
+        instance.pre_init()
         instance.initialized = True
+        instance.post_init()
 
         return instance
 
@@ -109,7 +112,9 @@ class Struct:
             instance.__setattr__(field, values[i])
 
         instance._rebuild_raw()
+        instance.pre_init()
         instance.initialized = True
+        instance.post_init()
         return instance
 
     def typename(self):
@@ -151,6 +156,14 @@ class Struct:
         self.off = 0
         self.raw = bytearray()
 
+    def pre_init(self):
+        """stub for subclasses. gets called before patch code is enabled"""
+        pass
+
+    def post_init(self):
+        """stub for subclasses. gets called *after* patch code is enabled"""
+        pass
+
     def _rebuild_raw(self):
         raw = bytearray()
         for field in self._fields:
@@ -180,6 +193,36 @@ class Struct:
         if key in self._fields:
             if self.initialized:
                 self._rebuild_raw()
+
+
+class BitFieldStruct(Struct):
+
+    def __str__(self):
+        text = f'{self.__class__.__name__}('
+        for field in self._BITFIELDS:
+            field_item = self.__getattribute__(field) if isinstance(self.__getattribute__(field), bytearray) else hex(
+                self.__getattribute__(field))
+            text += f'{field}={field_item}, '
+        return text[:-2] + ')'
+
+    def pre_init(self):
+
+        assert sum(self._BF_SIZES) == self.SIZE * 8
+
+        value = self.value
+
+        cur = 0
+        for i, bf_name in enumerate(self._BITFIELDS):
+            bf_size = self._BF_SIZES[i]
+
+            # TODO: THIS IS SO BAD
+            # TODO: SERIOUSLY
+            mask = int('1' * bf_size, 2)
+            # TODO: ^^^^^^^^^^^^^^
+
+            self.super.__setattr__(bf_name, (value >> cur) & mask)
+            # print(f'{bf_name} = {value} >> {cur} & {mask}')
+            cur += bf_size
 
 
 class fat_header(Struct):

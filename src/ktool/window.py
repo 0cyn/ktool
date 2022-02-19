@@ -1721,11 +1721,11 @@ class KToolMachOLoader:
         mmci = MainMenuContentItem()
 
         table = Table(True)
-        table.titles = ['Address', 'Symbol', 'Binding']
+        table.titles = ['Address', 'Symbol', 'Library']
 
         for symbol in lib.imports:
             table.rows.append(
-                [hex(symbol.address), symbol.fullname, symbol.attr.ljust(8)])
+                [hex(symbol.address), symbol.fullname, lib.linked_images[int(symbol.ordinal) - 1].install_name])
         mmci.lines.append(table)
 
         menuitem = SidebarMenuItem("Imports", mmci, parent)
