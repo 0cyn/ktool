@@ -48,37 +48,38 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install flake8 pytest poetry
-          poetry install
+          poetry build
+          python3 -m pip install $(ls dist/*.tar.gz | xargs)
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Test insert
         run: |
-          poetry run ktool insert --lc load --payload /your/mother.dylib --out tests/bins/testbin1.insert.test tests/bins/testbin1
-          poetry run ktool list --linked tests/bins/testbin1.insert.test | grep your/mother
+          ktool insert --lc load --payload /your/mother.dylib --out tests/bins/testbin1.insert.test tests/bins/testbin1
+          ktool list --linked tests/bins/testbin1.insert.test | grep your/mother
       - name: Test edit
         run: |
-          poetry run ktool edit --iname your/mother.framework/Mother --out tests/bins/Search.edit.test tests/bins/Search
-          poetry run ktool info tests/bins/Search.edit.test | grep Mother
+          ktool edit --iname your/mother.framework/Mother --out tests/bins/Search.edit.test tests/bins/Search
+          ktool info tests/bins/Search.edit.test | grep Mother
       - name: Test lipo
         run: |
-          poetry run ktool lipo --extract arm64 tests/bins/Search
-          poetry run ktool file tests/bins/Search.arm64
-          poetry run ktool lipo --extract x86_64 tests/bins/Search
-          poetry run ktool lipo --create --out tests/bins/Search.lipo.test tests/bins/Search.arm64 tests/bins/Search.x86_64
-          poetry run ktool file tests/bins/Search.lipo.test | grep "2 Slices"
+          ktool lipo --extract arm64 tests/bins/Search
+          ktool file tests/bins/Search.arm64
+          ktool lipo --extract x86_64 tests/bins/Search
+          ktool lipo --create --out tests/bins/Search.lipo.test tests/bins/Search.arm64 tests/bins/Search.x86_64
+          ktool file tests/bins/Search.lipo.test | grep "2 Slices"
       - name: test dump
         run: |
-          poetry run ktool dump --headers --out kdbg tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
-          poetry run ktool dump --tbd tests/bins/SpringBoardHome && cat SpringBoardHome.tbd | grep _SBHLibraryCategoryMap._sortedApplicationIdentifiersByCategoryIdentifier
+          ktool dump --headers --out kdbg tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
+          ktool dump --tbd tests/bins/SpringBoardHome && cat SpringBoardHome.tbd | grep _SBHLibraryCategoryMap._sortedApplicationIdentifiersByCategoryIdentifier
       - name: test dump with mmaped-IO disabled
         run: |
-          poetry run ktool --no-mmap dump --headers --out kdbg tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
+          ktool --no-mmap dump --headers --out kdbg tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
       - name: test list
         run: |
-          test $(poetry run ktool list --classes tests/bins/SpringBoardHome | wc -l) -eq 414
-          test $(poetry run ktool list --protocols tests/bins/SpringBoardHome | wc -l) -eq 246
-          test $(poetry run ktool list --cmds tests/bins/SpringBoardHome | wc -l) -eq 68
+          test $(ktool list --classes tests/bins/SpringBoardHome | wc -l) -eq 414
+          test $(ktool list --protocols tests/bins/SpringBoardHome | wc -l) -eq 246
+          test $(ktool list --cmds tests/bins/SpringBoardHome | wc -l) -eq 68
       - name: test symbols
         run: |
-          poetry run ktool symbols --imports tests/bins/testbin1 | grep _OBJC_CLASS_$_NSObject
-          poetry run ktool symbols --exports tests/bins/Search | grep SPFeedbackManager
-          test $(poetry run ktool symbols --symtab tests/bins/testbin1 | wc -l) -eq 25
+          ktool symbols --imports tests/bins/testbin1 | grep _OBJC_CLASS_$_NSObject
+          ktool symbols --exports tests/bins/Search | grep SPFeedbackManager
+          test $(ktool symbols --symtab tests/bins/testbin1 | wc -l) -eq 25
