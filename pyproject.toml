@@ -16,7 +16,7 @@ authors = ["cynder <kat@cynder.me>"]
 profile = "black"
 
 [tool.poetry.scripts]
-ipwndfu = "ktool.ktool_script:main"
+ktool = "ktool.ktool_script:main"
 
 [tool.poetry.dependencies]
 python = "^3.6.2"
