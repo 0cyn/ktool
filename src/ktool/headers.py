@@ -115,7 +115,7 @@ class HeaderGenerator:
             self.headers[objc_class.name + '.h'] = Header(self.objc_image, self.type_resolver, objc_class)
         for objc_cat in objc_image.catlist:
             if objc_cat.classname != "":
-                self.headers[objc_cat.classname + '+' + objc_cat.name + '.h'] = CategoryHeader(self.objc_image, objc_cat)
+                self.headers[f'{objc_cat.classname}+{objc_cat.name}.h'] = CategoryHeader(self.objc_image, objc_cat)
         for objc_proto in objc_image.protolist:
             self.headers[objc_proto.name + '-Protocol.h'] = ProtocolHeader(self.objc_image, objc_proto)
 
@@ -276,9 +276,9 @@ class Header:
                 else:
                     if type_name not in self.imported_classes:
                         self.imported_classes[type_name] = resolved_type
-        for property in self.interface.properties:
-            if property.is_id:
-                type_name = property.type
+        for objc_property in self.interface.properties:
+            if objc_property.is_id:
+                type_name = objc_property.type
                 resolved_type = self.type_resolver.find_linked(type_name)
                 if resolved_type is None:
                     if type_name != "id":
@@ -424,18 +424,18 @@ class Interface:
         return head + ivars + props + meths + foot
 
     def _process_properties(self):
-        for property in self.objc_class.properties:
-            if not hasattr(property, 'type'):
+        for objc_property in self.objc_class.properties:
+            if not hasattr(objc_property, 'type'):
                 continue
-            if property.type.lower() == 'bool':
-                getter_name = 'is' + property.name[0].upper() + property.name[1:]
+            if objc_property.type.lower() == 'bool':
+                getter_name = 'is' + objc_property.name[0].upper() + objc_property.name[1:]
                 self.getters.append(getter_name)
             else:
-                self.getters.append(property.name)
-            if 'readonly' not in property.attributes:
-                setter_name = 'set' + property.name[0].upper() + property.name[1:]
+                self.getters.append(objc_property.name)
+            if 'readonly' not in objc_property.attributes:
+                setter_name = 'set' + objc_property.name[0].upper() + objc_property.name[1:]
                 self.setters.append(setter_name)
-            self.properties.append(property)
+            self.properties.append(objc_property)
 
     def _process_ivars(self):
         for ivar in self.objc_class.ivars:

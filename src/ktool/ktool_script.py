@@ -26,7 +26,10 @@ from enum import Enum
 from typing import Union
 
 from kimg4.img4 import IM4P
+
+# noinspection PyProtectedMember
 from pkg_resources import packaging
+
 from kmacho import LOAD_COMMAND
 
 from ktool import (
@@ -54,8 +57,8 @@ MMAP_ENABLED = True
 def get_terminal_size():
     # We use this instead of shutil.get_terminal_size, because when output is being piped, it returns column width 80
     # We want to make sure if output is being piped (for example, to grep), that no wrapping occurs, so greps will
-    #   always display all relevant info on a single line. This also helps if it's being piped into a file, for processing
-    #   purposes among everything else.
+    # always display all relevant info on a single line. This also helps if it's being piped into a file,
+    # for processing purposes among everything else.
     try:
         return os.get_terminal_size()
     except OSError:
@@ -162,7 +165,8 @@ def require_args(args, always=None, one_of=None):
                     break
         if not found_one:
             print(args.func.__doc__)
-            exit_with_error(KToolError.ArgumentError, f'Missing one of {", ".join([arg_dest_to_name(MAIN_PARSER, i) for i in one_of])}')
+            missing_args = ", ".join([arg_dest_to_name(MAIN_PARSER, i) for i in one_of])
+            exit_with_error(KToolError.ArgumentError, f'Missing one of {missing_args}')
 
 
 def main():
@@ -174,7 +178,8 @@ def main():
     parser.add_argument('-f', dest='force_load', action='store_true')
     parser.add_argument('-V', dest='get_vers', action='store_true')
     parser.add_argument('--no-mmap', dest='no_mmap', action='store_true', help='Disable mmaped IO')
-    parser.set_defaults(func=help_prompt, bench=False, membench=False, force_load=False, no_mmap=False, logging_level=1, get_vers=False)
+    parser.set_defaults(func=help_prompt, bench=False, membench=False, force_load=False, no_mmap=False, logging_level=1,
+                        get_vers=False)
 
     subparsers = parser.add_subparsers(help='sub-command help')
 
@@ -262,7 +267,8 @@ def main():
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
     parser_dump.add_argument('filename', nargs='?', default='')
 
-    parser_dump.set_defaults(func=dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0, hard_fail=False)
+    parser_dump.set_defaults(func=dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0,
+                             hard_fail=False)
 
     # list command: Lists lists of things contained in lists in the image.
     parser_list = subparsers.add_parser('list', help='Print various lists')
@@ -417,7 +423,8 @@ def process_patches(image) -> 'Image':
         return ktool.reload_image(image)
     except MalformedMachOException:
         exit_with_error(KToolError.ProcessingError, "Reloading MachO after patch failed. This is an issue with "
-                                                    "my patch code. Please file an issue on https://github.com/kritantadev/ktool.")
+                                                    "my patch code. Please file an issue on "
+                                                    "https://github.com/kritantadev/ktool.")
 
 
 def _open(args):
@@ -459,7 +466,8 @@ Print the symbol table
 
     if args.get_exports:
         with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False, use_mmaped_io=MMAP_ENABLED)
+            image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
+                                     use_mmaped_io=MMAP_ENABLED)
 
             table = Table()
             table.titles = ['Address', 'Symbol']
@@ -471,7 +479,8 @@ Print the symbol table
 
     if args.get_symtab:
         with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_imports=False, load_exports=False, use_mmaped_io=MMAP_ENABLED)
+            image = ktool.load_image(fd, args.slice_index, load_imports=False, load_exports=False,
+                                     use_mmaped_io=MMAP_ENABLED)
 
             table = Table()
             table.titles = ['Address', 'Name']
@@ -483,16 +492,20 @@ Print the symbol table
 
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False, use_mmaped_io=MMAP_ENABLED)
+            image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False,
+                                     use_mmaped_io=MMAP_ENABLED)
 
             import_symbols = {}
             symbol = namedtuple('symbol', ['addr', 'name', 'image', 'from_table'])
 
             for addr, sym in image.import_table.items():
                 try:
-                    import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, image.linked_images[int(sym.ordinal) - 1].install_name, sym.attr)
+                    import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname,
+                                                          image.linked_images[int(sym.ordinal) - 1].install_name,
+                                                          sym.attr)
                 except IndexError:
-                    import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, "ordinal: " + str(int(sym.ordinal)), sym.attr)
+                    import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, "ordinal: " + str(int(sym.ordinal)),
+                                                          sym.attr)
 
             table = Table()
             table.titles = ['Addr', 'Symbol', 'Image', 'Binding']
@@ -510,21 +523,28 @@ Print the symbol table
             for sym in image.binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.address).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.dec_type}')
+                        f'{hex(sym.address).ljust(15, " ")} | '
+                        f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                        f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
                 except IndexError:
                     pass
             print('\nWeak Binding Info'.ljust(60, '-') + '\n')
             for sym in image.weak_binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.address).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.dec_type}')
+                        f'{hex(sym.address).ljust(15, " ")} | '
+                        f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                        f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
                 except IndexError:
                     pass
             print('\nLazy Binding Info'.ljust(60, '-') + '\n')
             for sym in image.lazy_binding_table.symbol_table:
                 try:
                     print(
-                        f'{hex(sym.address).ljust(15, " ")} | {image.linked_images[int(sym.ordinal) - 1].install_name} | {sym.name.ljust(20, " ")} | {sym.dec_type}')
+                        f'{hex(sym.address).ljust(15, " ")} | '
+                        f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                        f'{sym.name.ljust(20, " ")} | '
+                        f'{sym.dec_type}')
                 except IndexError:
                     pass
 
@@ -715,8 +735,9 @@ Create a fat Macho Binary from multiple thin binaries
                     with open(output, 'wb') as out:
                         out.write(macho_slice.full_bytes_for_slice())
                     return
+            macho_slices_list = [macho_slice.type.name.lower() for macho_slice in macho_file.slices]
             exit_with_error(KToolError.ArgumentError,
-                            f'Architecture {args.extract} was not found (found: {[macho_slice.type.name.lower() for macho_slice in macho_file.slices]})')
+                            f'Architecture {args.extract} was not found (found: {macho_slices_list})')
 
 
 def _list(args):
@@ -764,8 +785,8 @@ Print the list of function starts
             for objc_proto in objc_image.protolist:
                 print(f'{objc_proto.name}')
         elif args.get_linked:
-            for external_library in image.linked_images:
-                print('(Weak) ' + external_library.install_name if external_library.weak else '' + external_library.install_name)
+            for extlib in image.linked_images:
+                print('(Weak) ' + extlib.install_name if extlib.weak else '' + extlib.install_name)
         elif args.get_fstarts:
             for addr in image.function_starts:
                 print(f'Addr: {hex(addr)} -> {image.symbols[addr].fullname if addr in image.symbols else ""}')
@@ -789,7 +810,9 @@ Print basic information about a file (e.g 'Thin MachO Binary')
             print(f'{"Offset".ljust(15, " ")} | {"CPU Type".ljust(15, " ")} | {"CPU Subtype".ljust(15, " ")}')
             for macho_slice in macho_file.slices:
                 print(
-                    f'{hex(macho_slice.offset).ljust(15, " ")} | {macho_slice.type.name.ljust(15, " ")} | {macho_slice.subtype.name.ljust(15, " ")}')
+                    f'{hex(macho_slice.offset).ljust(15, " ")} | '
+                    f'{macho_slice.type.name.ljust(15, " ")} | '
+                    f'{macho_slice.subtype.name.ljust(15, " ")}')
         else:
             print('Thin MachO Binary')
 
@@ -808,7 +831,8 @@ of a MachO file
     ktool info [--slice n] --vm [filename]
     """
     with open(args.filename, 'rb') as fp:
-        image = ktool.load_image(fp, args.slice_index, load_symtab=False, load_imports=False, load_exports=False, use_mmaped_io=MMAP_ENABLED)
+        image = ktool.load_image(fp, args.slice_index, load_symtab=False, load_imports=False, load_exports=False,
+                                 use_mmaped_io=MMAP_ENABLED)
 
         if args.get_vm:
             print(image.vm)

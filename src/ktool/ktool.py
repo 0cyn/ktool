@@ -152,3 +152,5 @@ def macho_combine(slices: List[Slice]) -> BytesIO:
 
     fat_file.seek(0)
     return fat_file
+
+
