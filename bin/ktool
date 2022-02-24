@@ -26,6 +26,7 @@ from enum import Enum
 from typing import Union
 
 from kimg4.img4 import IM4P
+from pkg_resources import packaging
 from kmacho import LOAD_COMMAND
 
 from ktool import (
@@ -61,13 +62,19 @@ def get_terminal_size():
         return os.terminal_size((5000, 5000))
 
 
+def handle_version(version: str):
+    """ Used by check_for_update """
+    return packaging.version.parse(version)
+
+
 def check_for_update():
     endpoint = "https://pypi.org/pypi/k2l/json"
     # noinspection PyBroadException
     try:
         with urllib.request.urlopen(endpoint, timeout=1) as url:
             data = json.loads(url.read().decode(), strict=False)
-        if KTOOL_VERSION < data.get('info').get('version'):
+        new_version = data.get('info').get('version')
+        if handle_version(KTOOL_VERSION) < handle_version(new_version):
             global UPDATE_AVAILABLE
             UPDATE_AVAILABLE = True
     except Exception:
