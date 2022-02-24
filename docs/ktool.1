@@ -1,0 +1,90 @@
+.\"
+.\" ktool.1
+.\" Copyright (c) 2021-present kat
+.\"
+.\" SPDX-License-Identifier: MIT
+.\" Created by TheRealKeto on 8/30/2021.
+.\"
+.Dd January 23, 2022
+.Dt KTOOL 1
+.Os
+.Sh NAME
+.Nm ktool
+.Nd Static binary analysis tool
+.Sh SYNOPSIS
+.Nm
+.Oo Ar dump | file | lipo | list | info Oc
+.Oo ... Oc
+.Op filename
+.Sh DESCRIPTION
+.Nm
+is a static Mach-O binary metadata analysis tool and information dumper.
+.Sh COMMANDS
+.Bl -tag -width indent
+.It Ar dump Oo options ... Oc
+Dump set of headers for a bin/framework
+.Bl -tag -width indent
+.It Fl -headers
+Specify that headers should be dumped from a bin/framework
+.It Fl -out Op path
+Dump a set of headers of a bin/framework to a specific path
+.It Fl -tbd
+Dump .tbd for a specified bin/framework
+.El
+.It Ar file
+Prints (very) basic info about a file
+.It Ar lipo Oo options ... Oc
+Interact with universal, multi-architecture files
+.Bl -tag -width indent
+.It Fl -extract Op slice
+Extract a slice from a fat binary
+.It Fl -create Op filenames
+Create a fat Mach-O binary from multiple thin binaries.
+This option must be used alongside the
+.Ar --out
+flag.
+.El
+.It Ar list Oo options ... Oc Op filename
+Print symbols, classes, protocols, or linked libraries of a binary
+.Bl -tag -width indent
+.It Fl -symbols
+Print the symbol table of a specified binary
+.It Fl -classes
+Print a list of classes of the specified binary
+.It Fl -protocols
+Print a list of protocols of the specified binary
+.It Fl -linked
+Print the list of linked libraries in a specified binary
+.El
+.It Ar info Oo options ... Oc Fl -slice Oo n | number | index Oc
+Print generic information about a Mach-O file
+.Bl -tag -width indent
+.It Fl h
+Prints a help message
+.It Fl -vm
+Print VM -> Slice -> File addressing mapping for a slice of a Mach-O file
+.It Fl -cmds
+Print a list of load commands from a specified binary
+.It Fl -binding
+Print binding actions for a file
+.El
+.El
+.Sh EXAMPLES
+To dump .tbd files for a framework
+.Dl "ktool dump --tbd [filename]"
+.Pp
+To print basic information of a binary
+.Dl "ktool file [filename]"
+.Pp
+To extract a slice from a fat binary
+.Dl "ktool lipo --extract [slicename] [filename]"
+.Sh HISTORY
+.Nm
+is an alternative to specific tools, such as
+.An lipo ,
+and
+.An otool .
+For the sake of platform independence, it was written by
+.An kat
+with the Python Programming Language, preventing
+any hassles when operating on static binaries and libraries.
