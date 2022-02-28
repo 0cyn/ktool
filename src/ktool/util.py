@@ -18,8 +18,9 @@ import sys
 import time
 from enum import Enum
 from typing import List
+import re
 
-from .exceptions import *
+from ktool.exceptions import *
 
 import pkg_resources
 
@@ -195,10 +196,15 @@ class Table:
         (shutil.get_terminal_size)
     """
 
-    def __init__(self, dividers=False):
+    def __init__(self, dividers=False, avoid_wrapping_titles=False):
         self.titles = []
         self.rows = []
+        self.size_pinned_columns = []
+
         self.dividers = dividers
+        self.avoid_wrapping_titles = avoid_wrapping_titles
+        self.ansi_borders = True
+
         self.column_pad = 3 if dividers else 2
 
         # Holds the maximum length of the fields within the seperate columns
@@ -255,6 +261,11 @@ class Table:
         :param screen_width: Screen width
         :return:
         """
+
+        CGREY = '\33[38;5;242m'
+        CWHITE  = '\33[37m'
+        CEND = '\33[39m'
+
         if row_count == 0:
             return ""
         rows = []
@@ -278,9 +289,9 @@ class Table:
             sep_line = '┠━'
             for size in self.most_recent_adjusted_maxes:
                 sep_line += ''.ljust(size - 2, '━') + '╀━'
-            sep_line = sep_line[:-self.column_pad].ljust(screen_width - 1, '━')[:-self.column_pad] + '━━━┦'
+            sep_line = CGREY + sep_line[:-self.column_pad].ljust(screen_width - 1, '━')[:-self.column_pad] + '━━━┦' + CEND
 
-            rows_text = rows_text[:-len(sep_line)]  # Use our calculated sep_line length to cut off the last one
+            rows_text = rows_text[:-(len(sep_line))]  # Use our calculated sep_line length to cut off the last one
             rows_text += sep_line.replace('┠', '└').replace('╀', '┸').replace('┦', '┘')
 
         if screen_width in self.header_cache:
@@ -290,7 +301,7 @@ class Table:
             for i, title in enumerate(self.titles):
                 if self.dividers:
                     try:
-                        title_row += '│ ' + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[:-(self.column_pad - 1)]
+                        title_row += CGREY + '│ ' + CWHITE + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[:-(self.column_pad - 1)]
                     except IndexError:
                         # I have no idea what causes this
                         title_row = ""
@@ -301,15 +312,17 @@ class Table:
                         title_row = ""
             header_text = ""
             if self.dividers:
-                header_text += sep_line.replace('┠', '┌').replace('╀', '┬').replace('┦', '┐') + '\n'
-            header_text += title_row.ljust(screen_width-1)[:-1] + ' │\n' if self.dividers else title_row + '\n'
+                header_text += CGREY + sep_line.replace('┠', '┌').replace('╀', '┬').replace('┦', '┐') + CWHITE + '\n'
+            header_text += title_row.ljust(screen_width-1)[:-1] + CGREY + '  │\n' + CWHITE if self.dividers else title_row + '\n'
             if self.dividers:
                 header_text += sep_line + '\n'
             self.header_cache[screen_width] = header_text
             rows_text = header_text + rows_text
 
+        rows_text = rows_text.replace('┠', CGREY + '┠').replace('┦', '┦' + CEND)
         return rows_text
 
+    # noinspection PyUnreachableCode
     def render(self, _rows, width, row_start):
         """
         Render a list of rows for screen_width
@@ -337,7 +350,12 @@ class Table:
         last_sum = 0
         while sum(column_maxes) >= width:
             for index, i, in enumerate(column_maxes):
-                column_maxes[index] = max(col_min, column_maxes[index] - 1)
+                if index in self.size_pinned_columns:
+                    continue
+                if self.avoid_wrapping_titles:
+                    column_maxes[index] = max(col_min, column_maxes[index] - 1, len(self.titles[index]) + 3)
+                else:
+                    column_maxes[index] = max(col_min, column_maxes[index] - 1)
             if sum(column_maxes) == last_sum:
                 return 'Width too small to render table'
             last_sum = sum(column_maxes)
@@ -345,32 +363,64 @@ class Table:
         self.most_recent_adjusted_maxes = [*column_maxes]
 
         rows = []
+        rows_attributes = []
 
         # bit complex, this just wraps strings within their columns, to create the illusion of 'cells'
         for row_i, row in enumerate(_rows):
             # cols is going to be an array of columns in this row
             # each column is going to be an array of lines
             cols = []
+            cols_attributes = []
 
             max_line_count_in_row = 0
             for col_i, col in enumerate(row):
+                if chr(27) in col:
+                    col = col
+                    print(str(col))
                 lines = []
                 column_width = column_maxes[col_i] - self.column_pad
                 string_cursor = 0
                 while len(col) - string_cursor > column_width:
-                    first_line_of_column = col[string_cursor:string_cursor + column_width].split('\n')[0]
+                    first_line_of_column = str(col)[string_cursor:string_cursor + column_width].split('\n')[0]
                     lines.append(first_line_of_column)
                     string_cursor += len(first_line_of_column)
-                    if col[string_cursor] == '\n':
+                    if str(col)[string_cursor] == '\n':
                         string_cursor += 1
                 while string_cursor <= len(col):
-                    first_line_of_column = col[string_cursor:len(col)].split('\n')[0]
+                    first_line_of_column = str(col)[string_cursor:len(col)].split('\n')[0]
                     lines.append(first_line_of_column)
                     string_cursor += len(first_line_of_column)
                     if string_cursor == len(col):
                         break
-                    if col[string_cursor] == '\n':
+                    if str(col)[string_cursor] == '\n':
                         string_cursor += 1
+
+                if 1 == 0:
+                    print(col.attrs)
+                    string_cursor = 0
+                    rehighlighted_lines = []
+                    for line in lines:
+                        line_colors = []
+                        re_line = ""
+                        for attr in col.attrs:
+                            if attr[0][0] <= string_cursor + len(line):
+                                if not attr[0][1] <= string_cursor:
+                                    line_colors.append(attr)
+                        for attr in line_colors:
+                            if attr[0][0] <= string_cursor:
+                                re_line += f'\33[{attr[1]}m'
+
+                        for index, c in enumerate(line):
+                            for attr in line_colors:
+                                if index + string_cursor == attr[0][1]:
+                                    re_line = f'\33[0m'
+                            for attr in line_colors:
+                                if index + string_cursor == attr[0][0]:
+                                    re_line += f'\33[{attr[1]}m'
+                            re_line += c
+                        rehighlighted_lines.append(re_line + f'\33[0m')
+                        string_cursor += len(line)
+                    lines = rehighlighted_lines
                 max_line_count_in_row = max(len(lines), max_line_count_in_row)
                 cols.append(lines)
 
@@ -383,6 +433,10 @@ class Table:
 
         lines = ""
         sep_line = ""
+
+        CGREY = '\33[38;5;242m'
+        CWHITE  = '\33[37m'
+        CEND = '\33[39m'
 
         if self.dividers:
             sep_line = '┠━'
@@ -400,16 +454,19 @@ class Table:
                 line = ""
                 for j, col in enumerate(row):
                     line += col[i].ljust(column_maxes[j], ' ')
+                    diff = len(line) - len(strip_ansi(line))
                     if self.dividers:
-                        line = line[:-self.column_pad] + ' │ '
+                        line = line[:-self.column_pad] +' │ '
                 if self.dividers:
-                    line = '│ ' + line[:-self.column_pad].ljust(width, ' ')[:-self.column_pad] + ' │ '
+                    diff = len(line) - len(strip_ansi(line))
+                    line = CGREY + '│ ' + CWHITE + line.ljust(width, ' ')[:-self.column_pad] + CGREY + ' │ ' + CEND
+                    line = line.replace('│', CGREY + '│' + CWHITE)
                 else:
                     line = ' ' + line[:-self.column_pad].ljust(width, ' ')[:-self.column_pad] + (' ' * self.column_pad)
                 row_lines.append(line)
 
             if self.dividers:
-                row_lines.append(sep_line)
+                row_lines.append(CGREY + sep_line + CEND)
 
             self.rendered_row_cache[width + 1][str(row_index + row_start)] = '\n'.join(row_lines)
             lines += '\n'.join(row_lines)
@@ -427,6 +484,20 @@ class LogLevel(Enum):
     # if this isn't being piped to a file it will be ridiculous
     # it will also likely slow down the processor a shit-ton if it's being output to term.
     DEBUG_TOO_MUCH = 5
+
+
+ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
+
+
+def strip_ansi(msg):
+    return ansi_escape.sub('', msg)
+
+
+def ktool_print(msg, file=sys.stdout):
+    if file.isatty():
+        print(msg, file=file)
+    else:
+        print(strip_ansi(msg), file=file)
 
 
 def print_err(msg):

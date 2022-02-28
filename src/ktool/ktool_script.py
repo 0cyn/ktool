@@ -25,6 +25,11 @@ from collections import namedtuple
 from enum import Enum
 from typing import Union
 
+from pygments import highlight
+from pygments.formatters.terminal import TerminalFormatter
+from pygments.formatters.terminal256 import Terminal256Formatter
+from pygments.lexers.data import YamlLexer
+
 from kimg4.img4 import IM4P
 
 # noinspection PyProtectedMember
@@ -46,12 +51,15 @@ from ktool.swift import *
 
 from ktool.exceptions import *
 from ktool.generator import FatMachOGenerator
-from ktool.util import opts, version_output
+from ktool.util import opts, version_output, ktool_print
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
 MMAP_ENABLED = True
+
+# noinspection PyShadowingBuiltins
+print = ktool_print
 
 
 def get_terminal_size():
@@ -92,7 +100,7 @@ class KToolError(Enum):
 
 
 def exit_with_error(error: KToolError, msg):
-    print(f'Encountered an Error ({error.name}):\n', f"{msg}", file=sys.stderr)
+    print(f'Encountered an Error ({error.name}):\n' + f"{msg}", file=sys.stderr)
     exit(error.value)
 
 
@@ -260,6 +268,7 @@ def main():
     parser_dump.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
+    parser_dump.add_argument('--class', dest='get_class')
     parser_dump.add_argument('--use-stab-for-sel', dest='usfs', action='store_true')
     parser_dump.add_argument('--hard-fail', dest='hard_fail', action='store_true')
     parser_dump.add_argument('--sorted', dest='sort_headers', action='store_true')
@@ -268,7 +277,7 @@ def main():
     parser_dump.add_argument('filename', nargs='?', default='')
 
     parser_dump.set_defaults(func=dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0,
-                             hard_fail=False)
+                             hard_fail=False, get_class=None)
 
     # list command: Lists lists of things contained in lists in the image.
     parser_list = subparsers.add_parser('list', help='Print various lists')
@@ -488,7 +497,7 @@ Print the symbol table
             for sym in image.symbol_table.table:
                 table.rows.append([hex(sym.address), sym.fullname])
 
-            print(table.fetch_all(get_terminal_size().columns-1))
+            print(table.fetch_all(get_terminal_size().columns - 1))
 
     if args.get_imports:
         with open(args.filename, 'rb') as fd:
@@ -771,11 +780,16 @@ Print the list of function starts
         else:
             image = ktool.load_image(fd, args.slice_index, False, False, False)
 
-        print(f'\n{args.filename} '.ljust(60, '-') + '\n')
-
         if args.get_lcs:
-            for lc in image.macho_header.load_commands:
-                print(str(lc))
+            table = Table(dividers=True, avoid_wrapping_titles=True)
+            table.titles = ['Index', 'Load Command', 'Data']
+            table.size_pinned_columns = [0, 1]
+            for i, lc in enumerate(image.macho_header.load_commands):
+                lc_dat = str(lc)
+                if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB, LOAD_COMMAND.SUB_CLIENT]:
+                    lc_dat += '\n"' + image.get_cstr_at(lc.off + lc.SIZE, vm=False) + '"'
+                table.rows.append([str(i), LOAD_COMMAND(lc.cmd).name.ljust(15, ' '), lc_dat])
+            print(table.fetch_all(get_terminal_size().columns-5))
         elif args.get_classes:
             for obj_class in objc_image.classlist:
                 print(f'{obj_class.name}')
@@ -801,20 +815,17 @@ Print basic information about a file (e.g 'Thin MachO Binary')
     """
     with open(args.filename, 'rb') as fp:
         macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
-        print(f'\n{args.filename} '.ljust(60, '-') + '\n')
 
-        if macho_file.type == MachOFileType.FAT:
-            print('Fat MachO Binary')
-            print(f'{len(macho_file.slices)} Slices:')
+        table = Table()
+        table.titles = ['Address', 'CPU Type', 'CPU Subtype']
 
-            print(f'{"Offset".ljust(15, " ")} | {"CPU Type".ljust(15, " ")} | {"CPU Subtype".ljust(15, " ")}')
-            for macho_slice in macho_file.slices:
-                print(
-                    f'{hex(macho_slice.offset).ljust(15, " ")} | '
-                    f'{macho_slice.type.name.ljust(15, " ")} | '
-                    f'{macho_slice.subtype.name.ljust(15, " ")}')
-        else:
-            print('Thin MachO Binary')
+        for macho_slice in macho_file.slices:
+            table.rows.append([
+                    f'{hex(macho_slice.offset)}',
+                    f'{macho_slice.type.name}',
+                    f'{macho_slice.subtype.name}'])
+
+        print(table.fetch_all(get_terminal_size().columns))
 
 
 def info(args):
@@ -838,14 +849,16 @@ of a MachO file
             print(image.vm)
 
         else:
-            print(f'{image.base_name} -----\n')
-            print(f'Install Name: {image.install_name}')
-            print(f'Filetype: {image.macho_header.filetype.name}')
-            print(f'Flags: {", ".join([i.name for i in image.macho_header.flags])}')
-            print(f'UUID: {image.uuid.hex().upper()}')
-            print(f'Platform: {image.platform.name}')
-            print(f'Minimum OS: {image.minos.x}.{image.minos.y}.{image.minos.z}')
-            print(f'SDK Version: {image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}')
+            message = (f'\033[32m{image.base_name} \33[37m--- \n'
+                       f'\033[34mInstall Name: \33[37m{image.install_name}\n'
+                       f'\033[34mFiletype: \33[37m{image.macho_header.filetype.name}\n' 
+                       f'\033[34mFlags: \33[37m{", ".join([i.name for i in image.macho_header.flags])}\n'
+                       f'\033[34mUUID: \33[37m{image.uuid.hex().upper()}\n'
+                       f'\033[34mPlatform: \33[37m{image.platform.name}\n'
+                       f'\033[34mMinimum OS: \33[37m{image.minos.x}.{image.minos.y}.{image.minos.z}\n'
+                       f'\033[34mSDK Version: \33[37m{image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}')
+
+            print(message)
 
 
 def dump(args):
@@ -860,10 +873,23 @@ To dump .tbd files for a framework
 > ktool dump --tbd [filename]
     """
 
-    require_args(args, one_of=['do_headers', 'do_tbd'])
+    require_args(args, one_of=['do_headers', 'get_class', 'do_tbd'])
+
+    if args.get_class:
+        with open(args.filename, 'rb') as fp:
+            image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+
+            if image.name == "":
+                image.name = os.path.basename(args.filename)
+
+            objc_image = ktool.load_objc_metadata(image)
+            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers)
+            for header_name, header in objc_headers.items():
+                if args.get_class == header_name[:-2]:
+                    print(header.generate_highlighted_text())
+                    break
 
     if args.do_headers:
-        require_args(args, always=['outdir'])
 
         if args.hard_fail:
             ignore.OBJC_ERRORS = False
@@ -882,14 +908,14 @@ To dump .tbd files for a framework
             objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers)
 
             for header_name, header in objc_headers.items():
-                if args.outdir == "kdbg":
+                if not args.outdir:
                     print(f'\n\n{header_name}\n{header}')
                 elif args.outdir == 'ndbg':
                     pass
                 else:
                     os.makedirs(args.outdir, exist_ok=True)
                     with open(args.outdir + '/' + header_name, 'w') as out:
-                        out.write(header)
+                        out.write(str(header))
 
                 if args.bench:
                     pass

@@ -16,10 +16,10 @@ import os
 from collections import namedtuple
 
 from kmacho.structs import *
-from .util import log
-from .dyld import Dyld, SymbolType, Image
-from .macho import Slice
-from .objc import ObjCImage
+from ktool.util import log
+from ktool.dyld import Dyld, SymbolType, Image
+from ktool.macho import Slice
+from ktool.objc import ObjCImage
 
 
 class TBDGenerator:

@@ -17,12 +17,12 @@ import ktool
 from kmacho.base import Constructable
 from kswift.structs import *
 from kswift.demangle import demangle
-from . import ObjCImage
+from ktool import ObjCImage
 
-from .dyld import Image
-from .macho import Section
-from .objc import Class
-from .util import usi32_to_si32
+from ktool.dyld import Image
+from ktool.macho import Section
+from ktool.objc import Class
+from ktool.util import usi32_to_si32
 
 
 class Field:

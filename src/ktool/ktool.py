@@ -18,12 +18,12 @@
 from typing import Dict, Union, BinaryIO, List
 from io import BytesIO
 
-from .dyld import Dyld, Image
-from .generator import TBDGenerator, FatMachOGenerator
-from .headers import HeaderGenerator
-from .macho import Slice, MachOFile
-from .objc import ObjCImage
-from .util import TapiYAMLWriter, ignore, log
+from ktool.dyld import Dyld, Image
+from ktool.generator import TBDGenerator, FatMachOGenerator
+from ktool.headers import HeaderGenerator, Header
+from ktool.macho import Slice, MachOFile
+from ktool.objc import ObjCImage
+from ktool.util import TapiYAMLWriter, ignore, log
 
 
 def load_macho_file(fp: Union[BinaryIO, BytesIO], use_mmaped_io=True) -> MachOFile:
@@ -118,7 +118,7 @@ def load_objc_metadata(image: Image) -> ObjCImage:
     return ObjCImage.from_image(image)
 
 
-def generate_headers(objc_image: ObjCImage, sort_items=False) -> Dict[str, str]:
+def generate_headers(objc_image: ObjCImage, sort_items=False) -> Dict[str, Header]:
     out = {}
 
     if sort_items:
@@ -131,7 +131,7 @@ def generate_headers(objc_image: ObjCImage, sort_items=False) -> Dict[str, str]:
             objc_proto.opt_methods.sort(key=lambda h: h.signature)
 
     for header_name, header in HeaderGenerator(objc_image).headers.items():
-        out[header_name] = str(header)
+        out[header_name] = header
 
     return out
 

@@ -17,7 +17,7 @@
 
 from enum import Enum
 
-from .structs import *
+from kmacho.structs import *
 
 
 class dyld_chained_fixups_header(Struct):

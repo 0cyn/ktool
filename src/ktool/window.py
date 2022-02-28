@@ -140,6 +140,8 @@ class AttributedString:
             if ansi_str[pos] == "§":
                 ansi_escape_code = ""
                 pos += 1
+                if pos == len(ansi_str):
+                    panic(ansi_str)
                 while ansi_str[pos] != 'm':
                     ansi_escape_code += ansi_str[pos]
                     pos += 1
@@ -147,9 +149,13 @@ class AttributedString:
 
                 is_reset = False
                 first_item = ansi_list[0]
+                try:
+                    int(first_item)
+                except ValueError:
+                    panic(str(ansi_list) + '\n' + ansi_str)
                 if first_item == '38':
                     attr_color = AttributedString.fix_256_code(int(ansi_list[2]))
-                elif first_item == '39':
+                elif first_item == '39' or first_item == '0':
                     is_reset = True
                 elif 30 <= int(first_item) <= 37:
                     attr_color = int(first_item) - 30 + 8
@@ -555,25 +561,13 @@ class ScrollingDisplayBuffer:
         for line in lines:
             if isinstance(line, Table):
                 prop_lines = []
-                table_lines = [i[0:self.width] for i in
+                table_lines = [i for i in
                                line.fetch(start_line, int(self.height), self.width - (20 if ATTR_STRING_DEBUG else 1)).split('\n')]
                 table_attr_lines = []
 
                 for _line in table_lines:
-                    procline = ""
-                    grey = False
-                    for character in _line:
-                        if character in BOX_CHARS:
-                            if not grey:
-                                procline += '§31m'
-                            grey = True
-                        else:
-                            if grey:
-                                procline += '§39m'
-                            grey = False
-                        procline += character
-                    _line = procline + ' §39m'
                     table_attr_lines.append(AttributedString.ansi_to_attrstr(_line))
+
                 prop_lines += table_attr_lines
                 start_line = 0
                 end_line = self.height - 1

@@ -16,9 +16,9 @@ from enum import Enum
 from typing import List, Dict, Optional
 
 from kmacho.base import Constructable
-from .dyld import Image
-from .structs import *
-from .util import log, ignore, usi32_to_si32, opts, Queue, QueueItem
+from ktool.dyld import Image
+from ktool.structs import *
+from ktool.util import log, ignore, usi32_to_si32, opts, Queue, QueueItem
 
 type_encodings = {
     "c": "char",

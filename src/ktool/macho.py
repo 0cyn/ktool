@@ -19,8 +19,8 @@ from typing import Tuple, Dict
 
 from kmacho import *
 from kmacho.structs import *
-from .exceptions import *
-from .util import log
+from ktool.exceptions import *
+from ktool.util import log
 mmap = None
 
 

@@ -15,7 +15,7 @@
 
 from enum import IntEnum
 
-from .structs import *
+from kmacho.structs import *
 
 MH_MAGIC = 0xFEEDFACE
 MH_CIGAM = 0xCEFAEDFE

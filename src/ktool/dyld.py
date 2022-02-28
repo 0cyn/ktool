@@ -29,8 +29,8 @@ from kmacho import (
 from kmacho.structs import *
 from kmacho.base import Constructable
 from kmacho.fixups import *
-from .macho import _VirtualMemoryMap, Segment, Slice
-from .util import log, macho_is_malformed, ignore
+from ktool.macho import _VirtualMemoryMap, Segment, Slice
+from ktool.util import log, macho_is_malformed, ignore
 
 
 class ImageHeader(Constructable):

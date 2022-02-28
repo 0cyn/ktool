@@ -14,10 +14,15 @@
 
 from typing import List, Dict
 
-from .dyld import SymbolType, Image
-from .objc import ObjCImage, Class, Category, Protocol, Property, Method, Ivar
+from ktool.dyld import SymbolType, Image
+from ktool.objc import ObjCImage, Class, Category, Protocol, Property, Method, Ivar
 
-from .util import KTOOL_VERSION
+from ktool.util import KTOOL_VERSION
+
+from pygments import highlight
+from pygments.formatters.terminal import TerminalFormatter
+from pygments.formatters.terminal256 import Terminal256Formatter
+from pygments.lexers.objective import ObjectiveCLexer
 
 
 class HeaderUtils:
@@ -164,9 +169,19 @@ class Header:
         self._process_import_section()
 
         self.text = self._generate_text()
+        self.highlighted_text = None
 
     def __str__(self):
         return self.text
+
+    def generate_highlighted_text(self):
+        if self.highlighted_text:
+            return self.highlighted_text
+
+        formatter = TerminalFormatter()
+        self.highlighted_text = highlight(self.text, ObjectiveCLexer(), formatter)
+
+        return self.highlighted_text
 
     def _generate_text(self) -> str:
         """
