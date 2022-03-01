@@ -838,8 +838,7 @@ Print generic info about a MachO file
 
 Print VM -> Slice -> Filename address mapping for a slice
 of a MachO file
-
-    ktool info [--slice n] --vm [filename]
+> ktool info [--slice n] --vm [filename]
     """
     with open(args.filename, 'rb') as fp:
         image = ktool.load_image(fp, args.slice_index, load_symtab=False, load_imports=False, load_exports=False,
@@ -866,7 +865,10 @@ def dump(args):
 ------
 Tools to reconstruct certain files from compiled MachOs
 
-To dump a set of headers for a bin/framework
+Dump header for a single class
+> ktool dump --class <classname> [filename]
+
+To dump a full set of headers for a bin/framework
 > ktool dump --headers --out <directory> [filename]
 
 To dump .tbd files for a framework
