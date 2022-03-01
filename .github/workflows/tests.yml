@@ -73,13 +73,7 @@ jobs:
       - name: test dump with mmaped-IO disabled
         run: |
           ktool --no-mmap dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
-      - name: test list
-        run: |
-          test $(ktool list --classes tests/bins/SpringBoardHome | wc -l) -eq 411
-          test $(ktool list --protocols tests/bins/SpringBoardHome | wc -l) -eq 243
-          test $(ktool list --cmds tests/bins/SpringBoardHome | wc -l) -eq 185
       - name: test symbols
         run: |
           ktool symbols --imports tests/bins/testbin1 | grep _OBJC_CLASS_$_NSObject
           ktool symbols --exports tests/bins/Search | grep SPFeedbackManager
-          test $(ktool symbols --symtab tests/bins/testbin1 | wc -l) -eq 25
