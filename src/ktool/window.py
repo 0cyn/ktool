@@ -561,8 +561,7 @@ class ScrollingDisplayBuffer:
         for line in lines:
             if isinstance(line, Table):
                 prop_lines = []
-                table_lines = [i for i in
-                               line.fetch(start_line, int(self.height), self.width - (20 if ATTR_STRING_DEBUG else 1)).split('\n')]
+                table_lines = line.fetch(start_line, int(self.height), self.width).split('\n')
                 table_attr_lines = []
 
                 for _line in table_lines:
@@ -1532,7 +1531,7 @@ class KToolMachOLoader:
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nLoading Segments & Generating Hexdumps')
         smmci = MainMenuContentItem()
         ssmi = SidebarMenuItem("Segments", smmci, parent)
-        table = Table(True)
+        table = Table()
         table.titles = ['Segment Name', 'VM Address', 'Size', 'File Address']
 
         for segname, segm in lib.segments.items():
@@ -1638,7 +1637,7 @@ class KToolMachOLoader:
     def symtab(lib, parent=None, callback=None):
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Symtab')
         mmci = MainMenuContentItem()
-        tab = Table(True)
+        tab = Table()
         tab.titles = ['Address', 'Name']
         for sym in lib.symbol_table.table:
             tab.rows.append([hex(sym.address), sym.fullname])
@@ -1714,7 +1713,7 @@ class KToolMachOLoader:
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Imports')
         mmci = MainMenuContentItem()
 
-        table = Table(True)
+        table = Table()
         table.titles = ['Address', 'Symbol', 'Library']
 
         for symbol in lib.imports:
@@ -1732,7 +1731,7 @@ class KToolMachOLoader:
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Exports')
         mmci = MainMenuContentItem()
 
-        table = Table(True)
+        table = Table()
         table.titles = ['Address', 'Symbol']
 
         for symbol in lib.exports:
