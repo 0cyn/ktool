@@ -72,7 +72,7 @@ jobs:
           ktool dump --tbd tests/bins/SpringBoardHome && cat SpringBoardHome.tbd | grep _SBHLibraryCategoryMap._sortedApplicationIdentifiersByCategoryIdentifier
       - name: test dump with mmaped-IO disabled
         run: |
-          ktool --no-mmap dump --headers --out kdbg tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
+          ktool --no-mmap dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
       - name: test list
         run: |
           test $(ktool list --classes tests/bins/SpringBoardHome | wc -l) -eq 414
