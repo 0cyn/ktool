@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "k2l"
-version = "1.0.0rc3"
+version = "1.0.0"
 description = "Static MachO/ObjC Reverse Engineering Toolkit"
 readme = "README.md"
 
