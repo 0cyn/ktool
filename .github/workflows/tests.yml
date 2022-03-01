@@ -65,7 +65,7 @@ jobs:
           ktool file tests/bins/Search.arm64
           ktool lipo --extract x86_64 tests/bins/Search
           ktool lipo --create --out tests/bins/Search.lipo.test tests/bins/Search.arm64 tests/bins/Search.x86_64
-          ktool file tests/bins/Search.lipo.test | grep "0x44000"
+          ktool file tests/bins/Search.lipo.test | grep "0x4d000"
       - name: test dump
         run: |
           ktool dump --headers --out kdbg tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
