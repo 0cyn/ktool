@@ -17,6 +17,7 @@
 import json
 import os
 import os.path
+import shutil
 import sys
 import threading
 import urllib.request
@@ -24,12 +25,6 @@ from argparse import ArgumentParser
 from collections import namedtuple
 from enum import Enum
 from typing import Union
-
-from pygments import highlight
-from pygments.formatters.terminal import TerminalFormatter
-from pygments.formatters.terminal256 import Terminal256Formatter
-from pygments.lexers.data import YamlLexer
-
 from kimg4.img4 import IM4P
 
 # noinspection PyProtectedMember
@@ -70,7 +65,7 @@ def get_terminal_size():
     try:
         return os.get_terminal_size()
     except OSError:
-        return os.terminal_size((5000, 5000))
+        return shutil.get_terminal_size()
 
 
 def handle_version(version: str):

@@ -18,6 +18,8 @@ MachO/ObjC Analysis + Editing toolkit.
     <br>
 </p>
     
+<img src=".github/tui.png">
+
 ### Installation
 
 ```shell
