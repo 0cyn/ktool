@@ -330,6 +330,10 @@ class Slice:
             self.subtype = self._load_subtype(self.type)
         else:
             self.offset = offset
+            hdr = Struct.create_with_bytes(dyld_header, self.get_bytes_at(0, 28))
+            self.arch_struct = Struct.create_with_values(fat_arch, [hdr.cpu_type, hdr.cpu_subtype, 0, 0, 0])
+            self.type = self._load_type()
+            self.subtype = self._load_subtype(self.type)
 
         self.size = 0
 
