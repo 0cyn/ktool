@@ -18,6 +18,10 @@ MachO/ObjC Analysis + Editing toolkit.
     <br>
 </p>
     
+<p align="center">
+  <a href="https://ktool.cynder.me/en/latest/ktool.html"> Library Documentation </a>
+</p>
+    
 <img src=".github/tui.png">
 
 ### Installation
