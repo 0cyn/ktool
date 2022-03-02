@@ -2,12 +2,11 @@ ktool
 =================================
 
 
-
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: ktool Library:
 
-   quickstart
+   ktool
 
 
 .. toctree::

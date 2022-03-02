@@ -166,7 +166,7 @@ class ObjCImage(Constructable):
             type_processor = TypeProcessor()
         self.image = image
         if image:
-            self.name = image.name
+            self.name = image.base_name
         else:
             self.name = ""
         self.tp = type_processor
@@ -785,7 +785,6 @@ class Class(Constructable):
         self.linked_classes = []
         self.fdec_classes = []
         self.fdec_prots = []
-        self.struct_list = []
         # Classes imported in this class from the same mach-o
 
         self.methods = methods

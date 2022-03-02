@@ -147,7 +147,7 @@ class Segment:
             if i % 2 == 0:
                 self.name += chr(int(c + hex(cmd.segname)[2:][i + 1], 16))
         self.name = self.name[::-1]
-        self.sections = self._process_sections()
+        self.sections: Dict[str, Section] = self._process_sections()
 
         self.type = SectionType(S_FLAGS_MASKS.SECTION_TYPE & self.cmd.flags)
 
@@ -173,14 +173,7 @@ class _VirtualMemoryMap:
     it actually sits in memory at runtime; it will be slid, but the program doesnt know and doesnt care The slid
     address doesnt matter to us either, we only care about the addresses the rest of the file cares about
 
-    There are two address sets used in mach-o files: vm, and file. (commonly; vmoff and fileoff)
-    For example, when reading raw data of an executable binary:
-    0x0 file offset will (normally?) map to 0x10000000 in the VM
-
-    These VM offsets are relayed to the linker via Load Commands
-    Some locations in the file do not have VM counterparts (examples being symbol table(citation needed))
-
-    Some other VM related offsets are changed/modified via binding info(citation needed)
+    This class acts as a lazily-loaded lookup table for translating vm addresses to their location in the file.
     """
 
     def __init__(self, macho_slice):
@@ -239,6 +232,8 @@ class _VirtualMemoryMap:
         # This function gets called *a lot*
         # It needs to be fast as shit.
 
+        # TODO: this will totes probably break kext loading which we should eventually
+        #   look to support. chained fixups needs to correct these pointers.
         vm_address = 0x0000FFFFFFFFF & vm_address
 
         if vm_address in self.cache:

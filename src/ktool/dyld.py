@@ -108,7 +108,7 @@ class ImageHeader(Constructable):
         self.is64 = False
         self.dyld_header = None
         self.filetype = MH_FILETYPE(0)
-        self.flags: List[MH_FILETYPE] = []
+        self.flags: List[MH_FLAGS] = []
         self.load_commands = []
         self.raw = bytearray()
 
@@ -138,12 +138,12 @@ class Image:
         if self.slice:
             self.macho_header: ImageHeader = ImageHeader.from_image(macho_slice=macho_slice)
 
-        self.linked_images: List[ExternalDylib] = []
-
         self.base_name = ""  # copy of self.name
         self.install_name = ""
 
-        self.segments = {}
+        self.linked_images: List[ExternalDylib] = []
+
+        self.segments: Dict[str, Segment] = {}
 
         self.vm = _VirtualMemoryMap(macho_slice)
 
