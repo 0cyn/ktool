@@ -15,11 +15,11 @@ MachO/ObjC Analysis + Editing toolkit.
     <image src="https://badge.fury.io/py/k2l.svg">
   </a>
     <br>
-    <br>
 </p>
     
 <p align="center">
-  <a href="https://ktool.cynder.me/en/latest/ktool.html"> Library Documentation </a>
+  <strong><a href="https://ktool.cynder.me/en/latest/ktool.html"> Library Documentation </a></strong>
+  <br>
 </p>
     
 <img src=".github/tui.png">
