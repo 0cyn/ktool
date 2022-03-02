@@ -31,7 +31,15 @@ MachO/ObjC Analysis + Editing toolkit.
 pip3 install k2l
 
 # Updating
-pip3 install --upgrade k2l
+pip3 install -U k2l
+```
+
+#### On Procursus
+
+Procursus provides their own build of `ktool`, which you can install with APT.
+
+```shell
+sudo apt install ktool
 ```
 
 ### Usage 
@@ -66,26 +74,28 @@ Run `ktool [command]` for info/examples on using that command
     
 ---
 
-written in pure, 100% python for the sake of platform independence when operating on static binaries and libraries. 
-this should run on any and all implementations of python3.
+Written in pure, 100% Python for the sake of platform independence when operating on static binaries and libraries. 
+This should run on any and all implementations of python3.
     
 Tested on:
+
 * Windows/Windows on ARM64
 * MacOS x86/arm64
 * Linux/Linux ARM64
-* iOS (iSH, ssh)
+* iOS (iSH, ssh, Procursus)
 * Android (Termux)
 * WebAssembly
 * Brython
     
 #### Credits
     
-Chained fixup processing is currently entirely based on https://github.com/xpcmdshell/bn-chained-fixups
+Chained fixup processing is currently entirely based on [bn-chained-fixups]
 
 #### Special thanks to
 
-JLevin and *OS Internals for existing
+* JLevin and *OS Internals for existing
+* arandomdev for guidance + code
+* Blacktop for their amazing [ipsw project] 
 
-arandomdev for guidance + code
-
-Blacktop for their amazing ipsw project: https://github.com/blacktop/ipsw  
+[bn-chained-fixups]: https://github.com/xpcmdshell/bn-chained-fixups
+[ipsw Project]: https://github.com/blacktop/ipsw
