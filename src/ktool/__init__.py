@@ -2,5 +2,6 @@ from ktool.ktool import load_image, load_objc_metadata, generate_headers, genera
 
 from ktool.objc import ObjCImage
 from ktool.dyld import Dyld, LD64, Image
-from ktool.macho import Slice, MachOFile, MachOFileType
+from ktool.macho import Slice, MachOFile, MachOFileType, Segment, Section
+from ktool.headers import HeaderGenerator, Header
 from ktool.util import KTOOL_VERSION, ignore, log, LogLevel, Table

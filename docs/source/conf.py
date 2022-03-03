@@ -52,8 +52,8 @@ html_theme_options = {
     "navigation_with_keys": True,
     "light_logo": "logo.png",
     "dark_logo": "logo.png",
+    'navigation_depth': 4,
 }
-
 html_css_files = [
     'css/custom.css',
 ]
