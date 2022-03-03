@@ -222,7 +222,6 @@ class Image:
         :param endian: Endianness of bytes to read.
         :return: Loaded struct
         """
-        # TODO: verify we want same type; force_reload will do for now.
         if address not in self.struct_cache or force_reload:
             if vm:
                 address = self.vm.get_file_address(address, section_name)

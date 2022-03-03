@@ -342,7 +342,7 @@ class Slice:
             self.size = self.arch_struct.size
 
         # noinspection PyArgumentList
-        self.byte_order = "little" if self.get_int_at(0, 4, "little") == MH_MAGIC_64 else "big"
+        self.byte_order = "little" if self.get_int_at(0, 4, "little") in [MH_MAGIC, MH_MAGIC_64] else "big"
 
         self._cstring_cache = {}
 
