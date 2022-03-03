@@ -232,8 +232,7 @@ class _VirtualMemoryMap:
         # This function gets called *a lot*
         # It needs to be fast as shit.
 
-        # TODO: this will totes probably break kext loading which we should eventually
-        #   look to support. chained fixups needs to correct these pointers.
+        # TODO: Implement proper chained fixup size processing, so we dont need to limit pointers to 0xFFFFFFFF
         vm_address = 0x0000FFFFFFFFF & vm_address
 
         if vm_address in self.cache:

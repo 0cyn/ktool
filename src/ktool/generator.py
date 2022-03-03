@@ -152,7 +152,7 @@ class FatMachOGenerator:
                 align = pow(2, 0xc)
                 align_directive = 0xc
             else:
-                # TODO: implement other alignment directives and stuff
+                # TODO: Implement Proper Alignment directive calculation based on page size of the target CPUType/Subtype
                 print(cpu_type)
                 raise AssertionError("not yet implemented")
         if previous_fat_arch is None:

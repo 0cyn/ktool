@@ -12,9 +12,6 @@
 #  Copyright (c) kat 2021.
 #
 
-# TODO: 32 bit import
-# TODO: bitfield struct code needs multi-not-bit-field-thing-support for proper dyld_chained_import loading.
-
 from enum import Enum
 
 from kmacho.structs import *
