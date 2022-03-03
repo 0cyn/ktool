@@ -558,9 +558,9 @@ class ScrollingDisplayBuffer:
 
         prop_lines = [*lines]
 
-        for line in lines:
+        for i, line in enumerate(lines):
             if isinstance(line, Table):
-                prop_lines = []
+                prop_lines = lines[:i]
                 table_lines = line.fetch(start_line, int(self.height), self.width).split('\n')
                 table_attr_lines = []
 
@@ -1488,7 +1488,7 @@ class KToolMachOLoader:
     def slice_item(macho_slice, callback):
         loaded_image = Dyld.load(macho_slice)
         if hasattr(macho_slice, 'type'):
-            slice_nick = macho_slice.type.name + " Slice"
+            slice_nick = f'{macho_slice.type.name}:{macho_slice.subtype.name}' + " Slice"
         else:
             slice_nick = "Thin MachO"
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nLoading MachO Image')
@@ -1615,6 +1615,7 @@ class KToolMachOLoader:
         for cmd in lib.macho_header.load_commands:
             mmci = MainMenuContentItem()
             mmci.lines = str(cmd).split('\n')
+            mmci.lines.append('')
             raw: bytes = lib.slice.get_bytes_at(cmd.off, cmd.cmdsize)
             hexdump = HexDumpTable()
             hexdump.hex = bytearray(raw)

@@ -408,7 +408,7 @@ Segment
 Section
 =================================
 
-.. py:class:: Section(segment: Segment, Union[section, section_64]
+.. py:class:: Section(segment: Segment, Union[section, section_64])
 
    Section within a MachO Segment
 
