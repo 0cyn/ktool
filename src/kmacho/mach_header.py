@@ -140,6 +140,7 @@ LOAD_COMMAND_MAP = {
     LOAD_COMMAND.LOAD_DYLINKER: dylinker_command,
     LOAD_COMMAND.SUB_CLIENT: sub_client_command,
     LOAD_COMMAND.LOAD_WEAK_DYLIB: dylib_command,
+    LOAD_COMMAND.LOAD_UPWARD_DYLIB: dylib_command,
     LOAD_COMMAND.SEGMENT_64: segment_command_64,
     LOAD_COMMAND.UUID: uuid_command,
     LOAD_COMMAND.CODE_SIGNATURE: linkedit_data_command,
