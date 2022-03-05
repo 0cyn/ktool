@@ -12,10 +12,10 @@
 #  Copyright (c) kat 2022.
 #
 import ktool
-from ktool import MachOFile, Image
-
 from kmacho.structs import *
+from ktool import MachOFile, Image
 from ktool.dyld import ImageHeader, Dyld
+import ktool.kplistlib as plistlib
 
 
 class kmod_info_64(Struct):
@@ -33,6 +33,16 @@ class kmod_info_64(Struct):
 
 class Kext:
     def __init__(self, image: Image, kmod_info, start_addr):
+
+        self.prelink_info = {}
+
+        self.development_region = ""
+        self.executable_name = ""
+        self.id = ""
+        self.bundle_name = ""
+        self.package_type = ""
+        self.info_string = ""
+        self.version_str = ""
 
         self.backing_image = image
         self.backing_slice = image.slice
@@ -54,6 +64,7 @@ class Kext:
 
         # noinspection PyProtectedMember
         Dyld._parse_load_commands(self.image)
+        # noinspection PyProtectedMember
         Dyld._process_image(self.image)
 
         for segment in image.segments.values():
@@ -68,10 +79,41 @@ class KernelCache:
 
         self.kexts = []
 
+        self.prelink_info = {}
+
+        if '__info' in self.mach_kernel.segments['__PRELINK_INFO'].sections:
+            self._process_prelink_info()
+
+        self.version = self.prelink_info['com.apple.kpi.mach']['CFBundleVersion']
+
         # there is (that i know of, anyways) no official name for the old/new kext styles, so we're going with
         # 'normal' (pre ios 12) and 'merged' (post ios 12), per bazad's old blog post.
 
-        self._process_merged_kexts()
+        if '__kmod_info' in self.mach_kernel.segments['__PRELINK_INFO'].sections:
+            self._process_merged_kexts()
+
+        self._process_kexts()
+
+    def _process_kexts(self):
+        for kext in self.kexts:
+            if kext.name in self.prelink_info.keys():
+                kext.executable_name = self.prelink_info[kext.name]['CFBundleExecutable']
+                kext.id = self.prelink_info[kext.name]['CFBundleIdentifier']
+                kext.bundle_name = self.prelink_info[kext.name]['CFBundleName']
+                kext.package_type = self.prelink_info[kext.name]['CFBundlePackageType']
+                kext.info_string = self.prelink_info[kext.name]['CFBundleGetInfoString'] if 'CFBundleGetInfoString' in self.prelink_info[kext.name] else ''
+                kext.version_str = self.prelink_info[kext.name]['CFBundleVersion']
+
+                kext.prelink_info = self.prelink_info[kext.name]
+
+    def _process_prelink_info(self):
+        address = self.mach_kernel.segments['__PRELINK_INFO'].sections['__info'].vm_address
+        prelink_info_str = f'<plist version="1.0">{self.mach_kernel.get_cstr_at(address, vm=True)}</plist>'
+        prelink_info_dat = prelink_info_str.encode('utf-8')
+        prelink_info = plistlib.readPlistFromBytes(prelink_info_dat)
+        items = prelink_info['_PrelinkInfoDictionary']
+        for bundle_dict in items:
+            self.prelink_info[bundle_dict['CFBundleIdentifier']] = bundle_dict
 
     def _process_merged_kexts(self):
         kext_starts = []
