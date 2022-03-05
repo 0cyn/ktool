@@ -49,7 +49,7 @@ from ktool.generator import FatMachOGenerator
 from ktool.util import opts, version_output, ktool_print
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
-from ktool.kcache import KernelCache
+from ktool.kcache import KernelCache, Kext
 
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
@@ -309,9 +309,10 @@ def main():
     parser_kcache = subparsers.add_parser('kcache', help='Kernel Cache Processing')
 
     parser_kcache.add_argument('--kexts', dest='get_kexts', action='store_true', help='List kexts embedded')
+    parser_kcache.add_argument('--kext', dest='get_kext')
     parser_kcache.add_argument('filename', nargs='?', default='')
 
-    parser_kcache.set_defaults(func=kcache, get_kexts=False)
+    parser_kcache.set_defaults(func=kcache, get_kext = None, get_kexts=False)
 
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
@@ -936,17 +937,34 @@ To dump .tbd files for a framework
 
 
 def kcache(args):
-    require_args(args, one_of=['get_kexts'])
+    """kcache help string standin"""
+    require_args(args, one_of=['get_kexts', 'get_kext'])
+
+    fp = open(args.filename, 'rb')
+    macho_file = ktool.load_macho_file(fp)
+    kernel_cache = KernelCache(macho_file)
 
     if args.get_kexts:
-        with open(args.filename, 'rb') as fp:
-            macho_file = ktool.load_macho_file(fp)
-            kernel_cache = KernelCache(macho_file)
-            for kext in kernel_cache.kexts:
-                print(f'{kext.name} ({kext.version}) -> {str(kext.image.segments["__TEXT_EXEC"])}')
+        for kext in kernel_cache.kexts:
+            print(f'{kext.name} -> {kext.executable_name} ({kext.version})')
 
-            print(f'start -> {kernel_cache.mach_kernel.entry_point}')
-            print(f'{kernel_cache.mach_kernel.thread_state}')
+    elif args.get_kext:
+        kext = None
+        for _kext in kernel_cache.kexts:
+            if args.get_kext == _kext.executable_name:
+                kext = _kext
+                break
+        if not kext:
+            for _kext in kernel_cache.kexts:
+                if args.get_kext == _kext.id:
+                    kext = _kext
+                    break
+
+        if isinstance(kext, Kext):
+            bundle_text = f"Bundle ID: {kext.id}\nExecutable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}"
+            print(bundle_text)
+        else:
+            print('Kext Not Found')
 
 
 if __name__ == "__main__":
