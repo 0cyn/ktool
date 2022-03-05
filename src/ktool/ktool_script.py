@@ -415,6 +415,7 @@ MachO Editing ---
 
 MachO Analysis ---
     dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
+    kcache - Kernel cache specific tools
     list - Print various lists (ObjC Classes, etc.)
     symbols - Print various tables (Symbols, imports, exports)
     info - Print misc info about the target mach-o
@@ -937,7 +938,16 @@ To dump .tbd files for a framework
 
 
 def kcache(args):
-    """kcache help string standin"""
+    """
+------
+KernelCache specific tools
+
+List Kext IDS (And versions, and executable names if they were found)
+> ktool kcache --kexts [filename]
+
+Dump info for a specific kext
+> ktool kcache --kext [Bundle ID or Executable Name] [filename]
+    """
     require_args(args, one_of=['get_kexts', 'get_kext'])
 
     fp = open(args.filename, 'rb')
