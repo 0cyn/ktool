@@ -15,6 +15,7 @@
 import os
 from collections import namedtuple
 from enum import Enum
+from io import BytesIO
 from typing import Tuple, Dict
 
 from kmacho import *
@@ -41,6 +42,7 @@ class MachOFile:
             self.filename = ''
 
         if use_mmaped_io:
+            assert not isinstance(file, BytesIO)
             global mmap
             import mmap
             try:
@@ -85,9 +87,10 @@ class MachOFile:
     def _load_filetype(self) -> MachOFileType:
         if self.magic == FAT_MAGIC or self.magic == FAT_CIGAM:
             return MachOFileType.FAT
-        elif self.magic == MH_MAGIC or self.magic == MH_FILETYPE or self.magic == MH_MAGIC_64 or self.magic == MH_CIGAM_64:
+        elif self.magic == MH_MAGIC or self.magic == MH_CIGAM or self.magic == MH_MAGIC_64 or self.magic == MH_CIGAM_64:
             return MachOFileType.THIN
         else:
+            log.debug(f'Bad Magic: {hex(self.magic)}')
             raise UnsupportedFiletypeException
 
     def _load_struct(self, addr: int, struct_type, endian="little"):
