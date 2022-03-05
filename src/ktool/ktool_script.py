@@ -49,6 +49,8 @@ from ktool.generator import FatMachOGenerator
 from ktool.util import opts, version_output, ktool_print
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
+from ktool.kcache import KernelCache
+
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
 MMAP_ENABLED = True
@@ -303,6 +305,13 @@ def main():
 
     parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False,
                                 slice_index=0)
+
+    parser_kcache = subparsers.add_parser('kcache', help='Kernel Cache Processing')
+
+    parser_kcache.add_argument('--kexts', dest='get_kexts', action='store_true', help='List kexts embedded')
+    parser_kcache.add_argument('filename', nargs='?', default='')
+
+    parser_kcache.set_defaults(func=kcache, get_kexts=False)
 
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
@@ -924,6 +933,20 @@ To dump .tbd files for a framework
 
             with open(image.name + '.tbd', 'w') as out_fp:
                 out_fp.write(ktool.generate_text_based_stub(image, compatibility=True))
+
+
+def kcache(args):
+    require_args(args, one_of=['get_kexts'])
+
+    if args.get_kexts:
+        with open(args.filename, 'rb') as fp:
+            macho_file = ktool.load_macho_file(fp)
+            kernel_cache = KernelCache(macho_file)
+            for kext in kernel_cache.kexts:
+                print(f'{kext.name} ({kext.version}) -> {str(kext.image.segments["__TEXT_EXEC"])}')
+
+            print(f'start -> {kernel_cache.mach_kernel.entry_point}')
+            print(f'{kernel_cache.mach_kernel.thread_state}')
 
 
 if __name__ == "__main__":
