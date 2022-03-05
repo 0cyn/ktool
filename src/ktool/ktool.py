@@ -20,7 +20,14 @@ from io import BytesIO
 
 from ktool.dyld import Dyld, Image
 from ktool.generator import TBDGenerator, FatMachOGenerator
-from ktool.headers import HeaderGenerator, Header
+try:
+    from ktool.headers import HeaderGenerator, Header
+except ModuleNotFoundError:
+    # Maybe pygments wasn't installed and we're running in some weird context
+    # So let whatever works, work
+    Header = None
+    HeaderGenerator = None
+    pass
 from ktool.macho import Slice, MachOFile
 from ktool.objc import ObjCImage
 from ktool.util import TapiYAMLWriter, ignore, log
