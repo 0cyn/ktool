@@ -54,6 +54,7 @@ class Kext:
 
         # noinspection PyProtectedMember
         Dyld._parse_load_commands(self.image)
+        Dyld._process_image(self.image)
 
         for segment in image.segments.values():
             segment.vm_address = segment.vm_address | 0xffff000000000000
