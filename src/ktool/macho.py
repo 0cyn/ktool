@@ -30,7 +30,7 @@ class MachOFileType(Enum):
 
 
 class MachOFile:
-    def __init__(self, file, use_mmaped_io=True):
+    def __init__(self, file, use_mmaped_io=True, from_base=0):
         self.file_object = file
 
         self.uses_mmaped_io = use_mmaped_io
@@ -151,6 +151,9 @@ class Segment:
 
         self.type = SectionType(S_FLAGS_MASKS.SECTION_TYPE & self.cmd.flags)
 
+    def __str__(self):
+        return f'Segment {self.name} at {hex(self.vm_address)}\n'
+
     def _process_sections(self) -> Dict[str, Section]:
         sections = {}
         ea = self.cmd.off + self.cmd.SIZE
@@ -179,6 +182,9 @@ class _VirtualMemoryMap:
     def __init__(self, macho_slice):
         # name: vm_obj
         self.slice = macho_slice
+
+        self.kaddr_64_mode = False
+
         self.map = {}
         self.stats = {}
         self.vm_base_addr = 0
@@ -233,7 +239,9 @@ class _VirtualMemoryMap:
         # It needs to be fast as shit.
 
         # TODO: Implement proper chained fixup size processing, so we dont need to limit pointers to 0xFFFFFFFF
-        vm_address = 0x0000FFFFFFFFF & vm_address
+        vm_address = 0xFFFFFFFFF & vm_address
+        if self.kaddr_64_mode:
+            vm_address += 0xFFFFFFF000000000
 
         if vm_address in self.cache:
             return self.cache[vm_address]
@@ -280,6 +288,8 @@ class _VirtualMemoryMap:
     def add_segment(self, segment: Segment):
         if segment.file_address == 0 and segment.size != 0:
             self.vm_base_addr = segment.vm_address
+            if segment.vm_address >= 0xFFFFFFFF:
+                self.kaddr_64_mode = True
         if len(segment.sections) == 0:
             seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,
                              segment.name)
