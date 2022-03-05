@@ -434,7 +434,7 @@ class ScrollingDisplayBuffer:
         if self.wrap:
             wrapped_lines = []
 
-            if isinstance(self.lines[0], LazilyProcessedTextBuffer):
+            if len(self.lines) > 0 and isinstance(self.lines[0], LazilyProcessedTextBuffer):
                 if not self.lines[0].processed:
                     self.lines[0].go()
                 self.lines = self.lines[0].lines + self.lines[1:]
