@@ -30,6 +30,7 @@
 
 import curses
 import os
+import pprint
 from datetime import datetime
 from math import ceil
 
@@ -46,6 +47,8 @@ from ktool.objc import ObjCImage
 from ktool.headers import HeaderGenerator
 from ktool.swift import load_swift_types, SwiftClass
 from ktool.util import Table
+
+from ktool.kcache import KernelCache, Kext
 
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
@@ -232,6 +235,10 @@ class FileBrowserOpenNewFileException(Exception):
     """
 
     """
+
+
+class HelpMenuException(Exception):
+    """"""
 
 
 class DestroyTitleMenuException(Exception):
@@ -694,6 +701,14 @@ class TitleBarMenuItem:
         self.menu_items = []
 
 
+class HelpMenuItem(TitleBarMenuItem):
+    def __init__(self):
+        super().__init__("Help")
+
+    def function(self):
+        raise HelpMenuException
+
+
 class FileMenuItem(TitleBarMenuItem):
     def __init__(self):
         super().__init__("File")
@@ -745,9 +760,11 @@ class TitleBar(View):
         self.pres_menu_item = None
         self.pres_menu_item_index = -1
 
-        self.add_menu_item(FileMenuItem())
-        self.add_menu_item(EditMenuItem())
-        self.add_menu_item(DumpMenuItem())
+        self.add_menu_item(HelpMenuItem())
+
+        # self.add_menu_item(FileMenuItem())
+        # self.add_menu_item(EditMenuItem())
+        # self.add_menu_item(DumpMenuItem())
 
         self.exit_button = Button(self, 0, 0, 1)
         self.exit_button.set_text(" Exit ")
@@ -1242,6 +1259,76 @@ class DebugMenu(ScrollView):
         return handle
 
 
+class HelpMenu(ScrollView):
+    def __init__(self):
+        super().__init__()
+        self.draw = False
+
+    def parse_lines(self):
+        attrib_content = []
+        for item in self.scroll_view_text_buffer.lines:
+            if isinstance(item, str):
+                attrib_content.append(AttributedString.ansi_to_attrstr(item))
+            else:
+                attrib_content.append(item)
+
+        self.scroll_view_text_buffer.lines = attrib_content
+
+    def redraw(self):
+        width = self.box.width - 10
+        height = self.box.height
+        lc = '╒'
+        rc = '╕'
+        div = '═'
+        bl = '╘'
+        br = '╛'
+
+        bgcolor = curses.color_pair(1)
+
+        self.box.write(0, 0, lc + ''.ljust(width - 2, div) + rc, bgcolor)
+
+        for line in range(1, height):
+            self.box.write(0, line, VERT_LINE + ''.ljust(width - 2, ' ') + VERT_LINE, bgcolor)
+
+        self.box.write(0, height, bl + ''.ljust(width - 2, div) + br, bgcolor)
+
+        self.scroll_view_text_buffer.process_lines()
+        self.scroll_view_text_buffer.draw_lines()
+
+    def handle_key_press(self, key):
+        if key == curses.KEY_UP:
+            self.scroll_view_text_buffer.scrollcursor = max(0, self.scroll_view_text_buffer.scrollcursor - 1)
+            self.scroll_view_text_buffer.draw_lines()
+            return True
+        elif key == curses.KEY_DOWN:
+            self.scroll_view_text_buffer.scrollcursor = min(
+                self.scroll_view_text_buffer.filled_line_count - self.scroll_view_text_buffer.height + 1,
+                self.scroll_view_text_buffer.scrollcursor + 1)
+            self.scroll_view_text_buffer.draw_lines()
+            return True
+        return False
+
+    def handle_mouse(self, x, y):
+
+        x = x - self.box.x
+        y = y - self.box.y
+
+        handle = False
+        if not self.draw:
+            return handle
+
+        if x < 0 or x > self.box.width or y < 0 or y > self.box.height:
+            self.draw = False
+            handle=True
+
+        if y == 0:
+            handle = True
+            if -1 <= x - self.box.width + 15 <= 1:
+                self.draw = False
+
+        return handle
+
+
 class LoaderStatusView(View):
     def __init__(self):
         super().__init__()
@@ -1329,6 +1416,10 @@ class MenuOverlayRenderingView(View):
     def redraw(self):
         if not self.draw or not self.active_render_menu:
             return
+
+        if len(self.active_render_menu.menu_items) == 0:
+            self.active_render_menu.function()
+            self.draw = False
 
         start = (self.active_menu_start_x + 1, 1)
         width = 30
@@ -1471,15 +1562,15 @@ class KToolMachOLoader:
             item = item.parent
         return count
 
-    @staticmethod
-    def contents_for_file(fd, callback):
+    @classmethod
+    def contents_for_file(cls, fd, callback):
         machofile = MachOFile(fd)
         items = []
         KToolMachOLoader.SL_CNT = len(machofile.slices)
         for macho_slice in machofile.slices:
             KToolMachOLoader.CUR_SL += 1
             try:
-                items.append(KToolMachOLoader.slice_item(macho_slice, callback))
+                items.append(cls.slice_item(macho_slice, callback))
             except Exception as ex:
                 raise ex
         return items
@@ -1708,7 +1799,6 @@ class KToolMachOLoader:
         smi.parse_mmc()
         return smi
 
-
     @staticmethod
     def imports(lib, parent=None, callback=None):
         callback(f'Slice {KToolMachOLoader.CUR_SL}/{KToolMachOLoader.SL_CNT}\nProcessing Imports')
@@ -1797,6 +1887,99 @@ class KToolMachOLoader:
         return menuitem
 
 
+class KToolKernelCacheLoader(KToolMachOLoader):
+
+    @staticmethod
+    def slice_item(macho_slice, callback):
+        loaded_image = Dyld.load(macho_slice)
+        slice_nick = f'Kernel Cache'
+        callback(f'Kernel Cache\nLoading MachO Image')
+        slice_item = SidebarMenuItem(f'Kernel Cache', None, None)
+        kcache = KernelCache(macho_slice.macho_file)
+        slice_item.content = KToolKernelCacheLoader._file(kcache, slice_item, callback).content
+        items = [KToolMachOLoader.load_cmds,
+                 KToolMachOLoader.segments,
+                 KToolMachOLoader.symtab]
+
+        for item in items:
+            try:
+                slice_item.children.append(item(loaded_image, slice_item, callback))
+            except Exception as ex:
+                if KToolMachOLoader.HARD_FAIL:
+                    raise ex
+                else:
+                    pass
+
+        kernel_items = [KToolKernelCacheLoader.get_kexts]
+
+        for item in kernel_items:
+            try:
+                slice_item.children.append(item(kcache, slice_item, callback))
+            except Exception as ex:
+                if KToolMachOLoader.HARD_FAIL:
+                    raise ex
+                else:
+                    pass
+
+        slice_item.show_children = True
+        return slice_item
+
+    @staticmethod
+    def _file(kcache, parent=None, callback=None):
+        file_content_item = MainMenuContentItem()
+        lib = kcache.mach_kernel
+
+        file_content_item.lines.append(f'Kernel Version: §35m{kcache.version}§39m')
+        if lib.uuid:
+            file_content_item.lines.append(f'UUID: §35m{lib.uuid.hex().upper()}§39m')
+        file_content_item.lines.append(f'Platform: §35m{lib.platform.name}§39m')
+
+        file_content_item.lines.append(f'Minimum OS: §35m{lib.minos.x}.{lib.minos.y}.{lib.minos.z}§39m')
+        file_content_item.lines.append(
+            f'SDK Version: §35m{lib.sdk_version.x}.{lib.sdk_version.y}.{lib.sdk_version.z}§39m')
+
+        menuitem = SidebarMenuItem("File Info", file_content_item, parent)
+        menuitem.parse_mmc()
+
+        return menuitem
+
+    @staticmethod
+    def get_kexts(kcache: KernelCache, parent=None, callback=None):
+
+        hnci = MainMenuContentItem()
+        hnci.lines = [kext.name for kext in kcache.kexts]
+        menuitem = SidebarMenuItem("KEXTs", hnci, parent)
+        count = len(kcache.kexts)
+        callback(
+            f'Kernel Cache\nProcessing {count} KEXTs')
+
+        items = []
+        i = 1
+        for kext in kcache.kexts:
+            callback(
+                f'Kernel Cache\nProcessing {count} KEXT \n{i}/{count}')
+            mmci = MainMenuContentItem()
+            mmci.lines = []
+            mmci.lines.append(f'ID: {kext.name}')
+            mmci.lines.append(f'Embedded Version: {kext.version}')
+            
+            if kext.prelink_info:
+                bundle_text = f"Executable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}".split('\n')
+                bundle_text += ['', '']
+
+                bundle_text += pprint.pformat(kext.prelink_info).split('\n')
+
+                mmci.lines += bundle_text
+            sbmi = SidebarMenuItem(kext.name, mmci, menuitem)
+            items.append(sbmi)
+            i += 1
+
+        menuitem.children = items
+
+        menuitem.parse_mmc()
+        return menuitem
+
+
 # # # # #
 #
 # Main Screen:::
@@ -1827,6 +2010,7 @@ class KToolScreen:
         self.mainscreen = MainScreen()
         self.footerbar = FooterBar()
         self.debug_menu = DebugMenu()
+        self.help_menu = HelpMenu()
 
         self.title_menu_overlay = MenuOverlayRenderingView()
         self.loader_status = LoaderStatusView()
@@ -1841,7 +2025,7 @@ class KToolScreen:
         self.last_mouse_event = ""
 
         self.render_group = [self.titlebar, self.sidebar, self.mainscreen, self.footerbar, self.title_menu_overlay,
-                             self.debug_menu, self.loader_status, self.file_browser, self.input_overlay]
+                             self.debug_menu, self.help_menu, self.loader_status, self.file_browser, self.input_overlay]
 
         self.rebuild_all()
 
@@ -1939,16 +2123,19 @@ class KToolScreen:
 
             filename_base = os.path.basename(filename)
 
-            self.sidebar.add_menu_item(
-                SidebarMenuItem(f'{filename_base}', MainMenuContentItem(MAIN_TEXT.split('\n')), None))
-
-            for item in KToolMachOLoader.contents_for_file(fd, self.update_load_status):
-                self.sidebar.add_menu_item(item)
+            first1k = fd.read(0x1000)
+            fd.seek(0)
+            if b'__BOOTDATA\x00\x00\x00\x00\x00\x00' in first1k:
+                for item in KToolKernelCacheLoader.contents_for_file(fd, self.update_load_status):
+                    self.sidebar.add_menu_item(item)
+            else:
+                for item in KToolMachOLoader.contents_for_file(fd, self.update_load_status):
+                    self.sidebar.add_menu_item(item)
 
             self.active_key_handler = self.sidebar
             self.key_handlers = [self.sidebar, self.mainscreen, self.titlebar, self.file_browser]
             self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu,
-                                   self.input_overlay]
+                                   self.input_overlay, self.help_menu]
             self.loader_status.draw = False
             self.input_overlay.draw = False
 
@@ -2009,6 +2196,13 @@ class KToolScreen:
         self.debug_menu.scroll_view_text_buffer.render_attr = curses.color_pair(1)
         self.debug_menu.scroll_view_text_buffer.lines = ls  # ?? We shouldn't need to do this
         self.debug_menu.parse_lines()
+
+        self.help_menu.box = Box(self.root, 5, 5, curses.COLS - 10, curses.LINES - 10)
+        self.help_menu.scroll_view = Box(self.root, 7, 6, curses.COLS - 12, curses.LINES - 12)
+
+        self.help_menu.scroll_view_text_buffer = ScrollingDisplayBuffer(self.help_menu.scroll_view, 0, 0,
+                                                                         curses.COLS - 22, curses.LINES - 12)
+        self.help_menu.scroll_view_text_buffer.lines = MAIN_TEXT.split('\n')
 
         self.file_browser.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)
         self.file_browser.scroll_view = Box(self.root, 5, 4, curses.COLS - 10, curses.LINES - 8)
@@ -2139,7 +2333,19 @@ class KToolScreen:
 
             except PresentTitleMenuException:
                 self.handle_present_menu_exception(True)
-                self.redraw_all()
+                try:
+                    self.redraw_all()
+                # this is so bad
+                except HelpMenuException:
+                    self.handle_present_menu_exception(False)
+                    self.help_menu.draw = True
+                    self.active_key_handler = self.help_menu
+                    try:
+                        self.redraw_all()
+                    except PanicException:
+                        self.teardown()
+                        print(PANIC_STRING)
+                        exit(1)
 
             except DestroyTitleMenuException:
                 self.handle_present_menu_exception(False)
