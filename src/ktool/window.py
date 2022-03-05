@@ -1962,7 +1962,7 @@ class KToolKernelCacheLoader(KToolMachOLoader):
             mmci.lines = []
             mmci.lines.append(f'ID: {kext.name}')
             mmci.lines.append(f'Embedded Version: {kext.version}')
-            
+
             if kext.prelink_info:
                 bundle_text = f"Executable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}".split('\n')
                 bundle_text += ['', '']

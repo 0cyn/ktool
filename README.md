@@ -47,6 +47,7 @@ GUI (Still in active development) ---
 
 MachO Analysis ---
     dump - Tools to reconstruct headers and TBDs from compiled MachOs
+    kcache - Kernel cache specific tools
     list - Print various lists (Classlist, etc.)
     symbols - Print various tables (Symbols, imports, exports)
     info - Print misc info about the target mach-o
