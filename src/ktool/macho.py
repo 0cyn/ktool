@@ -288,7 +288,7 @@ class _VirtualMemoryMap:
     def add_segment(self, segment: Segment):
         if segment.file_address == 0 and segment.size != 0:
             self.vm_base_addr = segment.vm_address
-            if segment.vm_address >= 0xFFFFFFFF:
+            if segment.vm_address >= 0xFFFFFFFFF:
                 self.kaddr_64_mode = True
         if len(segment.sections) == 0:
             seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,
