@@ -42,11 +42,11 @@ class ImageHeader(Constructable):
     """
 
     @classmethod
-    def from_image(cls, macho_slice) -> 'ImageHeader':
+    def from_image(cls, macho_slice, offset=0) -> 'ImageHeader':
 
         image_header = ImageHeader()
 
-        offset = 0
+        offset = offset
 
         header: dyld_header = macho_slice.load_struct(offset, dyld_header)
         if header.magic == MH_MAGIC_64:
@@ -104,6 +104,9 @@ class ImageHeader(Constructable):
     def from_values(cls, *args, **kwargs):
         pass
 
+    def __str__(self):
+        return f'MachO Header - 64 bit VM: {self.is64} | File Type: {self.filetype} | Flags: {self.flags} | Load Cmd Count: {len(self.load_commands)}'
+
     def __init__(self):
         self.is64 = False
         self.dyld_header = None
@@ -145,7 +148,7 @@ class Image:
 
         self.segments: Dict[str, Segment] = {}
 
-        self.vm = _VirtualMemoryMap(macho_slice)
+        self.vm: _VirtualMemoryMap = _VirtualMemoryMap(macho_slice)
 
         self.info: Union[dyld_info_command, None] = None
         self.dylib: Union[ExternalDylib, None] = None
@@ -167,7 +170,12 @@ class Image:
         self.import_table: Dict[int, Symbol] = {}
         self.export_table: Dict[int, Symbol] = {}
 
+        self.entry_point = 0
+
         self.function_starts: List[int] = []
+
+        self.thread_state: List[int] = []
+        self._entry_off = 0
 
         self.binding_table = None
         self.weak_binding_table = None
@@ -318,6 +326,20 @@ class Dyld:
                 image.vm.add_segment(segment)
                 image.segments[segment.name] = segment
 
+            elif load_command in [LOAD_COMMAND.THREAD, LOAD_COMMAND.UNIXTHREAD]:
+                cmd: thread_command = cmd
+                thread_state = []
+                for i in range(cmd.count):
+                    off = cmd.off + 16 + (i * 4)
+                    val = image.get_int_at(off, 4)
+                    thread_state.append(val)
+
+                image.thread_state = thread_state
+
+            elif load_command == LOAD_COMMAND.MAIN:
+                cmd: entry_point_command = cmd
+                image._entry_off = cmd.entryoff
+
             elif load_command == LOAD_COMMAND.DYLD_INFO_ONLY:
                 image.info = cmd
 
@@ -458,6 +480,13 @@ class Dyld:
         if image.symbol_table:
             for symbol in image.symbol_table.table:
                 image.symbols[symbol.address] = symbol
+
+        if len(image.thread_state) > 0:
+            image.entry_point = image.thread_state[-4] if image.macho_header.is64 else image.thread_state[-2]
+
+        elif image._entry_off > 0:
+            image.entry_point = image.vm.vm_base_addr + image._entry_off
+
 
 
 class LD64:
