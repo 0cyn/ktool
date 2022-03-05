@@ -24,7 +24,10 @@ from ktool.exceptions import *
 
 import pkg_resources
 
-KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
+try:
+    KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
+except pkg_resources.DistributionNotFound:
+    KTOOL_VERSION = '1.0.0'
 THREAD_COUNT = os.cpu_count() - 1
 
 
