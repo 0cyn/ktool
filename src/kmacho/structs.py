@@ -655,3 +655,17 @@ class encryption_info_command_64(Struct):
         self.cryptsize = 0
         self.cryptid = 0
         self.pad = 0
+
+
+class thread_command(Struct):
+    _FIELDNAMES = ["cmd", "cmdsize", "flavor", "count"]
+    _SIZES = [4, 4, 4, 4]
+    SIZE = sum(_SIZES)
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        self.cmd = 0
+        self.cmdsize = 0
+        self.flavor = 0
+        self.count = 0
+
