@@ -1964,7 +1964,7 @@ class KToolKernelCacheLoader(KToolMachOLoader):
             mmci.lines.append(f'Embedded Version: {kext.version}')
 
             if kext.prelink_info:
-                bundle_text = f"Executable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}".split('\n')
+                bundle_text = f"Executable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | (0xffff000000000000 if kcache.mach_kernel.vm.kaddr_64_mode else 0))}".split('\n')
                 bundle_text += ['', '']
 
                 bundle_text += pprint.pformat(kext.prelink_info).split('\n')
