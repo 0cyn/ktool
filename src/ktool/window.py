@@ -1563,8 +1563,8 @@ class KToolMachOLoader:
         return count
 
     @classmethod
-    def contents_for_file(cls, fd, callback):
-        machofile = MachOFile(fd)
+    def contents_for_file(cls, fd, callback, mmap=True):
+        machofile = MachOFile(fd, use_mmaped_io=mmap)
         items = []
         KToolMachOLoader.SL_CNT = len(machofile.slices)
         for macho_slice in machofile.slices:
@@ -2107,7 +2107,7 @@ class KToolScreen:
         self.loader_status.status_string = msg
         self.redraw_all()
 
-    def load_file(self, filename):
+    def load_file(self, filename, mmap=True):
         """
         Load a file by filename into the GUI.
 
@@ -2132,7 +2132,7 @@ class KToolScreen:
                 for item in KToolKernelCacheLoader.contents_for_file(fd, self.update_load_status):
                     self.sidebar.add_menu_item(item)
             else:
-                for item in KToolMachOLoader.contents_for_file(fd, self.update_load_status):
+                for item in KToolMachOLoader.contents_for_file(fd, self.update_load_status, mmap):
                     self.sidebar.add_menu_item(item)
 
             self.active_key_handler = self.sidebar

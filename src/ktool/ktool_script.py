@@ -449,7 +449,7 @@ def _open(args):
         screen = KToolScreen(args.hard_fail)
         log.LOG_FUNC = screen.ktool_dbg_print_func
         log.LOG_ERR = screen.ktool_dbg_print_err_func
-        screen.load_file(args.filename)
+        screen.load_file(args.filename, MMAP_ENABLED)
     except KeyboardInterrupt:
         external_hard_fault_teardown()
         print('Hard Faulted. This was likely due to a curses error causing a freeze while rendering.')
