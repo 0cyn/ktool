@@ -11,11 +11,14 @@
 #
 #  Copyright (c) kat 2022.
 #
+from io import BytesIO
+
 import ktool
 from kmacho.structs import *
-from ktool import MachOFile, Image
+from ktool import MachOFile, Image, log
 from ktool.dyld import ImageHeader, Dyld
 import ktool.kplistlib as plistlib
+from ktool.exceptions import UnsupportedFiletypeException
 
 
 class kmod_info_64(Struct):
@@ -32,9 +35,13 @@ class kmod_info_64(Struct):
 
 
 class Kext:
-    def __init__(self, image: Image, kmod_info, start_addr):
+    def __init__(self):
 
         self.prelink_info = {}
+
+        self.name = ""
+        self.version = ""
+        self.start_addr = 0
 
         self.development_region = ""
         self.executable_name = ""
@@ -43,6 +50,27 @@ class Kext:
         self.package_type = ""
         self.info_string = ""
         self.version_str = ""
+
+        self.image = None
+
+
+class EmbeddedKext(Kext):
+    def __init__(self, image, prelink_info):
+        super().__init__()
+        self.start_addr = prelink_info['_PrelinkExecutableLoadAddr']
+        self.size = prelink_info['_PrelinkExecutableSize']
+        self.name = prelink_info['CFBundleIdentifier']
+        self.version = prelink_info['CFBundleVersion']
+
+        self.backing_file = BytesIO()
+        self.backing_file.write(image.get_bytes_at(self.start_addr, self.size, vm=True))
+        self.backing_file.seek(0)
+        self.image = ktool.load_image(self.backing_file)
+
+
+class MergedKext(Kext):
+    def __init__(self, image: Image, kmod_info, start_addr):
+        super().__init__()
 
         self.backing_image = image
         self.backing_slice = image.slice
@@ -92,7 +120,20 @@ class KernelCache:
         if '__kmod_info' in self.mach_kernel.segments['__PRELINK_INFO'].sections:
             self._process_merged_kexts()
 
+        if len(self.kexts) == 0:
+            if '_PrelinkExecutableLoadAddr' in self.prelink_info['com.apple.kpi.mach']:
+                self._process_kexts_from_prelink_info()
+
         self._process_kexts()
+
+    def _process_kexts_from_prelink_info(self):
+        for kext_name, kext in self.prelink_info.items():
+            try:
+                self.kexts.append(EmbeddedKext(self.mach_kernel, kext))
+            except UnsupportedFiletypeException:
+                log.debug(f'Bad Header(?) at {kext_name}')
+            except KeyError:
+                pass
 
     def _process_kexts(self):
         for kext in self.kexts:
@@ -135,7 +176,7 @@ class KernelCache:
             info = self.mach_kernel.load_struct(info_loc, kmod_info_64, vm=True)
 
             start_addr = kext_starts[i]
-            kext = Kext(self.mach_kernel, info, start_addr)
+            kext = MergedKext(self.mach_kernel, info, start_addr)
             self.kexts.append(kext)
 
 

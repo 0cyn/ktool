@@ -49,7 +49,7 @@ from ktool.generator import FatMachOGenerator
 from ktool.util import opts, version_output, ktool_print
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
-from ktool.kcache import KernelCache, Kext
+from ktool.kcache import KernelCache, Kext, EmbeddedKext
 
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
@@ -310,9 +310,10 @@ def main():
 
     parser_kcache.add_argument('--kexts', dest='get_kexts', action='store_true', help='List kexts embedded')
     parser_kcache.add_argument('--kext', dest='get_kext')
+    parser_kcache.add_argument('--extract', dest='do_extract')
     parser_kcache.add_argument('filename', nargs='?', default='')
 
-    parser_kcache.set_defaults(func=kcache, get_kext = None, get_kexts=False)
+    parser_kcache.set_defaults(func=kcache, get_kext = None, do_extract=None, get_kexts=False)
 
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
@@ -948,7 +949,7 @@ List Kext IDS (And versions, and executable names if they were found)
 Dump info for a specific kext
 > ktool kcache --kext [Bundle ID or Executable Name] [filename]
     """
-    require_args(args, one_of=['get_kexts', 'get_kext'])
+    require_args(args, one_of=['get_kexts', 'get_kext', 'do_extract'])
 
     fp = open(args.filename, 'rb')
     macho_file = ktool.load_macho_file(fp)
@@ -973,6 +974,24 @@ Dump info for a specific kext
         if isinstance(kext, Kext):
             bundle_text = f"Bundle ID: {kext.id}\nExecutable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}"
             print(bundle_text)
+        else:
+            print('Kext Not Found')
+
+    elif args.do_extract:
+        kext = None
+        for _kext in kernel_cache.kexts:
+            if args.do_extract == _kext.executable_name:
+                kext = _kext
+                break
+        if not kext:
+            for _kext in kernel_cache.kexts:
+                if args.do_extract == _kext.id:
+                    kext = _kext
+                    break
+
+        if isinstance(kext, EmbeddedKext):
+            with open(kext.id.split('.')[-1], 'wb') as out:
+                out.write(kext.image.slice.full_bytes_for_slice())
         else:
             print('Kext Not Found')
 
