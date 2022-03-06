@@ -2062,8 +2062,11 @@ class KToolScreen:
 
         self.supports_color = curses.has_colors()
         for i in range(0, curses.COLORS):
-            curses.init_pair(i + 1, i, -1)
-            self.supported_colors += 1
+            try:
+                curses.init_pair(i + 1, i, -1)
+                self.supported_colors += 1
+            except ValueError:
+                pass
 
         return stdscr
 
