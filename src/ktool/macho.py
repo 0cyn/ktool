@@ -183,6 +183,8 @@ class VM:
         self.tlb = {}
         self.vm_base_addr = None
 
+        self.dirty = False
+
     def vm_check(self, address):
         try:
             self.translate(address)
@@ -195,6 +197,12 @@ class VM:
             return
         if self.vm_base_addr is None:
             self.vm_base_addr = segment.vm_address
+        if self.dirty or segment.vm_address % (self.page_size + 1) != 0:
+            self.dirty = True
+            log.error(f'Severely malformed image: Cannot map segment to 4K pages')
+            log.warn("Manually mapping every single address in the segment")
+            for i in range(segment.size):
+                self.tlb[segment.vm_address+i] = segment.file_address+i
         self.map_pages(segment.file_address, segment.vm_address, segment.size)
 
     def translate(self, address) -> int:

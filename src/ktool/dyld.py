@@ -322,7 +322,6 @@ class Dyld:
                 segment = Segment(image, cmd)
 
                 log.info(f'Loaded Segment {segment.name}')
-
                 image.vm.add_segment(segment)
                 image.segments[segment.name] = segment
 
