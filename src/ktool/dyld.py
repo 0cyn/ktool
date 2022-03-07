@@ -29,7 +29,7 @@ from kmacho import (
 from kmacho.structs import *
 from kmacho.base import Constructable
 from kmacho.fixups import *
-from ktool.macho import _VirtualMemoryMap, Segment, Slice
+from ktool.macho import Segment, Slice, VM
 from ktool.util import log, macho_is_malformed, ignore
 
 
@@ -48,9 +48,9 @@ class ImageHeader(Constructable):
 
         offset = offset
 
-        header: dyld_header = macho_slice.load_struct(offset, dyld_header)
+        header: mach_header = macho_slice.load_struct(offset, mach_header)
         if header.magic == MH_MAGIC_64:
-            header: dyld_header_64 = macho_slice.load_struct(offset, dyld_header_64)
+            header: mach_header_64 = macho_slice.load_struct(offset, mach_header_64)
             image_header.is64 = True
 
         raw = header.raw
@@ -148,7 +148,7 @@ class Image:
 
         self.segments: Dict[str, Segment] = {}
 
-        self.vm: _VirtualMemoryMap = _VirtualMemoryMap(macho_slice)
+        self.vm: VM = VM(page_size=0x1000)
 
         self.info: Union[dyld_info_command, None] = None
         self.dylib: Union[ExternalDylib, None] = None
@@ -202,7 +202,7 @@ class Image:
         :return: `length` Bytes at `offset`
         """
         if vm:
-            offset = self.vm.get_file_address(offset, section_name)
+            offset = self.vm.translate(offset)
         return self.slice.get_int_at(offset, length)
 
     def get_bytes_at(self, offset: int, length: int, vm=False, section_name=None):
@@ -216,7 +216,7 @@ class Image:
         :return: `length` Bytes at `offset`
         """
         if vm:
-            offset = self.vm.get_file_address(offset, section_name)
+            offset = self.vm.translate(offset)
         return self.slice.get_bytes_at(offset, length)
 
     def load_struct(self, address: int, struct_type, vm=False, section_name=None, endian="little", force_reload=False):
@@ -232,7 +232,7 @@ class Image:
         """
         if address not in self.struct_cache or force_reload:
             if vm:
-                address = self.vm.get_file_address(address, section_name)
+                address = self.vm.translate(address)
             struct = self.slice.load_struct(address, struct_type, endian)
             self.struct_cache[address] = struct
             return struct
@@ -250,7 +250,7 @@ class Image:
         :return: The loaded string.
         """
         if vm:
-            address = self.vm.get_file_address(address, section_name)
+            address = self.vm.translate(address)
         return self.slice.get_str_at(address, count)
 
     def get_cstr_at(self, address: int, limit: int = 0, vm=False, section_name=None):
@@ -264,7 +264,7 @@ class Image:
         :return: The loaded C string
         """
         if vm:
-            address = self.vm.get_file_address(address, section_name)
+            address = self.vm.translate(address)
         return self.slice.get_cstr_at(address, limit)
 
     def decode_uleb128(self, readHead: int):
@@ -496,7 +496,7 @@ class LD64:
 
         load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
 
-        off = dyld_header.SIZE
+        off = mach_header.SIZE
         off += image.macho_header.dyld_header.loadsize
         raw = load_cmd.raw
         size = len(load_cmd.raw)
@@ -533,7 +533,7 @@ class LD64:
 
         load_cmd.cmdsize = cmd_size
 
-        off = dyld_header.SIZE
+        off = mach_header.SIZE
         off += image.macho_header.dyld_header.loadsize
         raw = load_cmd.raw + encoded + (b'\x00' * (cmd_size - (lc_type.SIZE + len(encoded))))
         log.debug_tm(f'Padding Size {(cmd_size - (lc_type.SIZE + len(encoded)))}')

@@ -1641,12 +1641,13 @@ class KToolMachOLoader:
                 itm.lines.append(hextab)
                 item.children.append(SidebarMenuItem(secname, itm, item))
             ssmi.children.append(item)
-            mmci.lines.append(segtable)
             if len(segm.sections.items()) == 0:
                 if 'PAGEZERO' not in segname:
                     hextab = HexDumpTable()
                     hextab.hex = lib.slice.get_bytes_at(segm.file_address, segm.size)
                     mmci.lines.append(hextab)
+            else:
+                mmci.lines.append(segtable)
 
         smmci.lines.append(table)
 
@@ -1705,7 +1706,7 @@ class KToolMachOLoader:
 
         for cmd in lib.macho_header.load_commands:
             mmci = MainMenuContentItem()
-            mmci.lines = str(cmd).split('\n')
+            mmci.lines = cmd.render_indented().split('\n')
             mmci.lines.append('')
             raw: bytes = lib.slice.get_bytes_at(cmd.off, cmd.cmdsize)
             hexdump = HexDumpTable()

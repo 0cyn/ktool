@@ -131,6 +131,14 @@ class Struct:
             text += f'{field}={field_item}, '
         return text[:-2] + ')'
 
+    def render_indented(self) -> str:
+        text = f'{self.__class__.__name__}\n'
+        for field in self._fields:
+            field_item = self.__getattribute__(field) if isinstance(self.__getattribute__(field), bytearray) else hex(
+                self.__getattribute__(field))
+            text += f'  {field}={field_item}\n'
+        return text
+
     def __init__(self, fields=None, sizes=None, byte_order="little", no_patch=False):
 
         if sizes is None:
@@ -262,7 +270,7 @@ class fat_arch(Struct):
         self.align = 0
 
 
-class dyld_header(Struct):
+class mach_header(Struct):
     _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags']
     _SIZES = [4, 4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
@@ -278,7 +286,7 @@ class dyld_header(Struct):
         self.flags = 0
 
 
-class dyld_header_64(Struct):
+class mach_header_64(Struct):
     _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags', 'reserved']
     _SIZES = [4, 4, 4, 4, 4, 4, 4, 4]
     SIZE = sum(_SIZES)
