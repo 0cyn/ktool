@@ -308,12 +308,13 @@ def main():
 
     parser_kcache = subparsers.add_parser('kcache', help='Kernel Cache Processing')
 
+    parser_kcache.add_argument('--info', dest='get_info', action='store_true', help='Basic KCache Info')
     parser_kcache.add_argument('--kexts', dest='get_kexts', action='store_true', help='List kexts embedded')
     parser_kcache.add_argument('--kext', dest='get_kext')
     parser_kcache.add_argument('--extract', dest='do_extract')
     parser_kcache.add_argument('filename', nargs='?', default='')
 
-    parser_kcache.set_defaults(func=kcache, get_kext = None, do_extract=None, get_kexts=False)
+    parser_kcache.set_defaults(func=kcache, get_kext = None, get_info=False, do_extract=None, get_kexts=False)
 
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
@@ -949,13 +950,16 @@ List Kext IDS (And versions, and executable names if they were found)
 Dump info for a specific kext
 > ktool kcache --kext [Bundle ID or Executable Name] [filename]
     """
-    require_args(args, one_of=['get_kexts', 'get_kext', 'do_extract'])
+    require_args(args, one_of=['get_info', 'get_kexts', 'get_kext', 'do_extract'])
 
     fp = open(args.filename, 'rb')
     macho_file = ktool.load_macho_file(fp)
     kernel_cache = KernelCache(macho_file)
 
-    if args.get_kexts:
+    if args.get_info:
+        print(kernel_cache.version_str)
+
+    elif args.get_kexts:
         for kext in kernel_cache.kexts:
             print(f'{kext.name} -> {kext.executable_name} ({kext.version})')
 

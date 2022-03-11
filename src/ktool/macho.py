@@ -16,7 +16,7 @@ import os
 from collections import namedtuple
 from enum import Enum
 from io import BytesIO
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Union
 
 from kmacho import *
 from kmacho.structs import *
@@ -182,8 +182,10 @@ class VM:
         self.page_table = {}
         self.tlb = {}
         self.vm_base_addr = None
-
         self.dirty = False
+
+        self.detag_kern_64 = False
+        self.detag_64 = False
 
     def vm_check(self, address):
         try:
@@ -199,13 +201,18 @@ class VM:
             self.vm_base_addr = segment.vm_address
         if self.dirty or segment.vm_address % (self.page_size + 1) != 0:
             self.dirty = True
-            log.error(f'Severely malformed image: Cannot map segment to 4K pages')
-            log.warn("Manually mapping every single address in the segment")
-            for i in range(segment.size):
-                self.tlb[segment.vm_address+i] = segment.file_address+i
+            log.warn(f'MachO File could not be aligned ')
+            raise MachOAlignmentError
         self.map_pages(segment.file_address, segment.vm_address, segment.size)
 
     def translate(self, address) -> int:
+
+        if self.detag_kern_64:
+            address = address | (0xFFFF << 12*4)
+
+        if self.detag_64:
+            address = address & 0xFFFFFFFFF
+
         try:
             return self.tlb[address]
         except KeyError:
@@ -226,6 +233,80 @@ class VM:
                         i * (self.page_size + 1))
 
 
+vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr", "name"])
+
+
+class MisalignedVM:
+    """
+    This is the manual backup if the image cant be mapped to 16/4k segments
+    """
+
+    def __init__(self, macho_slice):
+        # name: vm_obj
+        self.slice = macho_slice
+
+        self.detag_kern_64 = False
+        self.detag_64 = False
+
+        self.map = {}
+        self.stats = {}
+        self.vm_base_addr = 0
+        self.sorted_map = {}
+        self.cache = {}
+
+    def vm_check(self, vm_address):
+        try:
+            self.translate(vm_address)
+            return True
+        except ValueError:
+            return False
+
+    def translate(self, vm_address: int) -> int:
+        # This function gets called *a lot*
+        # It needs to be fast as shit.
+
+        # TODO: Implement proper chained fixup size processing, so we dont need to limit pointers to 0xFFFFFFFF
+        vm_address = 0xFFFFFFFFF & vm_address
+
+        if self.detag_kern_64:
+            vm_address += 0xFFFFFFF000000000
+
+        if vm_address in self.cache:
+            return self.cache[vm_address]
+
+        for o in self.map.values():
+            # noinspection PyChainedComparisons
+            if vm_address >= o.vmaddr and o.vmend >= vm_address:
+                file_addr = o.fileaddr + vm_address - o.vmaddr
+                self.cache[vm_address] = file_addr
+                return file_addr
+
+        raise ValueError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
+
+    def add_segment(self, segment: Segment):
+        if segment.file_address == 0 and segment.size != 0:
+            self.vm_base_addr = segment.vm_address
+
+            if segment.vm_address >= 0xFFFFFFFFF:
+                self.detag_kern_64 = True
+
+        if len(segment.sections) == 0:
+            seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,
+                             segment.name)
+            log.info(str(seg_obj))
+            self.map[segment.name] = seg_obj
+            self.stats[segment.name] = 0
+        else:
+            for section in segment.sections.values():
+                name = section.name if section.name not in self.map.keys() else section.name + '2'
+                sect_obj = vm_obj(section.vm_address, section.vm_address + section.size, section.size,
+                                  section.file_address, name)
+                log.info(str(sect_obj))
+                self.map[name] = sect_obj
+                self.sorted_map = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
+                self.stats[name] = 0
+
+
 class Slice:
     def __init__(self, macho_file: MachOFile, arch_struct: fat_arch = None, offset=0):
         self.macho_file: MachOFile = macho_file
@@ -236,11 +317,13 @@ class Slice:
             self.get_bytes_at = self._mmap_get_bytes_at
             self.get_str_at = self._mmap_get_str_at
             self.get_cstr_at = self._mmap_get_cstr_at
+            self.find = self._mmap_find
         else:
             self.get_int_at = self._bio_get_int_at
             self.get_bytes_at = self._bio_get_bytes_at
             self.get_str_at = self._bio_get_str_at
             self.get_cstr_at = self._bio_get_cstr_at
+            self.find = self._bio_find
 
         self.patches = {}
 
@@ -310,6 +393,20 @@ class Slice:
                     data[patch_loc + i] = byte
                     i += 1
             return data
+
+    def _mmap_find(self, pattern: Union[str, bytes]):
+        if isinstance(pattern, str):
+            pattern = pattern.encode('utf-8')
+        addr = self.macho_file.file[self.offset:self.offset+self.size].find(pattern)
+        if addr == -1:
+            return -1
+        return addr + self.offset
+
+    def _bio_find(self, pattern: Union[str, bytes]):
+        addr = self.macho_file.file_data[self.offset:self.offset+self.size].find(pattern)
+        if addr == -1:
+            return -1
+        return addr + self.offset
 
     def load_struct(self, addr: int, struct_type, endian="little"):
         size = struct_type.SIZE

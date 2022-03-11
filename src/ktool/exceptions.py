@@ -19,6 +19,11 @@ class MalformedMachOException(Exception):
     """
 
 
+class MachOAlignmentError(Exception):
+    """
+    """
+
+
 class UnsupportedFiletypeException(Exception):
     """
     """

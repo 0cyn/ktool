@@ -82,13 +82,14 @@ class MergedKext(Kext):
         self.start_addr = start_addr
         self.info = kmod_info
 
-        file_base_addr = image.vm.get_file_address(start_addr)
+        file_base_addr = image.vm.translate(start_addr)
 
         # cool. we have a basic set of stuff in place, lets bootstrap up an Image from it.
 
         self.mach_header = ImageHeader.from_image(self.backing_slice, file_base_addr)
         self.image = Image(self.backing_slice)
         self.image.macho_header = self.mach_header
+        self.image.vm_realign(yell_about_misalignment=False)
 
         # noinspection PyProtectedMember
         Dyld._parse_load_commands(self.image)
@@ -105,6 +106,9 @@ class KernelCache:
         self.mach_kernel_file = macho_file
         self.mach_kernel = ktool.load_image(macho_file)
 
+        if self.mach_kernel.macho_header.is64:
+            self.mach_kernel.vm.detag_kern_64 = True
+
         self.kexts = []
 
         self.prelink_info = {}
@@ -114,8 +118,17 @@ class KernelCache:
 
         self.version = self.prelink_info['com.apple.kpi.mach']['CFBundleVersion']
 
-        # there is (that i know of, anyways) no official name for the old/new kext styles, so we're going with
-        # 'normal' (pre ios 12) and 'merged' (post ios 12), per bazad's old blog post.
+        self.version_str = ""
+        vloc = self.mach_kernel.slice.find('@(#)VERSION:')
+        if not self.mach_kernel.macho_header.is64:
+            #  ???????????????????????????????????!??!?!???
+            vloc -= 28
+        self.version_str = self.mach_kernel.get_cstr_at(vloc)
+        dat = self.version_str.split('xnu_')[-1].split('/')[-1].lower()
+
+        self.release_type = dat.split('_')[0]
+        self.arch = dat.split('_')[1]
+        self.soc = dat.split('_')[2]
 
         if '__kmod_info' in self.mach_kernel.segments['__PRELINK_INFO'].sections:
             self._process_merged_kexts()

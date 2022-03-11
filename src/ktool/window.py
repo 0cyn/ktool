@@ -1930,7 +1930,14 @@ class KToolKernelCacheLoader(KToolMachOLoader):
         file_content_item = MainMenuContentItem()
         lib = kcache.mach_kernel
 
+        file_content_item.lines.append(f'Release Type: §35m{kcache.release_type}§39m')
+        file_content_item.lines.append(f'SOC: §35m{kcache.soc}§39m')
+        file_content_item.lines.append(f'Arch: §35m{kcache.arch}§39m')
+
+        file_content_item.lines.append('')
+
         file_content_item.lines.append(f'Kernel Version: §35m{kcache.version}§39m')
+        file_content_item.lines.append(f'{kcache.version_str}')
         if lib.uuid:
             file_content_item.lines.append(f'UUID: §35m{lib.uuid.hex().upper()}§39m')
         file_content_item.lines.append(f'Platform: §35m{lib.platform.name}§39m')
@@ -1965,7 +1972,7 @@ class KToolKernelCacheLoader(KToolMachOLoader):
             mmci.lines.append(f'Embedded Version: {kext.version}')
 
             if kext.prelink_info:
-                bundle_text = f"Executable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | (0xffff000000000000 if kcache.mach_kernel.vm.kaddr_64_mode else 0))}".split('\n')
+                bundle_text = f"Executable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | (0xffff000000000000 if kcache.mach_kernel.vm.detag_kern_64 else 0))}".split('\n')
                 bundle_text += ['', '']
 
                 bundle_text += pprint.pformat(kext.prelink_info).split('\n')

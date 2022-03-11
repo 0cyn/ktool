@@ -29,7 +29,7 @@ from kmacho import (
 from kmacho.structs import *
 from kmacho.base import Constructable
 from kmacho.fixups import *
-from ktool.macho import Segment, Slice, VM
+from ktool.macho import Segment, Slice, VM, MisalignedVM
 from ktool.util import log, macho_is_malformed, ignore
 
 
@@ -138,8 +138,12 @@ class Image:
         """
         self.slice: Slice = macho_slice
 
+        self.vm = None
+
         if self.slice:
             self.macho_header: ImageHeader = ImageHeader.from_image(macho_slice=macho_slice)
+
+            self.vm_realign()
 
         self.base_name = ""  # copy of self.name
         self.install_name = ""
@@ -147,8 +151,6 @@ class Image:
         self.linked_images: List[ExternalDylib] = []
 
         self.segments: Dict[str, Segment] = {}
-
-        self.vm: VM = VM(page_size=0x1000)
 
         self.info: Union[dyld_info_command, None] = None
         self.dylib: Union[ExternalDylib, None] = None
@@ -187,6 +189,32 @@ class Image:
         self.symbol_table: Union[SymbolTable, None] = None
 
         self.struct_cache: Dict[int, Struct] = {}
+
+    def vm_realign(self, yell_about_misalignment=True):
+
+        align_by = 0x4000
+        aligned = False
+        while not aligned:
+            aligned = True
+            for cmd in self.macho_header.load_commands:
+                if cmd.cmd in [LOAD_COMMAND.SEGMENT.value, LOAD_COMMAND.SEGMENT_64.value]:
+                    cmd: segment_command_64 = cmd
+                    if cmd.vmaddr % align_by != 0:
+                        if align_by == 0x4000:
+                            align_by = 0x1000
+                            aligned = False
+                            break
+                        else:
+                            align_by = 0
+                            aligned = True
+                            break
+        if align_by != 0:
+            log.info(f'Aligned to {hex(align_by)} pages')
+            self.vm: VM = VM(page_size=align_by)
+        else:
+            if yell_about_misalignment:
+                log.warn("MachO cannot be aligned to 16k or 4k pages. Swapping to fallback mapping.")
+            self.vm: MisalignedVM = MisalignedVM(self.slice)
 
     def vm_check(self, address):
         return self.vm.vm_check(address)
