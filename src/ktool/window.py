@@ -1611,7 +1611,7 @@ class KToolMachOLoader:
             slice_item.children += KToolMachOLoader.swift_items(loaded_image, slice_item, callback)
         except Exception as ex:
             if KToolMachOLoader.HARD_FAIL:
-                raise ex
+                pass
             else:
                 pass
         slice_item.show_children = True

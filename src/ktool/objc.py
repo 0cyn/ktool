@@ -904,9 +904,14 @@ class Category(Constructable):
 
     @classmethod
     def from_image(cls, objc_image: ObjCImage, category_ptr):
-        loc = objc_image.get_int_at(category_ptr, 8, vm=True)
-        struct: objc2_category = objc_image.load_struct(loc, objc2_category, vm=True)
-        name = objc_image.get_cstr_at(struct.name, vm=True)
+        try:
+            loc = objc_image.get_int_at(category_ptr, 8, vm=True)
+            struct: objc2_category = objc_image.load_struct(loc, objc2_category, vm=True)
+            name = objc_image.get_cstr_at(struct.name, vm=True)
+        except ValueError as ex:
+            log.error("Couldn't load basic info about a Category: " + str(ex))
+            return None
+        
         classname = ""
         try:
             sym = objc_image.image.import_table[loc + 8]

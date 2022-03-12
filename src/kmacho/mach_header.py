@@ -258,8 +258,6 @@ class CPUSubTypeARM(IntEnum):
 class CPUSubTypeARM64(IntEnum):
     ALL = 0
     ARM64E = 2
-    ARM64E2 = 0x80000002
-    ARM64E3 = 0xc0000002
 
 
 class CPUSubTypeSPARC(IntEnum):

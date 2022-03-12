@@ -24,7 +24,7 @@ from kmacho import (
     BINDING_OPCODE,
     LOAD_COMMAND_MAP,
     BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB,
-    BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64
+    BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64, CPUType, CPUSubTypeARM64
 )
 from kmacho.structs import *
 from kmacho.base import Constructable
@@ -140,6 +140,8 @@ class Image:
 
         self.vm = None
 
+        self.fallback_vm = MisalignedVM(self.slice)
+
         if self.slice:
             self.macho_header: ImageHeader = ImageHeader.from_image(macho_slice=macho_slice)
 
@@ -194,27 +196,43 @@ class Image:
 
         align_by = 0x4000
         aligned = False
+
+        detag_64 = False
+
+        segs = []
+        for cmd in self.macho_header.load_commands:
+            if cmd.cmd in [LOAD_COMMAND.SEGMENT.value, LOAD_COMMAND.SEGMENT_64.value]:
+                segs.append(cmd)
+            if cmd.cmd == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
+                detag_64 = True
+
+        if self.slice.type == CPUType.ARM64 and self.slice.subtype == CPUSubTypeARM64.ARM64E:
+            detag_64 = True
+
         while not aligned:
             aligned = True
-            for cmd in self.macho_header.load_commands:
-                if cmd.cmd in [LOAD_COMMAND.SEGMENT.value, LOAD_COMMAND.SEGMENT_64.value]:
-                    cmd: segment_command_64 = cmd
-                    if cmd.vmaddr % align_by != 0:
-                        if align_by == 0x4000:
-                            align_by = 0x1000
-                            aligned = False
-                            break
-                        else:
-                            align_by = 0
-                            aligned = True
-                            break
+            for cmd in segs:
+                cmd: segment_command_64 = cmd
+                if cmd.vmaddr % align_by != 0:
+                    if align_by == 0x4000:
+                        align_by = 0x1000
+                        aligned = False
+                        break
+                    else:
+                        align_by = 0
+                        aligned = True
+                        break
+
         if align_by != 0:
             log.info(f'Aligned to {hex(align_by)} pages')
             self.vm: VM = VM(page_size=align_by)
+            self.vm.detag_64 = detag_64
+            self.vm.fallback = self.fallback_vm
         else:
             if yell_about_misalignment:
                 log.warn("MachO cannot be aligned to 16k or 4k pages. Swapping to fallback mapping.")
-            self.vm: MisalignedVM = MisalignedVM(self.slice)
+            self.vm: MisalignedVM = self.fallback_vm
+            self.vm.detag_64 = detag_64
 
     def vm_check(self, address):
         return self.vm.vm_check(address)

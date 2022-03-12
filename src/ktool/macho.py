@@ -184,6 +184,8 @@ class VM:
         self.vm_base_addr = None
         self.dirty = False
 
+        self.fallback: Union[None, MisalignedVM] = None
+
         self.detag_kern_64 = False
         self.detag_64 = False
 
@@ -197,6 +199,9 @@ class VM:
     def add_segment(self, segment: Segment):
         if segment.name == '__PAGEZERO':
             return
+
+        self.fallback.add_segment(segment)
+
         if self.vm_base_addr is None:
             self.vm_base_addr = segment.vm_address
         if self.dirty or segment.vm_address % self.page_size != 0:
@@ -206,6 +211,8 @@ class VM:
         self.map_pages(segment.file_address, segment.vm_address, segment.size)
 
     def translate(self, address) -> int:
+
+        l_addr = address
 
         if self.detag_kern_64:
             address = address | (0xFFFF << 12*4)
@@ -226,7 +233,13 @@ class VM:
             self.tlb[address] = physical_location
             return physical_location
         except KeyError:
-            raise ValueError(f'Address {hex(address)} not in VA Table. (page: {hex(page_location)})')
+
+            log.info(f'Address {hex(address)} not mapped, attempting fallback')
+
+            try:
+                return self.fallback.translate(address)
+            except ValueError:
+                raise ValueError(f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
 
     def map_pages(self, physical_addr, virtual_addr, size):
         for i in range(size // self.page_size):
@@ -522,6 +535,7 @@ class Slice:
 
     def _load_subtype(self, cputype: CPUType):
         cpu_subtype = self.arch_struct.cpu_subtype
+        cpu_subtype = cpu_subtype & 0xFFFF
 
         try:
             sub = CPU_SUBTYPES[cputype]
