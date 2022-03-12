@@ -177,8 +177,8 @@ class VM:
     """
 
     def __init__(self, page_size):
-        self.page_size = page_size - 1
-        self.page_size_bits = self.page_size.bit_length()
+        self.page_size = page_size
+        self.page_size_bits = (self.page_size - 1).bit_length()
         self.page_table = {}
         self.tlb = {}
         self.vm_base_addr = None
@@ -199,9 +199,9 @@ class VM:
             return
         if self.vm_base_addr is None:
             self.vm_base_addr = segment.vm_address
-        if self.dirty or segment.vm_address % (self.page_size + 1) != 0:
+        if self.dirty or segment.vm_address % self.page_size != 0:
             self.dirty = True
-            log.warn(f'MachO File could not be aligned ')
+            log.warn(f'MachO File could not be aligned.')
             raise MachOAlignmentError
         self.map_pages(segment.file_address, segment.vm_address, segment.size)
 
@@ -217,7 +217,8 @@ class VM:
             return self.tlb[address]
         except KeyError:
             pass
-        page_offset = address & self.page_size
+
+        page_offset = address & self.page_size - 1
         page_location = address >> self.page_size_bits
         try:
             phys_page = self.page_table[page_location]
@@ -229,8 +230,8 @@ class VM:
 
     def map_pages(self, physical_addr, virtual_addr, size):
         for i in range(size // self.page_size):
-            self.page_table[virtual_addr + (i * (self.page_size + 1)) >> self.page_size_bits] = physical_addr + (
-                        i * (self.page_size + 1))
+            self.page_table[virtual_addr + (i * self.page_size) >> self.page_size_bits] = physical_addr + (
+                        i * self.page_size)
 
 
 vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr", "name"])
@@ -242,7 +243,6 @@ class MisalignedVM:
     """
 
     def __init__(self, macho_slice):
-        # name: vm_obj
         self.slice = macho_slice
 
         self.detag_kern_64 = False
@@ -262,14 +262,12 @@ class MisalignedVM:
             return False
 
     def translate(self, vm_address: int) -> int:
-        # This function gets called *a lot*
-        # It needs to be fast as shit.
-
-        # TODO: Implement proper chained fixup size processing, so we dont need to limit pointers to 0xFFFFFFFF
-        vm_address = 0xFFFFFFFFF & vm_address
 
         if self.detag_kern_64:
-            vm_address += 0xFFFFFFF000000000
+            vm_address = vm_address | (0xFFFF << 12*4)
+
+        if self.detag_64:
+            vm_address = vm_address & 0xFFFFFFFFF
 
         if vm_address in self.cache:
             return self.cache[vm_address]
@@ -286,9 +284,6 @@ class MisalignedVM:
     def add_segment(self, segment: Segment):
         if segment.file_address == 0 and segment.size != 0:
             self.vm_base_addr = segment.vm_address
-
-            if segment.vm_address >= 0xFFFFFFFFF:
-                self.detag_kern_64 = True
 
         if len(segment.sections) == 0:
             seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,

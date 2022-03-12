@@ -667,15 +667,15 @@ class Class(Constructable):
         else:
             superclass_name = ''
 
-        ro_location = objc2_class_item.info >> (1<<1) << 2
-        # log.info(hex(ro_location))
+        ro_location = objc2_class_item.info >> (1 << 1) << 2
+
         objc2_class_ro_item = objc_image.load_struct(ro_location, objc2_class_ro, vm=True)
         if not meta:
             try:
                 name = objc_image.get_cstr_at(objc2_class_ro_item.name, 0, vm=True)
-            except ValueError as ex:
+            except ValueError:
                 log.warning(f'Classname out of bounds')
-
+                name = ""
         else:
             name = ""
 
@@ -785,7 +785,6 @@ class Class(Constructable):
         self.linked_classes = []
         self.fdec_classes = []
         self.fdec_prots = []
-        # Classes imported in this class from the same mach-o
 
         self.methods = methods
         self.properties = properties
@@ -885,8 +884,6 @@ class Property(Constructable):
         ivar = ""
         property_attributes = []
 
-        # T@"NSMutableSet",&,N,V_busyControllers
-        # T@"NSMutableSet" & N V_busyControllers
         for attribute in attribute_strings:
             indicator = attribute[0]
             if indicator == "T":

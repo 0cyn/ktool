@@ -5,7 +5,7 @@
 #  Outward facing API
 #
 #  Some of these functions are only one line long, but the point is to standardize an outward facing API that allows
-#   me to refactor and change things internally without breaking others' scripts.
+#  me to refactor and change things internally without breaking others' scripts.
 #
 #  This file is part of ktool. ktool is free software that
 #  is made available under the MIT license. Consult the
@@ -108,13 +108,16 @@ def macho_verify(fp: Union[BinaryIO, MachOFile, Slice, Image]) -> None:
 
     if isinstance(fp, Image):
         load_image(fp.slice)
+
     elif isinstance(fp, MachOFile) or isinstance(fp, BinaryIO):
         if isinstance(fp, MachOFile):
             slices = fp.slices
         else:
             slices = load_macho_file(fp)
+
         for macho_slice in slices:
             load_image(macho_slice)
+
     else:
         load_image(fp)
 
@@ -153,11 +156,10 @@ def macho_combine(slices: List[Slice]) -> BytesIO:
 
     fat_file = BytesIO()
     fat_file.write(fat_generator.fat_head)
+
     for arch in fat_generator.fat_archs:
         fat_file.seek(arch.offset)
         fat_file.write(arch.slice.full_bytes_for_slice())
 
     fat_file.seek(0)
     return fat_file
-
-

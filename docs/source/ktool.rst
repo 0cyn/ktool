@@ -56,7 +56,7 @@ It's the root object in the massive tree of information we're going to build up 
 This class on its own does not handle populating its fields.
 The Dyld class set is responsible for loading in and processing the raw values to it.
 
-You should obtain an instance of this class using the public `ktool.load_image()` API
+You should obtain an instance of this class using the public :python:`ktool.load_image()` API
 
 .. py:class:: Image(macho_slice: Slice)
 
@@ -449,40 +449,46 @@ ktool.macho
 .. py:module:: ktool.macho
 
 
-_VirtualMemoryMap
+VM / MisalignedVM
 =================================
 
-This is the translation table used by the Image class to translate VM addresses to their File counterparts
+This is the translation table used by the Image class to translate VM addresses to their File counterparts.
 
-It's accessible via Image().vm . You shouldn't really ever need or use this directly unless you're working on ktool itself, but I cant tell you what to do :)
+You can fetch it using :python:`Image().vm`
 
-.. py:class:: _VirtualMemoryMap(macho_slice: Slice)
+the :python:`VM` class will be used if the image can be mapped to 16k/4k segments. If it can't, it will automatically fall back to :python:`MisalignedVM`. The aligned VM is approximately 2x faster at doing translations.
 
-   VM Map. Initialization does nothing, you will need to populate it yourself with segments/sections
+Their outward APIs are (nearly) identical.
 
-   .. py:method:: vm_check(vm_address) -> bool
-
-      Check whether a specified address is within the VM address ranges
-
-   .. py:method:: get_file_address(vm_address: int, segment_name: str=None) -> int
-
-      Translate a vm address to a file address (if possible). Passing segment_name (if you are *sure* you know which segment it should be in,) will very fractionally speed up the translation. You typically dont need to worry about this, but when performing millions of translations while loading objC metadata, there's a noticeable speed difference.
+.. py:class:: VM
 
    .. py:method:: add_segment(segment: Segment)
 
-      Add a segment (or its individual sections, if it has any) to the VM Mapping.
+      Map a segment.
 
-   .. py:attribute:: map: Dict[str, vm_obj]
+   .. py:method:: translate(address: int) -> int
 
-      Map of segment/section names to namedtuples representing their address ranges
+      Translate VM address to file address.
 
-   .. py:attribute:: vm_base_addr
+   .. py:method:: vm_check(address: int) -> int
 
-      "Base Address" of the file. Used primarily for function starts processing. If you're familiar with dyld source, it's the equivalent to this: https://github.com/apple-opensource/ld64/blob/e28c028b20af187a16a7161d89e91868a450cadc/src/other/dyldinfo.cpp#L156
+      Check whether an address is mapped in the VM. Calls :python:`translate()` and catches any exceptions.
 
-   .. py:attribute:: sorted_map
+   .. py:attribute:: vm_base_addr: int
 
-      VM Object Map sorted in order of addresses
+      “Base Address” of the file. Used primarily for function starts processing. If you’re familiar with dyld source, it’s the equivalent to this: https://github.com/apple-opensource/ld64/blob/e28c028b20af187a16a7161d89e91868a450cadc/src/other/dyldinfo.cpp#L156
+
+   .. py:attribute:: detag_kern_64: bool
+
+      Should we apply 64 bit kernel detagging to translated pointers?
+
+   .. py:attribute:: detag_64: bool
+
+      Should we detag chained fixups from pointers?
+
+   .. py:attribute:: page_size: int
+
+      If this is not a :python:`MisalignedVM`, this attribute exists and contains the page size of the VM
 
 
 ktool.dyld
@@ -865,6 +871,21 @@ ktool.headers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. py:module:: ktool.headers
+
+Header
+=================================
+
+.. py:class:: Header
+
+  .. py:attribute:: text
+
+      Plain generated header contents
+
+      :python:`str(my_header)` will also return this value.
+
+   .. py:method:: generate_highlighted_text()
+
+      generate and return ANSI Color highlighted header text
 
 HeaderUtils
 =================================

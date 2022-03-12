@@ -354,7 +354,6 @@ class Dyld:
                 image.segments[segment.name] = segment
 
             elif load_command in [LOAD_COMMAND.THREAD, LOAD_COMMAND.UNIXTHREAD]:
-                cmd: thread_command = cmd
                 thread_state = []
                 for i in range(cmd.count):
                     off = cmd.off + 16 + (i * 4)
@@ -364,7 +363,6 @@ class Dyld:
                 image.thread_state = thread_state
 
             elif load_command == LOAD_COMMAND.MAIN:
-                cmd: entry_point_command = cmd
                 image._entry_off = cmd.entryoff
 
             elif load_command == LOAD_COMMAND.DYLD_INFO_ONLY:
@@ -406,7 +404,7 @@ class Dyld:
                     image.symbol_table = SymbolTable(image, cmd)
 
             elif load_command == LOAD_COMMAND.DYSYMTAB:
-                cmd = cmd
+                pass
 
             elif load_command == LOAD_COMMAND.UUID:
                 image.uuid = cmd.uuid.to_bytes(16, "little")
@@ -508,13 +506,13 @@ class Dyld:
             for symbol in image.symbol_table.table:
                 image.symbols[symbol.address] = symbol
 
+        # noinspection PyProtectedMember
         if len(image.thread_state) > 0:
             image.entry_point = image.thread_state[-4] if image.macho_header.is64 else image.thread_state[-2]
 
         elif image._entry_off > 0:
+            # noinspection PyProtectedMember
             image.entry_point = image.vm.vm_base_addr + image._entry_off
-
-
 
 class LD64:
     @classmethod

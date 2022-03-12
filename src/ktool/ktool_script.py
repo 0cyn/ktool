@@ -314,7 +314,7 @@ def main():
     parser_kcache.add_argument('--extract', dest='do_extract')
     parser_kcache.add_argument('filename', nargs='?', default='')
 
-    parser_kcache.set_defaults(func=kcache, get_kext = None, get_info=False, do_extract=None, get_kexts=False)
+    parser_kcache.set_defaults(func=kcache, get_kext=None, get_info=False, do_extract=None, get_kexts=False)
 
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
