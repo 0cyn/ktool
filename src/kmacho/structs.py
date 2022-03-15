@@ -9,8 +9,6 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  TODO: whole (non object) implementaion for a multitude of struct field typings. use bitflags + masks.
-#
 #  Copyright (c) kat 2021.
 #
 
@@ -215,7 +213,9 @@ class Struct:
             if isinstance(field_dat, int):
                 data = field_dat.to_bytes(size, byteorder=self.byte_order)
             elif isinstance(field_dat, bytearray) or isinstance(field_dat, bytes):
-                data = self.__getattribute__(field)
+                data = field_dat
+            elif isinstance(field_dat, str):
+                data = field_dat.encode('utf-8')
 
             assert data is not None
 
