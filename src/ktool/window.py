@@ -1176,6 +1176,14 @@ class MainScreen(ScrollView):
             self.scroll_view_text_buffer.scrollcursor = max(0, self.scroll_view_text_buffer.scrollcursor - 1)
             self.scroll_view_text_buffer.draw_lines()
             return True
+        elif key == curses.KEY_PPAGE:
+            j_height = self.scroll_view_text_buffer.box.height - 3
+            for i in range(j_height):
+                self.scroll_view_text_buffer.scrollcursor = max(0, self.scroll_view_text_buffer.scrollcursor - 1)
+
+            self.scroll_view_text_buffer.draw_lines()
+            return True
+
         elif key == curses.KEY_DOWN:
             if self.scroll_view_text_buffer.filled_line_count == -1:
                 self.scroll_view_text_buffer.scrollcursor += 1
@@ -1183,6 +1191,18 @@ class MainScreen(ScrollView):
                 self.scroll_view_text_buffer.scrollcursor = min(
                     self.scroll_view_text_buffer.filled_line_count - self.scroll_view_text_buffer.height + 1,
                     self.scroll_view_text_buffer.scrollcursor + 1)
+            self.scroll_view_text_buffer.draw_lines()
+            return True
+
+        elif key == curses.KEY_NPAGE:
+            j_height = self.scroll_view_text_buffer.box.height - 3
+            for i in range(j_height):
+                if self.scroll_view_text_buffer.filled_line_count == -1:
+                    self.scroll_view_text_buffer.scrollcursor += 1
+                else:
+                    self.scroll_view_text_buffer.scrollcursor = min(
+                        self.scroll_view_text_buffer.filled_line_count - self.scroll_view_text_buffer.height + 1,
+                        self.scroll_view_text_buffer.scrollcursor + 1)
             self.scroll_view_text_buffer.draw_lines()
             return True
         elif key == ord("d"):

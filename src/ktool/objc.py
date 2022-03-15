@@ -454,6 +454,7 @@ class Ivar(Constructable):
 
 class MethodList:
     def __init__(self, image: ObjCImage, methlist_head, base_meths, class_meta, class_name):
+        log.info(f'Opening method list ({str(methlist_head)}) at {hex(base_meths)}')
         self.objc_image = image
         self.methlist_head = methlist_head
         self.meta = class_meta
@@ -669,7 +670,11 @@ class Class(Constructable):
 
         ro_location = objc2_class_item.info >> (1 << 1) << 2
 
-        objc2_class_ro_item = objc_image.load_struct(ro_location, objc2_class_ro, vm=True)
+        try:
+            objc2_class_ro_item = objc_image.load_struct(ro_location, objc2_class_ro, vm=True)
+        except ValueError:
+            log.warn("Class Data is off-image")
+            return None
         if not meta:
             try:
                 name = objc_image.get_cstr_at(objc2_class_ro_item.name, 0, vm=True)
@@ -911,7 +916,7 @@ class Category(Constructable):
         except ValueError as ex:
             log.error("Couldn't load basic info about a Category: " + str(ex))
             return None
-        
+
         classname = ""
         try:
             sym = objc_image.image.import_table[loc + 8]
@@ -925,34 +930,44 @@ class Category(Constructable):
         struct_list = []
 
         if struct.inst_meths != 0:
-            methlist_head = objc_image.load_struct(struct.inst_meths, objc2_meth_list)
-            methlist = MethodList(objc_image, methlist_head, struct.inst_meths, False, f'{classname}+{name}')
+            try:
+                methlist_head = objc_image.load_struct(struct.inst_meths, objc2_meth_list)
+                methlist = MethodList(objc_image, methlist_head, struct.inst_meths, False, f'{classname}+{name}')
 
-            load_errors += methlist.load_errors
-            struct_list += methlist.struct_list
-            methods += methlist.methods
+                load_errors += methlist.load_errors
+                struct_list += methlist.struct_list
+                methods += methlist.methods
+            except ValueError:
+                log.warn("Methods for this category are off-image.")
 
         if struct.class_meths != 0:
-            methlist_head = objc_image.load_struct(struct.class_meths, objc2_meth_list)
-            methlist = MethodList(objc_image, methlist_head, struct.class_meths, True, f'{classname}+{name}')
+            try:
+                methlist_head = objc_image.load_struct(struct.class_meths, objc2_meth_list)
+                methlist = MethodList(objc_image, methlist_head, struct.class_meths, True, f'{classname}+{name}')
 
-            load_errors += methlist.load_errors
-            struct_list += methlist.struct_list
-            methods += methlist.methods
+                load_errors += methlist.load_errors
+                struct_list += methlist.struct_list
+                methods += methlist.methods
+            except ValueError:
+                log.warn("Methods for this category are off-image.")
 
         if struct.props != 0:
-            proplist_head = objc_image.load_struct(struct.props, objc2_prop_list)
+            try:
+                proplist_head = objc_image.load_struct(struct.props, objc2_prop_list)
 
-            ea = proplist_head.off
-            ea += 8
+                ea = proplist_head.off
+                ea += 8
 
-            for i in range(1, proplist_head.count + 1):
-                prop = objc_image.load_struct(ea, objc2_prop, vm=False)
-                try:
-                    properties.append(Property.from_image(objc_image, prop))
-                except Exception as ex:
-                    log.warning(f'Failed to load property with {str(ex)}')
-                ea += objc2_prop.SIZE
+                for i in range(1, proplist_head.count + 1):
+                    prop = objc_image.load_struct(ea, objc2_prop, vm=False)
+                    try:
+                        properties.append(Property.from_image(objc_image, prop))
+                    except Exception as ex:
+                        log.warning(f'Failed to load property with {str(ex)}')
+                    ea += objc2_prop.SIZE
+
+            except ValueError:
+                log.warn("Properties for this category are off-image.")
 
         return cls(classname, name, methods, properties, loc=loc)
 

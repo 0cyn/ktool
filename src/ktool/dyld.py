@@ -425,7 +425,7 @@ class Dyld:
                 pass
 
             elif load_command == LOAD_COMMAND.UUID:
-                image.uuid = cmd.uuid.to_bytes(16, "little")
+                image.uuid = cmd.uuid
                 log.info(f'image UUID: {image.uuid}')
 
             elif load_command == LOAD_COMMAND.SUB_CLIENT:

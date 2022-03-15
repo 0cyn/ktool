@@ -127,7 +127,7 @@ class Section:
     def __init__(self, segment, cmd):
         self.cmd = cmd
         self.segment = segment
-        self.name = segment.image.get_str_at(cmd.off, 16)
+        self.name = cmd.sectname
         self.vm_address = cmd.addr
         self.file_address = cmd.offset
         self.size = cmd.size
@@ -145,11 +145,8 @@ class Segment:
         self.vm_address = cmd.vmaddr
         self.file_address = cmd.fileoff
         self.size = cmd.vmsize
-        self.name = ""
-        for i, c in enumerate(hex(cmd.segname)[2:]):
-            if i % 2 == 0:
-                self.name += chr(int(c + hex(cmd.segname)[2:][i + 1], 16))
-        self.name = self.name[::-1]
+        self.name = cmd.segname
+
         self.sections: Dict[str, Section] = self._process_sections()
 
         self.type = SectionType(S_FLAGS_MASKS.SECTION_TYPE & self.cmd.flags)
