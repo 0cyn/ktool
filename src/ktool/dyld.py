@@ -14,7 +14,6 @@
 #
 import math
 from collections import namedtuple
-from enum import Enum
 from typing import List, Union, Dict
 
 from kmacho import (
@@ -26,7 +25,6 @@ from kmacho import (
     BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB,
     BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64, CPUType, CPUSubTypeARM64
 )
-from kmacho.structs import *
 from kmacho.base import Constructable
 from kmacho.fixups import *
 from ktool.macho import Segment, Slice, VM, MisalignedVM
@@ -532,6 +530,7 @@ class Dyld:
             # noinspection PyProtectedMember
             image.entry_point = image.vm.vm_base_addr + image._entry_off
 
+
 class LD64:
     @classmethod
     def insert_load_cmd(cls, image: Image, lc, fields, index=-1):
@@ -621,8 +620,8 @@ class ExternalDylib:
         self.source_image = source_image
 
         self.install_name = self._get_name(cmd)
-        self.weak = cmd.cmd == 0x18 | 0x80000000
-        self.local = cmd.cmd == 0xD
+        self.weak = cmd.cmd == LOAD_COMMAND.LOAD_WEAK_DYLIB.value
+        self.local = cmd.cmd == LOAD_COMMAND.ID_DYLIB.value
 
     def _get_name(self, cmd) -> str:
         read_address = cmd.off + dylib_command.SIZE
@@ -779,7 +778,7 @@ class ChainedFixups(Constructable):
             # print("[-] Does not contain LC_DYLD_CHAINED_FIXUPS")
             return
 
-        #print(f"[*] Fixup header at = {hex(fixup_hdr_addr)} ")
+        # print(f"[*] Fixup header at = {hex(fixup_hdr_addr)} ")
         fixup_hdr = image.load_struct(fixup_hdr_addr, dyld_chained_fixups_header, vm=False)
 
         imports_format = dyld_chained_import_format(fixup_hdr.imports_format)
@@ -843,7 +842,7 @@ class ChainedFixups(Constructable):
                         segment_offset + (j * page_size) + start
                 )
 
-                #print(f"[*] Chain start at {hex(chain_entry_addr)}")
+                # print(f"[*] Chain start at {hex(chain_entry_addr)}")
 
                 j += 1
                 while True:
@@ -869,13 +868,13 @@ class ChainedFixups(Constructable):
                         # Get the symbol name at the desginated address
                         sym_name = image.get_cstr_at(
                             sym_name_addr)
-                        #print(sym_name + '->' + hex(ordinal))
+                        # print(sym_name + '->' + hex(ordinal))
                         sym = Symbol.from_values(sym_name, sym_name_addr, True, ordinal)
                         symbols.append(sym)
 
-                        #print(f"[*] Binding {sym_name} at {hex(chain_entry_addr)}")
-                        #sym_ref: CoreSymbol = bv.get_symbol_by_raw_name(sym_name)
-                        #if not sym_ref:
+                        # print(f"[*] Binding {sym_name} at {hex(chain_entry_addr)}")
+                        # sym_ref: CoreSymbol = bv.get_symbol_by_raw_name(sym_name)
+                        # if not sym_ref:
                         #    print(
                         #        f"[-] Could not get reference to symbol named {sym_name}, malformed or bug?"
                         #    )

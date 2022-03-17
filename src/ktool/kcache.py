@@ -28,7 +28,7 @@ class kmod_info_64(Struct):
                    'address', 'size', 'hdr_size', 'start_addr', 'stop_addr']
     _SIZES = [uint64_t, int32_t, uint32_t, uint8_t*64, uint8_t*64, int32_t, uint64_t,
               uint64_t, uint64_t, uint64_t, uint64_t, uint64_t]
-    SIZE = sum(_SIZES)
+    SIZE = sum([0xffff & i for i in _SIZES])
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
