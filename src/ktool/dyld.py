@@ -44,9 +44,8 @@ class ImageHeader(Constructable):
 
         image_header = ImageHeader()
 
-        offset = offset
-
         header: mach_header = macho_slice.load_struct(offset, mach_header)
+
         if header.magic == MH_MAGIC_64:
             header: mach_header_64 = macho_slice.load_struct(offset, mach_header_64)
             image_header.is64 = True
@@ -689,7 +688,6 @@ class Symbol(Constructable):
 
     @classmethod
     def from_values(cls, fullname, value, external=False, ordinal=0):
-
         if '_$_' in fullname:
             if fullname.startswith('_OBJC_CLASS_$'):
                 dec_type = SymbolType.CLASS
@@ -771,54 +769,33 @@ class ChainedFixups(Constructable):
 
         import struct
 
-        # Get the location of the start of the fixups metadata
-        # fixup_hdr_addr, read_src, arm_slice_start = get_fixups_addr(bv)
         fixup_hdr_addr = chained_fixup_cmd.dataoff
-        if fixup_hdr_addr is None:
-            # print("[-] Does not contain LC_DYLD_CHAINED_FIXUPS")
-            return
-
-        # print(f"[*] Fixup header at = {hex(fixup_hdr_addr)} ")
         fixup_hdr = image.load_struct(fixup_hdr_addr, dyld_chained_fixups_header, vm=False)
 
         imports_format = dyld_chained_import_format(fixup_hdr.imports_format)
 
         segs_addr = fixup_hdr_addr + fixup_hdr.starts_offset
-
-        # peek the segs count
         seg_count = image.get_int_at(segs_addr, 4, vm=False)
-        # print(f"[*] DYLD_CHAINED_STARTS_IN_IMAGE at = {hex(segs_addr)}, with {hex(seg_count)} segments")
-
-        # start of imports table
         imports_addr = fixup_hdr_addr + fixup_hdr.imports_offset
-        # print(f"[*] Imports table at {hex(imports_addr)} ")
 
-        # start of symbol table
         syms_addr = fixup_hdr_addr + fixup_hdr.symbols_offset
-        # print(f"[*] Symbols table at {hex(syms_addr)}")
 
         segs = []
-        # We wanna read in the the array of offsets from the seg_info_offset
-        # field of dyld_chained_starts_in_image
         for i in range(seg_count):
             s = image.get_int_at((i * 4) + segs_addr + 4, 4)  # read
             segs.append(s)
 
         for i in range(seg_count):
-            # No fixups in this segment, skip
             if segs[i] == 0:
                 continue
             starts_addr = (
                     segs_addr + segs[i]
-            )  # follow the current segment offset from the start of the segments list
+            )
 
-            # read the current dyld_chained_starts_in_segment bytes
             starts_in_segment_data = image.get_bytes_at(starts_addr, 24)
 
-            # unpack those bytes into a nice list of fields
             starts_in_segment = struct.unpack("<IHHQIHH", starts_in_segment_data)
 
-            # Give them nice names for my brain cells lol
             page_count = starts_in_segment[5]
             page_size = starts_in_segment[1]
             segment_offset = starts_in_segment[3]
@@ -827,73 +804,38 @@ class ChainedFixups(Constructable):
             PTR_STRUCT_TYPE_BASE = DYLD_CHAINED_PTR_BASE[dyld_chained_ptr_format(pointer_type)]
             PTR_STRUCT_TYPE_FUNC = DYLD_CHAINED_PTR_FMATS[dyld_chained_ptr_format(pointer_type)]
 
-            # read the array of page_starts from dyld_chained_starts_in_segment
             page_starts_data = image.get_bytes_at(starts_addr + 22, page_count * 2)
             page_starts = struct.unpack("<" + ("H" * page_count), page_starts_data)
 
-            # handle each page start
             for (j, start) in enumerate(page_starts):
-                # DYLD_CHAINED_PTR_START_NONE, denotes a page with no fixups
                 if start == DYLD_CHAINED_PTR_START_NONE:
                     continue
 
-                # The chain entry address is the offset into the raw view
                 chain_entry_addr = (
                         segment_offset + (j * page_size) + start
                 )
-
-                # print(f"[*] Chain start at {hex(chain_entry_addr)}")
 
                 j += 1
                 while True:
                     content = image.get_int_at(chain_entry_addr, 8)
                     item = image.load_struct(chain_entry_addr, PTR_STRUCT_TYPE_BASE, vm=False)
                     item = image.load_struct(chain_entry_addr, PTR_STRUCT_TYPE_FUNC(item), vm=False, force_reload=True)
-                    # print(item)
+
                     offset = content & 0xFFFFFFFF
                     nxt = (content >> 50) & 2047
                     bind = (content >> 62) & 1
-                    # print(f'o: {offset} n: {nxt} b: {bind}')
-                    # handle symbol binding
                     if bind == 1:
-                        # In the binding case, `offset` is an entry in the imports table
-                        # The import entry is a DYLD_CHAINED_IMPORT. The low 23 bits contain
-                        # the offset into the symbol table to lookup (DYLD_CHAINED_IMPORT.name_offset)
                         import_entry = image.get_int_at(imports_addr + offset * 4, 4)
-                        # print(bin(import_entry))
                         ordinal = import_entry & 0xFF
                         sym_name_offset = import_entry >> 9
                         sym_name_addr = syms_addr + sym_name_offset
 
-                        # Get the symbol name at the desginated address
                         sym_name = image.get_cstr_at(
                             sym_name_addr)
-                        # print(sym_name + '->' + hex(ordinal))
                         sym = Symbol.from_values(sym_name, sym_name_addr, True, ordinal)
                         symbols.append(sym)
 
-                        # print(f"[*] Binding {sym_name} at {hex(chain_entry_addr)}")
-                        # sym_ref: CoreSymbol = bv.get_symbol_by_raw_name(sym_name)
-                        # if not sym_ref:
-                        #    print(
-                        #        f"[-] Could not get reference to symbol named {sym_name}, malformed or bug?"
-                        #    )
-                        #    return
-
-                        # Replace it with the address of the symbol we just found
-                        # fixed_bytes = struct.pack("<Q", sym_ref.address)
-                        # bv.write(chain_entry_addr - arm_slice_start, fixed_bytes, except_on_relocation=False,)
-
                     else:
-                        # Nothing to bind
-                        """print(f"[*] Rebasing pointer at {hex(chain_entry_addr)}")
-                        target = bv.start + offset
-                        fixed_bytes = struct.pack("<Q", target)
-                        bv.write(
-                            chain_entry_addr - arm_slice_start,
-                            fixed_bytes,
-                            except_on_relocation=False,
-                        )"""
                         pass
 
                     # next tells us how many u32 until the next chain entry

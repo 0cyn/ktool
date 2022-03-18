@@ -11,7 +11,6 @@
 #
 #  Copyright (c) kat 2021.
 #
-import enum
 
 import ktool
 from kmacho.base import Constructable
@@ -43,7 +42,6 @@ class _FieldDescriptor(Constructable):
         fields = []
 
         fd = image.load_struct(location, FieldDescriptor, vm=True)
-        ea = location
 
         for i in range(fd.numFields):
             ea = location + (i * 0xc)
@@ -159,4 +157,3 @@ def load_swift_types(image: Image):
         types.append(SwiftType.from_image(image, objc_image, type_loc))
 
     return types
-

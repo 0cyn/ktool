@@ -191,10 +191,3 @@ class KernelCache:
             start_addr = kext_starts[i]
             kext = MergedKext(self.mach_kernel, info, start_addr)
             self.kexts.append(kext)
-
-
-
-
-
-
-

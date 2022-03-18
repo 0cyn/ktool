@@ -31,115 +31,121 @@ except pkg_resources.DistributionNotFound:
 THREAD_COUNT = os.cpu_count() - 1
 
 
+OUT_IS_TTY = sys.stdout.isatty()
+
+
 def version_output():
-    UP = "\x1B[3A"
-    CLR = "\x1B[0K"
 
-    CSET = """                     ___====-_  _-====___
-               _--^^^#####//      \\\\#####^^^--_
-            _-^##########// (    ) \\\\##########^-_
-           -############//  |\\^^/|  \\\\############-
-         _/############//   (@::@)   \\\\############\\_
-        /#############((     \\\\//     ))#############\\
-       -###############\\\\    (oo)    //###############-
-      -#################\\\\  /    \\  //#################-
-     -###################\\\\/      \\//###################-
-    _#/|##########/\\######(   /\\   )######/\\##########|\\#_
-    |/ |#/\\#/\\#/\\/  \\#/\\##\\  |  |  /##/\\#/  \\/\\#/\\#/\\#| \\|
-    `  |/  V  V  `   V  \\#\\| |  | |/#/  V   '  V  V  \\|  '
-       `   `  `      `   / | |  | | \\   '      '  '   '
-                        (  | |  | |  )    {}
-       {}__\\ | |  | | /__   {}
-                      (vvv(VVV)(VVV)vvv)  {}"""
+    if OUT_IS_TTY:
 
-    line_count = CSET.count('\n')
-    print('\n' * (line_count + 2))
+        up_chr = "\x1B[3A"
+        clr_chr = "\x1B[0K"
 
-    up_count = line_count - 6
-    cset_proc = CSET.format('by cynder', f'ktool v{KTOOL_VERSION}'.ljust(16, ' '), 'gh/cxnder', '@arm64e')
+        char_set = """                     ___====-_  _-====___
+                   _--^^^#####//      \\\\#####^^^--_
+                _-^##########// (    ) \\\\##########^-_
+               -############//  |\\^^/|  \\\\############-
+             _/############//   (@::@)   \\\\############\\_
+            /#############((     \\\\//     ))#############\\
+           -###############\\\\    (oo)    //###############-
+          -#################\\\\  /    \\  //#################-
+         -###################\\\\/      \\//###################-
+        _#/|##########/\\######(   /\\   )######/\\##########|\\#_
+        |/ |#/\\#/\\#/\\/  \\#/\\##\\  |  |  /##/\\#/  \\/\\#/\\#/\\#| \\|
+        `  |/  V  V  `   V  \\#\\| |  | |/#/  V   '  V  V  \\|  '
+           `   `  `      `   / | |  | | \\   '      '  '   '
+                            (  | |  | |  )    {}
+           {}__\\ | |  | | /__   {}
+                          (vvv(VVV)(VVV)vvv)  {}"""
 
-    lines = cset_proc.split("\n")
+        line_count = char_set.count('\n')
+        print('\n' * (line_count + 2))
 
-    maxwid = 0
-    for line in lines:
-        maxwid = max(maxwid, len(line))
+        up_count = line_count - 6
+        cset_proc = char_set.format('by cynder', f'ktool v{KTOOL_VERSION}'.ljust(16, ' '), 'gh/cxnder', '@arm64e')
 
-    lines = [i.ljust(maxwid, ' ') for i in lines]
+        lines = cset_proc.split("\n")
 
-    for i in range(maxwid * 2):
-        if i < 5:
-            continue
+        maxwid = 0
+        for line in lines:
+            maxwid = max(maxwid, len(line))
 
-        pre_lines = [*lines]
+        lines = [i.ljust(maxwid, ' ') for i in lines]
 
-        for y, line in enumerate(pre_lines):
-            target = y + (i - maxwid + 1)
-            if 0 <= target - 3 <= maxwid - 5:
-                chop_pre = line[:target - 3]
-                chop_post = line[target + 3 + 1:]
-                chop_sect = line[target - 3:target + 3]
-                chop_color = ""
-                try:
-                    chop_color += f'\033[38;5;52m{chop_sect[0]}'
-                    chop_color += f'\033[38;5;166m{chop_sect[1]}'
-                    chop_color += f'\033[38;5;120m{chop_sect[2]}'
-                    chop_color += f'\033[38;5;26m{chop_sect[3]}'
-                    chop_color += f'\033[38;5;20m{chop_sect[4]}'
-                    chop_color += f'\033[38;5;69m{chop_sect[5]}'
-                except IndexError:
-                    pass  # too lazy to debug this at 2 am for what's essentially a meme
+        for i in range(maxwid * 2):
+            if i < 5:
+                continue
 
-                pre_lines[y] = chop_pre + f'{chop_color}\033[0m' + chop_post
+            pre_lines = [*lines]
 
-        # append CLR op to the lines
-        cset_proc = ''.join([f'{i}{CLR}\n' for i in pre_lines]) + '\n'
+            for y, line in enumerate(pre_lines):
+                target = y + (i - maxwid + 1)
+                if 0 <= target - 3 <= maxwid - 5:
+                    chop_pre = line[:target - 3]
+                    chop_post = line[target + 3 + 1:]
+                    chop_sect = line[target - 3:target + 3]
+                    chop_color = ""
+                    try:
+                        chop_color += f'\033[38;5;52m{chop_sect[0]}'
+                        chop_color += f'\033[38;5;166m{chop_sect[1]}'
+                        chop_color += f'\033[38;5;120m{chop_sect[2]}'
+                        chop_color += f'\033[38;5;26m{chop_sect[3]}'
+                        chop_color += f'\033[38;5;20m{chop_sect[4]}'
+                        chop_color += f'\033[38;5;69m{chop_sect[5]}'
+                    except IndexError:
+                        pass  # too lazy to debug this at 2 am for what's essentially a meme
 
-        # erase previous output
-        for _ in range(up_count):
-            print(f'{UP}')
+                    pre_lines[y] = chop_pre + f'{chop_color}\033[0m' + chop_post
 
-        # print our latest iteration
-        print(cset_proc)
-        time.sleep(0.015)
+            # append CLR op to the lines
+            cset_proc = ''.join([f'{i}{clr_chr}\n' for i in pre_lines]) + '\n'
 
-    for i in reversed(range(maxwid * 2)):
-        if i < 5:
-            continue
+            # erase previous output
+            for _ in range(up_count):
+                print(f'{up_chr}')
 
-        pre_lines = [*lines]
+            # print our latest iteration
+            print(cset_proc)
+            time.sleep(0.015)
 
-        for y, line in enumerate(pre_lines):
-            target = y + (i - maxwid + 1)
-            if 0 <= target - 3 <= maxwid - 5:
-                chop_pre = line[:target - 3]
-                chop_post = line[target + 3 + 1:]
-                chop_sect = line[target - 3:target + 3]
-                chop_color = ""
-                try:
-                    chop_color += f'\033[38;5;52m{chop_sect[0]}'
-                    chop_color += f'\033[38;5;166m{chop_sect[1]}'
-                    chop_color += f'\033[38;5;120m{chop_sect[2]}'
-                    chop_color += f'\033[38;5;26m{chop_sect[3]}'
-                    chop_color += f'\033[38;5;20m{chop_sect[4]}'
-                    chop_color += f'\033[38;5;69m{chop_sect[5]}'
-                except IndexError:
-                    pass  # too lazy to debug this at 2 am for what's essentially a meme
+        for i in reversed(range(maxwid * 2)):
+            if i < 5:
+                continue
 
-                pre_lines[y] = chop_pre + f'{chop_color}\033[0m' + chop_post
+            pre_lines = [*lines]
 
-        # append CLR op to the lines
-        cset_proc = ''.join([f'{i}{CLR}\n' for i in pre_lines]) + '\n'
+            for y, line in enumerate(pre_lines):
+                target = y + (i - maxwid + 1)
+                if 0 <= target - 3 <= maxwid - 5:
+                    chop_pre = line[:target - 3]
+                    chop_post = line[target + 3 + 1:]
+                    chop_sect = line[target - 3:target + 3]
+                    chop_color = ""
+                    try:
+                        chop_color += f'\033[38;5;52m{chop_sect[0]}'
+                        chop_color += f'\033[38;5;166m{chop_sect[1]}'
+                        chop_color += f'\033[38;5;120m{chop_sect[2]}'
+                        chop_color += f'\033[38;5;26m{chop_sect[3]}'
+                        chop_color += f'\033[38;5;20m{chop_sect[4]}'
+                        chop_color += f'\033[38;5;69m{chop_sect[5]}'
+                    except IndexError:
+                        pass  # too lazy to debug this at 2 am for what's essentially a meme
 
-        # erase previous output
-        for _ in range(up_count):
-            print(f'{UP}')
+                    pre_lines[y] = chop_pre + f'{chop_color}\033[0m' + chop_post
 
-        # print our latest iteration
-        print(cset_proc)
-        time.sleep(0.02)
+            # append CLR op to the lines
+            cset_proc = ''.join([f'{i}{clr_chr}\n' for i in pre_lines]) + '\n'
 
-    for i in range(up_count):
-        print(f'{UP}')
+            # erase previous output
+            for _ in range(up_count):
+                print(f'{up_chr}')
+
+            # print our latest iteration
+            print(cset_proc)
+            time.sleep(0.02)
+
+        for i in range(up_count):
+            print(f'{up_chr}')
 
     print(f'ktool v{KTOOL_VERSION}. by cynder. gh/cxnder || @arm64e')
 
@@ -340,9 +346,9 @@ class Table:
         :return:
         """
 
-        CGREY = '\33[38;5;242m'
-        CWHITE = '\33[37m'
-        CEND = '\33[39m'
+        cgrey = '\33[38;5;242m'
+        cwhite = '\33[37m'
+        cend = '\33[39m'
 
         if row_count == 0:
             return ""
@@ -367,8 +373,8 @@ class Table:
             sep_line = '┠━'
             for size in self.most_recent_adjusted_maxes:
                 sep_line += ''.ljust(size - 2, '━') + '╀━'
-            sep_line = CGREY + sep_line[:-self.column_pad].ljust(screen_width - 1, '━')[
-                               :-self.column_pad] + '━━━┦' + CEND
+            sep_line = cgrey + sep_line[:-self.column_pad].ljust(screen_width - 1, '━')[
+                               :-self.column_pad] + '━━━┦' + cend
 
             rows_text = rows_text[:-(len(sep_line))]  # Use our calculated sep_line length to cut off the last one
             rows_text += sep_line.replace('┠', '└').replace('╀', '┸').replace('┦', '┘')
@@ -380,7 +386,7 @@ class Table:
             for i, title in enumerate(self.titles):
                 if self.dividers:
                     try:
-                        title_row += CGREY + '│ ' + CWHITE + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[
+                        title_row += cgrey + '│ ' + cwhite + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[
                                                              :-(self.column_pad - 1)]
                     except IndexError:
                         # I have no idea what causes this
@@ -392,15 +398,15 @@ class Table:
                         title_row = ""
             header_text = ""
             if self.dividers:
-                header_text += CGREY + sep_line.replace('┠', '┌').replace('╀', '┬').replace('┦', '┐') + CWHITE + '\n'
+                header_text += cgrey + sep_line.replace('┠', '┌').replace('╀', '┬').replace('┦', '┐') + cwhite + '\n'
             header_text += title_row.ljust(screen_width - 1)[
-                           :-1] + CGREY + '  │\n' + CWHITE if self.dividers else title_row + '\n'
+                           :-1] + cgrey + '  │\n' + cwhite if self.dividers else title_row + '\n'
             if self.dividers:
                 header_text += sep_line + '\n'
             self.header_cache[screen_width] = header_text
             rows_text = header_text + rows_text
 
-        rows_text = rows_text.replace('┠', CGREY + '┠').replace('┦', '┦' + CEND)
+        rows_text = rows_text.replace('┠', cgrey + '┠').replace('┦', '┦' + cend)
         return rows_text
 
     # noinspection PyUnreachableCode
@@ -444,14 +450,12 @@ class Table:
         self.most_recent_adjusted_maxes = [*column_maxes]
 
         rows = []
-        rows_attributes = []
 
         # bit complex, this just wraps strings within their columns, to create the illusion of 'cells'
         for row_i, row in enumerate(_rows):
             # cols is going to be an array of columns in this row
             # each column is going to be an array of lines
             cols = []
-            cols_attributes = []
 
             max_line_count_in_row = 0
             for col_i, col in enumerate(row):
@@ -515,9 +519,9 @@ class Table:
         lines = ""
         sep_line = ""
 
-        CGREY = '\33[38;5;242m'
-        CWHITE = '\33[37m'
-        CEND = '\33[39m'
+        cgrey = '\33[38;5;242m'
+        cwhite = '\33[37m'
+        cend = '\33[39m'
 
         if self.dividers:
             sep_line = '┠━'
@@ -535,19 +539,17 @@ class Table:
                 line = ""
                 for j, col in enumerate(row):
                     line += col[i].ljust(column_maxes[j], ' ')
-                    diff = len(line) - len(strip_ansi(line))
                     if self.dividers:
                         line = line[:-self.column_pad] + ' │ '
                 if self.dividers:
-                    diff = len(line) - len(strip_ansi(line))
-                    line = CGREY + '│ ' + CWHITE + line.ljust(width, ' ')[:-self.column_pad] + CGREY + ' │ ' + CEND
-                    line = line.replace('│', CGREY + '│' + CWHITE)
+                    line = cgrey + '│ ' + cwhite + line.ljust(width, ' ')[:-self.column_pad] + cgrey + ' │ ' + cend
+                    line = line.replace('│', cgrey + '│' + cwhite)
                 else:
                     line = ' ' + line[:-self.column_pad].ljust(width, ' ')[:-self.column_pad] + (' ' * self.column_pad)
                 row_lines.append(line)
 
             if self.dividers:
-                row_lines.append(CGREY + sep_line + CEND)
+                row_lines.append(cgrey + sep_line + cend)
 
             self.rendered_row_cache[width + 1][str(row_index + row_start)] = '\n'.join(row_lines)
             lines += '\n'.join(row_lines)

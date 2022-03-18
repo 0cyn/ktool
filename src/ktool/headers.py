@@ -21,7 +21,6 @@ from ktool.util import KTOOL_VERSION
 
 from pygments import highlight
 from pygments.formatters.terminal import TerminalFormatter
-from pygments.formatters.terminal256 import Terminal256Formatter
 from pygments.lexers.objective import ObjectiveCLexer
 
 

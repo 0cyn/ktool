@@ -107,6 +107,7 @@ class objc2_prop(Struct):
         self.name = 0
         self.attr = 0
 
+
 class objc2_prot_list(Struct):
     _FIELDNAMES = ['cnt']
     _SIZES = [8]
