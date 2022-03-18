@@ -550,6 +550,26 @@ Symbol
 
    Initializing this class should be done with either the :python:`.from_image()` or :python:`.from_values()` class methods
 
+   .. py:attribute:: fullname: str
+
+      Original name of the Symbol as is embedded in the executable ( `_OBJC_CLASS_$_SomeClassName` )
+
+   .. py:attribute:: name: str
+
+      Name of the symbol with some typing information removed ( `_SomeClassName` )
+
+   .. py:attribute:: address: int
+
+      Address the symbol represents
+
+   .. py:attribute:: external: bool
+
+      Whether this symbol was imported.
+
+   .. py:attribute:: ordinal: int
+
+      If this symbol was imported, the index of the library it was imported from.
+
    .. py:classmethod:: from_image(image: Image, cmd: symtab_command, entry: NList32 or NList64 item)
 
       Generate a Symbol loaded from the Symbol Table. Any other method of loading symbols needs to use .from_values()
