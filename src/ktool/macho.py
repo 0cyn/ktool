@@ -441,12 +441,23 @@ class Slice:
 
         return self.macho_file.file_data[addr:addr + count]
 
-    def _mmap_get_str_at(self, addr: int, count: int) -> str:
+    def _mmap_get_str_at(self, addr: int, count: int, force=False) -> str:
         addr = addr + self.offset
+
+        if force:
+            data = self.macho_file.file[addr:addr + count]
+            string = ""
+
+            for ch in data:
+                try:
+                    string += bytes(ch).decode()
+                except UnicodeDecodeError:
+                    string += "?"
+            return string
 
         return self.macho_file.file[addr:addr + count].decode().rstrip('\x00')
 
-    def _bio_get_str_at(self, addr: int, count: int):
+    def _bio_get_str_at(self, addr: int, count: int, force=False):
         addr = addr + self.offset
 
         self.macho_file.file.seek(addr)

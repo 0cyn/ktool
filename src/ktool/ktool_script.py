@@ -316,6 +316,15 @@ def main():
 
     parser_kcache.set_defaults(func=kcache, get_kext=None, get_info=False, do_extract=None, get_kexts=False)
 
+    parser_ent = subparsers.add_parser('cs', help='Codesign processing')
+
+    parser_ent.add_argument('--ent', dest='get_ent', action='store_true')
+    parser_ent.add_argument('--slice', dest='slice_index', type=int,
+                                help="Specify Index of Slice (in FAT MachO) to examine")
+    parser_ent.add_argument('filename', nargs='?', default='')
+
+    parser_ent.set_defaults(func=ent, get_ent=False, slice_index=0)
+
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
     # this means when that command is used, calling args.func() will branch off to that function.
@@ -462,6 +471,18 @@ def _open(args):
 
     # should probably just always do this, just in case.
     external_hard_fault_teardown()
+
+
+def ent(args):
+
+    require_args(args, one_of=['get_ent'])
+
+    if args.get_ent:
+        with open(args.filename, 'rb') as fd:
+            image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
+                                 use_mmaped_io=MMAP_ENABLED)
+            ents = image.codesign_info.entitlements
+            print(ents)
 
 
 def symbols(args):

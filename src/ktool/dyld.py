@@ -27,6 +27,7 @@ from kmacho import (
 )
 from kmacho.base import Constructable
 from kmacho.fixups import *
+from ktool.codesign import CodesignInfo
 from ktool.macho import Segment, Slice, VM, MisalignedVM
 from ktool.util import log, macho_is_malformed, ignore
 
@@ -154,6 +155,9 @@ class Image:
         self.info: Union[dyld_info_command, None] = None
         self.dylib: Union[ExternalDylib, None] = None
         self.uuid = None
+        self.codesign_info: Union[CodesignInfo, None] = None
+
+        self._codesign_cmd = None
 
         self.platform: PlatformType = PlatformType.UNK
 
@@ -282,7 +286,7 @@ class Image:
 
         return self.struct_cache[address]
 
-    def get_str_at(self, address: int, count: int, vm=False, section_name=None):
+    def get_str_at(self, address: int, count: int, vm=False, section_name=None, force=False):
         """
         Get string with set length from location (to be used essentially only for loading segment names)
 
@@ -294,7 +298,7 @@ class Image:
         """
         if vm:
             address = self.vm.translate(address)
-        return self.slice.get_str_at(address, count)
+        return self.slice.get_str_at(address, count, force=force)
 
     def get_cstr_at(self, address: int, limit: int = 0, vm=False, section_name=None):
         """
@@ -376,6 +380,10 @@ class Dyld:
                     thread_state.append(val)
 
                 image.thread_state = thread_state
+
+            elif load_command == LOAD_COMMAND.CODE_SIGNATURE:
+                image._codesign_cmd = cmd
+                image.codesign_info = CodesignInfo.from_image(image, cmd)
 
             elif load_command == LOAD_COMMAND.MAIN:
                 image._entry_off = cmd.entryoff

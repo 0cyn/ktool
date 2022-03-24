@@ -913,9 +913,19 @@ class SidebarMenuItem:
         self.selected = False
 
     def parse_mmc(self):
-        attrib_content = []
+
+        lines = []
+
         for item in self.content.lines:
             if isinstance(item, str):
+                lines += item.split('\n')
+            else:
+                lines.append(item)
+
+        attrib_content = []
+        for item in lines:
+            if isinstance(item, str):
+                item = item.replace('\t', '    ')  # double tabs break rendering
                 attrib_content.append(AttributedString.ansi_to_attrstr(item))
             else:
                 attrib_content.append(item)
@@ -1607,6 +1617,7 @@ class KToolMachOLoader:
         slice_item.content = KToolMachOLoader._file(loaded_image, slice_item, callback).content
         items = [KToolMachOLoader.load_cmds,
                  KToolMachOLoader.segments,
+                 KToolMachOLoader.codesign,
                  KToolMachOLoader.linked,
                  KToolMachOLoader.imports,
                  KToolMachOLoader.exports,
@@ -1710,6 +1721,46 @@ class KToolMachOLoader:
         menuitem = SidebarMenuItem("Linked Libraries", linked_libs_item, parent)
         menuitem.parse_mmc()
         return menuitem
+
+    @staticmethod
+    def codesign(lib, parent=None, callback=None):
+        callback(f'Codesign Info')
+
+        cs = MainMenuContentItem()
+
+        image = lib
+
+        lines = []
+        lines += image.codesign_info.superblob.render_indented().split('\n')
+        lines.append('')
+        for slot in image.codesign_info.slots:
+            lines += slot.render_indented().split('\n')
+            lines.append('')
+
+        cs.lines = lines
+
+        smi = SidebarMenuItem("Codesign Info", cs, parent)
+
+        # ent item
+        ent_mmci = MainMenuContentItem()
+        ent_mmci.lines.append(image.codesign_info.entitlements)
+        ent_smi = SidebarMenuItem("Entitlements", ent_mmci, smi)
+        ent_smi.parse_mmc()
+        smi.children.append(ent_smi)
+
+        # req item
+        req_mmci = MainMenuContentItem()
+
+        hexdump = HexDumpTable()
+        hexdump.hex = bytearray(image.codesign_info.req_dat)
+
+        req_mmci.lines.append(hexdump)
+
+        req_smi = SidebarMenuItem("Requirements", req_mmci, smi)
+        smi.children.append(req_smi)
+
+        smi.parse_mmc()
+        return smi
 
     @staticmethod
     def load_cmds(lib, parent=None, callback=None):
