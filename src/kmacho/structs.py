@@ -81,25 +81,31 @@ class Struct:
         for field in instance._fields:
             value = instance._field_sizes[field]
 
-            field_type = type_mask & value
-            size = size_mask & value
-
             field_value = None
 
-            data = raw[current_off:current_off + size]
+            if isinstance(value, int):
+                field_type = type_mask & value
+                size = size_mask & value
 
-            if field_type == type_str:
-                field_value = data.decode('utf-8').replace('\x00', '')
+                data = raw[current_off:current_off + size]
 
-            elif field_type == type_bytes:
-                field_value = bytes(data)
+                if field_type == type_str:
+                    field_value = data.decode('utf-8').replace('\x00', '')
 
-            elif field_type == type_uint:
-                field_value = int.from_bytes(data, byte_order)
+                elif field_type == type_bytes:
+                    field_value = bytes(data)
 
-            elif field_type == type_sint:
-                field_value = int.from_bytes(data, byte_order)
-                field_value = uint_to_int(field_value, size * 8)
+                elif field_type == type_uint:
+                    field_value = int.from_bytes(data, byte_order)
+
+                elif field_type == type_sint:
+                    field_value = int.from_bytes(data, byte_order)
+                    field_value = uint_to_int(field_value, size * 8)
+
+            elif issubclass(value, Struct):
+                size = value.SIZE
+                data = raw[current_off:current_off+size]
+                field_value = Struct.create_with_bytes(value, data)
 
             setattr(instance, field, field_value)
             inst_raw += data
@@ -152,10 +158,12 @@ class Struct:
                 field_item = self.__getattribute__(field)
             elif isinstance(self.__getattribute__(field), int):
                 field_item = hex(self.__getattribute__(field))
+            elif issubclass(self.__getattribute__(field), Struct):
+                field_item = str(self.__getattribute__(field))
             text += f'{field}={field_item}, '
         return text[:-2] + ')'
 
-    def render_indented(self) -> str:
+    def render_indented(self, indent_size=2) -> str:
         text = f'{self.__class__.__name__}\n'
         for field in self._fields:
             field_item = None
@@ -165,7 +173,9 @@ class Struct:
                 field_item = self.__getattribute__(field)
             elif isinstance(self.__getattribute__(field), int):
                 field_item = hex(self.__getattribute__(field))
-            text += f'  {field}={field_item}\n'
+            elif issubclass(self.__getattribute__(field).__class__, Struct):
+                field_item = '\n' + " "*(indent_size+2) + self.__getattribute__(field).render_indented(indent_size+2)
+            text += f'{" "*indent_size}{field}={field_item}\n'
         return text
 
     def __init__(self, fields=None, sizes=None, byte_order="little", no_patch=False):
@@ -710,4 +720,3 @@ class thread_command(Struct):
         self.cmdsize = 0
         self.flavor = 0
         self.count = 0
-
