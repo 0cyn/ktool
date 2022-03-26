@@ -618,7 +618,7 @@ class LD64:
         image.macho_header.dyld_header.loadcnt += 1
         image.macho_header.dyld_header.loadsize += size
 
-        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw)
+        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw[:image.macho_header.dyld_header.__class__.SIZE])
 
     @classmethod
     def insert_load_cmd_with_str(cls, image: Image, lc, fields, suffix, index=-1):
@@ -655,8 +655,8 @@ class LD64:
 
         image.macho_header.dyld_header.loadcnt += 1
         image.macho_header.dyld_header.loadsize -= size
-
-        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw)
+        log.info("Patching dyld_header")
+        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw[:image.macho_header.dyld_header.__class__.SIZE])
 
     @classmethod
     def remove_load_command(cls, image: Image, index):
@@ -672,7 +672,7 @@ class LD64:
         image.macho_header.dyld_header.loadcnt -= 1
         image.macho_header.dyld_header.loadsize -= b_load_cmd.cmdsize
 
-        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw)
+        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw[:image.macho_header.dyld_header.__class__.SIZE])
 
 
 class ExternalDylib:

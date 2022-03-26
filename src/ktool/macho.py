@@ -390,10 +390,12 @@ class Slice:
         self._cstring_cache = {}
 
     def patch(self, address: int, raw: bytes):
+        log.debug_tm(f'Wrote {str(raw)} @ {address}')
         self.file.write(address, raw)
+        assert self.file.read_bytes(address, len(raw)) == raw
 
     def full_bytes_for_slice(self):
-        return bytes(self.file.file)
+        return bytes(self.file.read_bytes(0, self.file.size))
 
     def find(self, pattern: Union[str, bytes]):
         if isinstance(pattern, str):
