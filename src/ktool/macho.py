@@ -132,6 +132,15 @@ class Section:
         self.file_address = cmd.offset
         self.size = cmd.size
 
+    def serialize(self):
+        return {
+            'command': self.cmd.serialize(),
+            'name': self.name,
+            'vm_address': self.vm_address,
+            'file_address': self.file_address,
+            'size': self.size
+        }
+
 
 class Segment:
     """
@@ -153,6 +162,21 @@ class Segment:
 
     def __str__(self):
         return f'Segment {self.name} at {hex(self.vm_address)}\n'
+
+    def serialize(self):
+        segment = {
+            'command': self.cmd.serialize(),
+            'name': self.name,
+            'vm_address': self.vm_address,
+            'file_address': self.file_address,
+            'size': self.size,
+            'type': self.type.name,
+        }
+        sects = {}
+        for section_name, sect in self.sections.items():
+            sects[section_name] = sect.serialize()
+        segment['sections'] = sects
+        return segment
 
     def _process_sections(self) -> Dict[str, Section]:
         sections = {}

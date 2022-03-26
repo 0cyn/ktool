@@ -49,6 +49,7 @@ class CodesignInfo(Constructable):
                 ent_blob.length = swap_32(ent_blob.length)
                 ent_size = ent_blob.length
                 entitlements = image.get_str_at(start+Blob.SIZE, ent_size-Blob.SIZE)
+
             elif blob.type == CSSLOT_REQUIREMENTS:
                 start = superblob.off + blob.offset
                 req_blob = image.load_struct(start, Blob)

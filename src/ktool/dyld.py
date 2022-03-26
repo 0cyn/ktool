@@ -29,7 +29,7 @@ from kmacho.base import Constructable
 from kmacho.fixups import *
 from ktool.codesign import CodesignInfo
 from ktool.macho import Segment, Slice, VM, MisalignedVM
-from ktool.util import log, macho_is_malformed, ignore
+from ktool.util import log, macho_is_malformed, ignore, bytes_to_hex
 
 
 class ImageHeader(Constructable):
@@ -113,6 +113,15 @@ class ImageHeader(Constructable):
         self.load_commands = []
         self.raw = bytearray()
 
+    def serialize(self):
+        return {
+            'filetype': self.filetype.name,
+            'flags': [flag.name for flag in self.flags],
+            'is_64_bit': self.is64,
+            'dyld_header': self.dyld_header.serialize(),
+            'load_commands': [cmd.serialize() for cmd in self.load_commands]
+        }
+
     def raw_bytes(self) -> bytes:
         return self.raw
 
@@ -192,6 +201,51 @@ class Image:
         self.symbol_table: Union[SymbolTable, None] = None
 
         self.struct_cache: Dict[int, Struct] = {}
+
+    def serialize(self):
+        image_dict = {
+            'macho_header': self.macho_header.serialize()
+        }
+
+        if self.install_name != "":
+            image_dict['install_name'] = self.install_name
+
+        linked = []
+        for ext_dylib in self.linked_images:
+            linked.append(ext_dylib.serialize())
+
+        image_dict['linked'] = linked
+
+        segments = {}
+
+        for seg_name, seg in self.segments.items():
+            segments[seg_name] = seg.serialize()
+
+        image_dict['segments'] = segments
+        if self.uuid:
+            image_dict['uuid'] = bytes_to_hex(self.uuid)
+
+        image_dict['platform'] = self.platform.name
+
+        image_dict['allowed-clients'] = self.allowed_clients
+
+        if self.rpath:
+            image_dict['rpath'] = self.rpath
+
+        image_dict['imports'] = [sym.serialize() for sym in self.imports]
+        image_dict['exports'] = [sym.serialize() for sym in self.exports]
+        image_dict['symbols'] = [sym.serialize() for sym in self.symbols.values()]
+
+        image_dict['entry_point'] = self.entry_point
+
+        image_dict['function_starts'] = self.function_starts
+
+        image_dict['thread_state'] = self.thread_state
+
+        image_dict['minos'] = f'{self.minos.x}.{self.minos.y}{self.minos.z}'
+        image_dict['sdk_version'] = f'{self.sdk_version.x}.{self.sdk_version.y}.{self.sdk_version.z}'
+
+        return image_dict
 
     def vm_realign(self, yell_about_misalignment=True):
 
@@ -578,7 +632,7 @@ class LD64:
         cmd_size = lc_type.SIZE
         cmd_size += len(encoded)
         cmd_size = 0x8 * math.ceil(cmd_size / 0x8)
-        log.debug_tm(f'Computed cmd size (w/ pad) Size of {cmd_size}')
+        log.debug_tm(f'Computed cmd size (w/ pad) of {cmd_size}')
 
         load_cmd.cmdsize = cmd_size
 
@@ -629,6 +683,12 @@ class ExternalDylib:
         self.install_name = self._get_name(cmd)
         self.weak = cmd.cmd == LOAD_COMMAND.LOAD_WEAK_DYLIB.value
         self.local = cmd.cmd == LOAD_COMMAND.ID_DYLIB.value
+
+    def serialize(self):
+        return {
+            'install_name': self.install_name,
+            'load_command': LOAD_COMMAND(self.cmd.cmd).name
+        }
 
     def _get_name(self, cmd) -> str:
         read_address = cmd.off + dylib_command.SIZE
@@ -714,6 +774,14 @@ class Symbol(Constructable):
 
     def raw_bytes(self):
         pass
+
+    def serialize(self):
+        return {
+            'name': self.fullname,
+            'address': self.address,
+            'external': self.external,
+            'ordinal': self.ordinal
+        }
 
     def __init__(self, fullname=None, name=None, dec_type=None, external=False, value=0, ordinal=0):
         self.fullname = fullname

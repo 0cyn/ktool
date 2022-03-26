@@ -74,7 +74,7 @@ class NominalClassDescriptor(Struct):
     _FIELDNAMES = ['Flags', 'Parent', 'Name', 'AccessFunctionPtr', 'Fields', 'SuperclassType',
                    'MetadataNegativeSizeInWords', 'MetadataPositiveSizeInWords', 'NumImmediateMembers',
                    'NumFields', 'FieldOffsetVectorOffset']
-    _SIZES = [4, -4, -4, -4, -4, -4, 4, 4, 4, 4, 4]
+    _SIZES = [uint32_t, int32_t, int32_t, int32_t, int32_t, int32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
     SIZE = 44
 
     def __init__(self, byte_order="little"):

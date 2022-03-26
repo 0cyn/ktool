@@ -17,7 +17,7 @@ import os
 import sys
 import time
 from enum import Enum
-from typing import List
+from typing import List, Union
 import re
 
 from ktool.exceptions import *
@@ -574,6 +574,10 @@ ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
 
 def strip_ansi(msg):
     return ansi_escape.sub('', msg)
+
+
+def bytes_to_hex(data: Union[bytes, bytearray]) -> str:
+    return data.hex()
 
 
 def ktool_print(msg, file=sys.stdout):

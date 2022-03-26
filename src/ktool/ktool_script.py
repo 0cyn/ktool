@@ -30,6 +30,7 @@ from kimg4.img4 import IM4P
 # noinspection PyProtectedMember
 from pkg_resources import packaging
 
+import ktool
 from kmacho import LOAD_COMMAND
 
 from ktool import (
@@ -195,6 +196,12 @@ def main():
     parser_open.add_argument('--hard-fail', dest='hard_fail', action='store_true')
 
     parser_open.set_defaults(func=_open, hard_fail=False)
+
+    parser_json = subparsers.add_parser('json', help='Dump Image metadata as json')
+
+    parser_json.add_argument('filename', nargs='?', default='')
+
+    parser_json.set_defaults(func=serialize)
 
     # insert command: optool replacement
     parser_insert = subparsers.add_parser('insert', help='Insert data into MachO Binary')
@@ -471,6 +478,36 @@ def _open(args):
 
     # should probably just always do this, just in case.
     external_hard_fault_teardown()
+
+
+def serialize(args):
+
+    require_args(args, one_of=['filename'])
+
+    with open(args.filename, 'rb') as fp:
+
+        macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
+
+        out_dict = {
+            'filetype': macho_file.type.name
+        }
+        slices = []
+
+        for macho_slice in macho_file.slices:
+            image = ktool.load_image(macho_slice)
+            image_dict = image.serialize()
+            slice_dict = {
+                'offset': macho_slice.offset,
+                'size': macho_slice.size,
+                'type': macho_slice.type.name,
+                'subtype': macho_slice.subtype.name,
+                'image': image_dict
+            }
+            slices.append(slice_dict)
+
+        out_dict['slices'] = slices
+
+        print(json.dumps(out_dict, indent=4, sort_keys=True))
 
 
 def ent(args):

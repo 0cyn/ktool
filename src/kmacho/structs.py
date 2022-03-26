@@ -34,7 +34,11 @@ int64_t = type_sint | 8
 char_t = [type_str | i for i in range(17)]
 
 
-def uint_to_int(uint, bits):
+def _bytes_to_hex(data) -> str:
+    return data.hex()
+
+
+def _uint_to_int(uint, bits):
     """
     Assume an int was read from binary as an unsigned int,
 
@@ -100,7 +104,7 @@ class Struct:
 
                 elif field_type == type_sint:
                     field_value = int.from_bytes(data, byte_order)
-                    field_value = uint_to_int(field_value, size * 8)
+                    field_value = _uint_to_int(field_value, size * 8)
 
             elif issubclass(value, Struct):
                 size = value.SIZE
@@ -177,6 +181,25 @@ class Struct:
                 field_item = '\n' + " "*(indent_size+2) + self.__getattribute__(field).render_indented(indent_size+2)
             text += f'{" "*indent_size}{field}={field_item}\n'
         return text
+
+    def serialize(self):
+        struct_dict = {
+            'type': self.__class__.__name__
+        }
+
+        for field in self._fields:
+            field_item = None
+            if isinstance(self.__getattribute__(field), str):
+                field_item = self.__getattribute__(field)
+            elif isinstance(self.__getattribute__(field), bytearray) or isinstance(self.__getattribute__(field), bytes):
+                field_item = _bytes_to_hex(self.__getattribute__(field))
+            elif isinstance(self.__getattribute__(field), int):
+                field_item = self.__getattribute__(field)
+            elif issubclass(self.__getattribute__(field).__class__, Struct):
+                field_item = self.__getattribute__(field).serialize()
+            struct_dict[field] = field_item
+
+        return struct_dict
 
     def __init__(self, fields=None, sizes=None, byte_order="little", no_patch=False):
 
