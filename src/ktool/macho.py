@@ -74,7 +74,7 @@ class BackingFile:
             # noinspection PyUnresolvedReferences
             assert isinstance(self.file, mmap.mmap)
             self.file.seek(location)
-            self.file.write()
+            self.file.write(data)
             self.file.seek(0)
 
     def close(self):
