@@ -152,6 +152,11 @@ class Struct:
     def desc(self):
         return ""
 
+    def __getattr__(self, item):
+        if item == 'raw':
+            return self._rebuild_raw()
+        return super().__getattribute__(item)
+
     def __str__(self):
         text = f'{self.__class__.__name__}('
         for field in self._fields:
@@ -224,7 +229,6 @@ class Struct:
             self._field_sizes[i] = sizes[index]
 
         self.off = 0
-        self.raw = bytearray()
 
     def pre_init(self):
         """stub for subclasses. gets called before patch code is enabled"""
@@ -254,17 +258,7 @@ class Struct:
 
             raw += bytearray(data)
 
-        self.raw = raw
-
-    def __setattr__(self, key, value):
-        super().__setattr__(key, value)
-        if not self.initialized:
-            return
-        if self.no_patch:
-            return
-        if key in self._fields:
-            if self.initialized:
-                self._rebuild_raw()
+        return raw
 
 
 class BitFieldStruct(Struct):
