@@ -60,9 +60,8 @@ class ObjCImage(Constructable):
         cat_prot_queue = Queue()
         class_queue = Queue()
 
-        if not image.slice.macho_file.uses_mmaped_io:
-            cat_prot_queue.multithread = False
-            class_queue.multithread = False
+        cat_prot_queue.multithread = False
+        class_queue.multithread = False
 
         sect = None
         for seg in image.segments:

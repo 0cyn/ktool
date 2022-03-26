@@ -551,7 +551,7 @@ class Dyld:
             image.install_name = image.dylib.install_name
         else:
             image.name = ""
-            image.base_name = image.slice.macho_file.filename
+            image.base_name = image.slice.file.name
             image.install_name = ""
 
         if image.export_trie:

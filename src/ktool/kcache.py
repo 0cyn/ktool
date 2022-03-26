@@ -74,7 +74,6 @@ class MergedKext(Kext):
 
         self.backing_image = image
         self.backing_slice = image.slice
-        self.backing_file = self.backing_slice.macho_file.file
 
         is64 = image.macho_header.is64
         self.name = image.get_cstr_at(kmod_info.off + (0x10 if is64 else 0x8), vm=False)
@@ -120,9 +119,6 @@ class KernelCache:
 
         self.version_str = ""
         vloc = self.mach_kernel.slice.find('@(#)VERSION:')
-        if not self.mach_kernel.macho_header.is64:
-            #  ???????????????????????????????????!??!?!???
-            vloc -= 28
         self.version_str = self.mach_kernel.get_cstr_at(vloc)
         dat = self.version_str.split('xnu_')[-1].split('/')[-1].lower()
 

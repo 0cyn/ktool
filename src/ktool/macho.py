@@ -16,7 +16,7 @@ import os
 from collections import namedtuple
 from enum import Enum
 from io import BytesIO
-from typing import Tuple, Dict, Union
+from typing import Tuple, Dict, Union, BinaryIO
 
 from kmacho import *
 from kmacho.structs import *
@@ -30,6 +30,75 @@ class MachOFileType(Enum):
     THIN = 1
 
 
+class BackingFile:
+    def __init__(self, fp: Union[BinaryIO, BytesIO], use_mmaped_io=True):
+        self.fp = fp
+
+        if hasattr(fp, 'name'):
+            self.name = os.path.basename(fp.name)
+        else:
+            self.name = ''
+        if use_mmaped_io:
+            # noinspection PyBroadException
+            try:
+                assert not isinstance(fp, BytesIO)
+                global mmap
+                import mmap
+                self.file = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_COPY)
+            except Exception:
+                use_mmaped_io = False
+            f = fp
+            old_file_position = f.tell()
+            f.seek(0, os.SEEK_END)
+            self.size = f.tell()
+            f.seek(old_file_position)
+        if not use_mmaped_io:
+            self.file = bytearray(fp.read())
+            self.size = len(self.file)
+
+    def read_bytes(self, location, count):
+        return bytes(self.file[location:location+count])
+
+    def read_int(self, location, count):
+        return int.from_bytes(self.read_bytes(location, count), "big")
+
+    def write(self, location, data: bytes):
+        data = bytearray(data)
+
+        if isinstance(self.file, bytearray):
+            count = len(data)
+            for i in range(count):
+                self.file[location+i] = data[i]
+
+        else:
+            # noinspection PyUnresolvedReferences
+            assert isinstance(self.file, mmap.mmap)
+            self.file.seek(location)
+            self.file.write()
+            self.file.seek(0)
+
+    def close(self):
+        self.fp.close()
+
+
+class SlicedBackingFile:
+    def __init__(self, backing_file: BackingFile, offset, size):
+        self.file = bytearray(backing_file.read_bytes(offset, size))
+        self.size = size
+        self.name = backing_file.name
+
+    def read_bytes(self, location, count):
+        return bytes(self.file[location:location+count])
+
+    def read_int(self, location, count):
+        return int.from_bytes(self.read_bytes(location, count), "big")
+
+    def write(self, location, data: bytes):
+        count = len(data)
+        for i in range(count):
+            self.file[location + i] = data[i]
+
+
 class MachOFile:
     def __init__(self, file, use_mmaped_io=True, from_base=0):
         self.file_object = file
@@ -41,79 +110,39 @@ class MachOFile:
         else:
             self.filename = ''
 
-        if use_mmaped_io:
-            assert not isinstance(file, BytesIO)
-            global mmap
-            import mmap
-            try:
-                self.file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_COPY)
-                self._get_bytes_at = self._mmaped_get_bytes_at
-                self._get_at = self._mmaped_get_at
-            except:
-                log.warning("mmap Failed - Swapped to fallback IO method")
-                self.uses_mmaped_io = False
-                log.debug_tm("mmapped IO disabled")
-                self.file = file
-
-                self.file_data = bytearray(file.read())
-                log.debug_tm("BIO Buffer Size: " + hex(len(self.file_data)))
-                self._get_bytes_at = self._bio_get_bytes_at
-                self._get_at = self._bio_get_at
-
-        else:
-            log.debug_tm("mmapped IO disabled")
-            self.file = file
-
-            self.file_data = bytearray(file.read())
-            log.debug_tm("BIO Buffer Size: " + hex(len(self.file_data)))
-            self._get_bytes_at = self._bio_get_bytes_at
-            self._get_at = self._bio_get_at
+        self.file = BackingFile(file, use_mmaped_io)
 
         self.slices = []
-        # noinspection PyTypeChecker
-        self.magic = self._get_at(0, 4)
-        self.type = self._load_filetype()
+
+        self.magic = self.file.read_int(0, 4)
+
+        if self.magic == FAT_MAGIC or self.magic == FAT_CIGAM:
+            self.type = MachOFileType.FAT
+        elif self.magic == MH_MAGIC or self.magic == MH_CIGAM or self.magic == MH_MAGIC_64 or self.magic == MH_CIGAM_64:
+            self.type = MachOFileType.THIN
+        else:
+            log.debug(f'Bad Magic: {hex(self.magic)}')
+            raise UnsupportedFiletypeException
 
         if self.type == MachOFileType.FAT:
             self.header: fat_header = self._load_struct(0, fat_header, "big")
             for off in range(0, self.header.nfat_archs):
                 offset = fat_header.SIZE + (off * fat_arch.SIZE)
-                arch_struct = self._load_struct(offset, fat_arch, "big")
-                log.debug_more(arch_struct)
-                self.slices.append(Slice(self, arch_struct))
+                arch_struct: fat_arch = self._load_struct(offset, fat_arch, "big")
+                sliced_backing_file = SlicedBackingFile(self.file, arch_struct.offset, arch_struct.size)
+                log.debug_more(str(arch_struct))
+                self.slices.append(Slice(self, sliced_backing_file, arch_struct))
         else:
-            self.slices.append(Slice(self, None))
-
-    def _load_filetype(self) -> MachOFileType:
-        if self.magic == FAT_MAGIC or self.magic == FAT_CIGAM:
-            return MachOFileType.FAT
-        elif self.magic == MH_MAGIC or self.magic == MH_CIGAM or self.magic == MH_MAGIC_64 or self.magic == MH_CIGAM_64:
-            return MachOFileType.THIN
-        else:
-            log.debug(f'Bad Magic: {hex(self.magic)}')
-            raise UnsupportedFiletypeException
+            self.slices.append(Slice(self, self.file, None))
 
     def _load_struct(self, address: int, struct_type, endian="little"):
         size = struct_type.SIZE
-        data = self._get_bytes_at(address, size)
+        data = self.file.read_bytes(address, size)
 
         struct = Struct.create_with_bytes(struct_type, data, endian)
         struct.off = address
 
         return struct
-
-    def _bio_get_bytes_at(self, address: int, count: int):
-        return bytes(self.file_data[address:address + count])
-
-    def _mmaped_get_bytes_at(self, address: int, count: int):
-        return self.file[address: address + count]
-
-    def _bio_get_at(self, address: int, count: int, endian="big"):
-        return int.from_bytes(self._bio_get_bytes_at(address, count), endian)
-
-    # noinspection PyTypeChecker
-    def _mmaped_get_at(self, address: int, count: int, endian="big") -> int:
-        return int.from_bytes(self.file[address:address + count], endian)
 
     def __del__(self):
         self.file.close()
@@ -337,27 +366,10 @@ class MisalignedVM:
 
 
 class Slice:
-    def __init__(self, macho_file: MachOFile, arch_struct: fat_arch = None, offset=0):
-        self.macho_file: MachOFile = macho_file
+    def __init__(self, macho_file, sliced_backing_file: SlicedBackingFile, arch_struct: fat_arch=None, offset=0):
+        self.file = sliced_backing_file
+        self.macho_file = macho_file
         self.arch_struct: fat_arch = arch_struct
-
-        if macho_file.uses_mmaped_io:
-            self.get_int_at = self._mmap_get_int_at
-            self.get_bytes_at = self._mmap_get_bytes_at
-            self.get_str_at = self._mmap_get_str_at
-            self.get_cstr_at = self._mmap_get_cstr_at
-            self.find = self._mmap_find
-        else:
-            self.get_int_at = self._bio_get_int_at
-            self.get_bytes_at = self._bio_get_bytes_at
-            self.get_str_at = self._bio_get_str_at
-            self.get_cstr_at = self._bio_get_cstr_at
-            self.find = self._bio_find
-
-        self.patches = {}
-
-        self.patched_bytes = b''
-        self.use_patched_bytes = False
 
         if self.arch_struct:
             self.offset = arch_struct.offset
@@ -370,16 +382,7 @@ class Slice:
             self.type = self._load_type()
             self.subtype = self._load_subtype(self.type)
 
-        self.size = 0
-
-        if self.offset == 0:
-            f = self.macho_file.file_object
-            old_file_position = f.tell()
-            f.seek(0, os.SEEK_END)
-            self.size = f.tell()
-            f.seek(old_file_position)
-        else:
-            self.size = self.arch_struct.size
+        self.size = sliced_backing_file.size
 
         # noinspection PyArgumentList
         self.byte_order = "little" if self.get_int_at(0, 4, "little") in [MH_MAGIC, MH_MAGIC_64] else "big"
@@ -387,55 +390,16 @@ class Slice:
         self._cstring_cache = {}
 
     def patch(self, address: int, raw: bytes):
-        if self.macho_file.uses_mmaped_io:
-            self.macho_file.file.seek(self.offset + address)
-            log.debug(f'Patched At: {hex(address)} ')
-            log.debug(f'New Bytes: {str(raw)}')
-            diff = self.size - (self.offset + address + len(raw))
-            if diff < 0:
-                data = self.full_bytes_for_slice()
-                data = data[:address] + raw
-                # log.debug(data)
-                self.patched_bytes = data
-                self.use_patched_bytes = True
-                return
-            old_raw = self.macho_file.file.read(len(raw))
-            self.macho_file.file.seek(self.offset + address)
-            log.debug(f'Old Bytes: {str(old_raw)}')
-            self.macho_file.file.write(raw)
-            self.macho_file.file.seek(0)
-        else:
-            self.patches[address] = raw
+        self.file.write(address, raw)
 
     def full_bytes_for_slice(self):
-        if self.macho_file.uses_mmaped_io:
-            if self.offset == 0:
-                return self.macho_file.file[0:self.size]
-            return self.macho_file.file[self.offset:self.offset + self.arch_struct.size]
+        return bytes(self.file.file)
 
-        else:
-            data = self.macho_file.file_data[self.offset:self.offset+self.size]
-            for patch_loc in self.patches:
-                i = 0
-                patch_data = self.patches[patch_loc]
-                for byte in patch_data:
-                    data[patch_loc + i] = byte
-                    i += 1
-            return data
-
-    def _mmap_find(self, pattern: Union[str, bytes]):
+    def find(self, pattern: Union[str, bytes]):
         if isinstance(pattern, str):
             pattern = pattern.encode('utf-8')
-        addr = self.macho_file.file[self.offset:self.offset+self.size].find(pattern)
-        if addr == -1:
-            return -1
-        return addr + self.offset
 
-    def _bio_find(self, pattern: Union[str, bytes]):
-        addr = self.macho_file.file_data[self.offset:self.offset+self.size].find(pattern)
-        if addr == -1:
-            return -1
-        return addr + self.offset
+        return self.file.file.find(pattern)
 
     def load_struct(self, addr: int, struct_type, endian="little"):
         size = struct_type.SIZE
@@ -446,30 +410,15 @@ class Slice:
 
         return struct
 
-    def _mmap_get_int_at(self, addr: int, count: int, endian="little"):
-        addr = addr + self.offset
+    def get_int_at(self, addr: int, count: int, endian="little"):
+        return int.from_bytes(self.file.read_bytes(addr, count), endian)
 
-        return int.from_bytes(self.macho_file.file[addr:addr + count], endian)
+    def get_bytes_at(self, addr: int, count: int):
+        return self.file.read_bytes(addr, count)
 
-    def _bio_get_int_at(self, addr: int, count: int, endian="little"):
-        return int.from_bytes(self._bio_get_bytes_at(addr, count), endian)
-
-    def _mmap_get_bytes_at(self, addr: int, count: int):
-        addr = addr + self.offset
-
-        return self.macho_file.file[addr:addr + count]
-
-    # noinspection PyUnusedLocal
-    def _bio_get_bytes_at(self, addr: int, count: int, endian="little"):
-        addr = addr + self.offset
-
-        return self.macho_file.file_data[addr:addr + count]
-
-    def _mmap_get_str_at(self, addr: int, count: int, force=False) -> str:
-        addr = addr + self.offset
-
+    def get_str_at(self, addr: int, count: int, force=False) -> str:
         if force:
-            data = self.macho_file.file[addr:addr + count]
+            data = self.file.file[addr:addr + count]
             string = ""
 
             for ch in data:
@@ -479,63 +428,23 @@ class Slice:
                     string += "?"
             return string
 
-        return self.macho_file.file[addr:addr + count].decode().rstrip('\x00')
+        return self.file.file[addr:addr + count].decode().rstrip('\x00')
 
-    def _bio_get_str_at(self, addr: int, count: int, force=False):
-        addr = addr + self.offset
-
-        self.macho_file.file.seek(addr)
-        data = self.macho_file.file.read(count)
-
-        return data.decode().rstrip('\x00')
-
-    # noinspection PyUnusedLocal
-    def _mmap_get_cstr_at(self, addr: int, limit: int = 0) -> str:
-        addr = addr + self.offset
+    def get_cstr_at(self, addr: int, limit: int = 0):
+        ea = addr
 
         if addr in self._cstring_cache:
             return self._cstring_cache[addr]
 
-        try:
-            self.macho_file.file.seek(addr)
-        except ValueError as ex:
-            log.error(f'OOB Seek to {hex(addr)} in slice {hex(self.offset)} size:{hex(self.size)}')
-            raise ex
-
-        try:
-            text = self.macho_file.file[addr:self.macho_file.file.find(b"\x00")].decode()
-        except Exception as ex:
-            log.debug(f'Failed to decode CString at raw {hex(addr)} off {hex(addr - self.offset)}')
-            raise ex
-
-        self.macho_file.file.seek(0)
-        self._cstring_cache[addr] = text
-
-        return text
-
-    # noinspection PyUnusedLocal
-    def _bio_get_cstr_at(self, addr: int, limit: int = 0):
-        # this function will likely be a bit slower than the mmaped one, and will probably bottleneck things, oh well.
-        # I'm unsure if there's any possible faster approach than this.
-        ea = addr + self.offset
-
-        if addr in self._cstring_cache:
-            return self._cstring_cache[addr]
-
-        cnt = 0
+        count = 0
         while True:
-            try:
-                if self.macho_file.file_data[ea] != 0:
-                    cnt += 1
-                    ea += 1
-                else:
-                    break
+            if self.file.file[ea] != 0:
+                count += 1
+                ea += 1
+            else:
+                break
 
-            except IndexError as ex:
-                log.error(f'ea: {hex(ea)} // buffer len: {hex(len(self.macho_file.file_data))}')
-                raise ex
-
-        text = self._bio_get_bytes_at(addr, cnt).decode()
+        text = self.get_str_at(addr, count)
 
         self._cstring_cache[addr] = text
 
