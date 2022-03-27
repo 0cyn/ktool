@@ -623,56 +623,57 @@ class LD64:
     @classmethod
     def insert_load_cmd_with_str(cls, image: Image, lc, fields, suffix, index=-1):
         lc_type = LOAD_COMMAND_MAP[lc]
-
         load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
-        log.debug(f'Fabricated Load Command {str(load_cmd)}')
 
         encoded = suffix.encode('utf-8') + b'\x00'
+        cmd_size = 0x8 * math.ceil(lc_type.SIZE + len(encoded) / 0x8)
 
-        cmd_size = lc_type.SIZE
-        cmd_size += len(encoded)
-        cmd_size = 0x8 * math.ceil(cmd_size / 0x8)
-        log.debug_tm(f'Computed cmd size (w/ pad) of {cmd_size}')
+        header_size = image.segments['__TEXT'].sections['__text'].file_address
+
+        # verify our lc will actually fit
+        assert image.macho_header.dyld_header.loadsize + len(image.macho_header.dyld_header.raw)  + cmd_size < header_size
 
         load_cmd.cmdsize = cmd_size
-
-        off = mach_header.SIZE
-        off += image.macho_header.dyld_header.loadsize
         raw = load_cmd.raw + encoded + (b'\x00' * (cmd_size - (lc_type.SIZE + len(encoded))))
-        log.debug_tm(f'Padding Size {(cmd_size - (lc_type.SIZE + len(encoded)))}')
-        size = len(raw)
+
+        full_header = bytearray()
+
+        pre_load_cmd = image.macho_header.load_commands[index - 1] if index != -1 else image.macho_header.load_commands[-1]
+        off = pre_load_cmd.off + pre_load_cmd.cmdsize
+
+        full_header += bytearray(image.macho_header.raw_bytes()[:off])
+        patch_after = bytearray()
 
         if index != -1:
-            b_load_cmd = image.macho_header.load_commands[index - 1]
-            off = b_load_cmd.off + b_load_cmd.cmdsize
-            after_bytes = image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + 32]
-            image.slice.patch(off, raw)
-            image.slice.patch(off + size, after_bytes)
-            image.macho_header.load_commands.insert(index, load_cmd)
-        else:
-            image.slice.patch(off, raw)
-            image.macho_header.load_commands.append(load_cmd)
+            patch_after = bytearray(image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + len(image.macho_header.dyld_header.raw)])
+
+        full_header += bytearray(raw)
+        full_header += patch_after
 
         image.macho_header.dyld_header.loadcnt += 1
-        image.macho_header.dyld_header.loadsize -= size
-        log.info("Patching dyld_header")
-        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw[:image.macho_header.dyld_header.__class__.SIZE])
+        image.macho_header.dyld_header.loadsize -= len(raw)
+
+        full_header = bytearray(image.macho_header.dyld_header.raw) + full_header[len(image.macho_header.dyld_header.raw):]
+
+        image.slice.patch(0, bytes(full_header))
 
     @classmethod
     def remove_load_command(cls, image: Image, index):
         b_load_cmd = image.macho_header.load_commands.pop(index)
 
-        off = b_load_cmd.off + b_load_cmd.cmdsize
-        after_bytes = image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + 32]
+        full_header = bytearray()
 
-        image.slice.patch(b_load_cmd.off, after_bytes)
-        image.slice.patch(image.macho_header.dyld_header.loadsize + 32 - b_load_cmd.cmdsize,
-                          b'\x00' * b_load_cmd.cmdsize)
+        off = b_load_cmd.off + b_load_cmd.cmdsize
+        full_header += bytearray(image.macho_header.raw_bytes()[:b_load_cmd.off])  # add everything up to the target
+        full_header += bytearray(image.macho_header.raw_bytes()[off:])  # add everything after the target command
+        full_header += bytearray(b'\x00' * b_load_cmd.cmdsize)  # replace the now junk copies of displaced commands
 
         image.macho_header.dyld_header.loadcnt -= 1
         image.macho_header.dyld_header.loadsize -= b_load_cmd.cmdsize
 
-        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw[:image.macho_header.dyld_header.__class__.SIZE])
+        full_header = bytearray(image.macho_header.dyld_header.raw) + full_header[len(image.macho_header.dyld_header.raw):]
+
+        image.slice.patch(0, bytes(full_header))
 
 
 class ExternalDylib:
