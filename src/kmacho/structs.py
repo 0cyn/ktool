@@ -82,6 +82,9 @@ class Struct:
         raw = bytearray(raw)
         inst_raw = bytearray()
 
+        # I *Genuinely* cannot figure out where in the program the size mismatch is happening. This should hotfix?
+        raw = raw[:struct_class.SIZE]
+
         for field in instance._fields:
             value = instance._field_sizes[field]
 
@@ -152,7 +155,7 @@ class Struct:
     def desc(self):
         return ""
 
-    def __getattr__(self, item):
+    def __getattribute__(self, item):
         if item == 'raw':
             return self._rebuild_raw()
         return super().__getattribute__(item)
@@ -328,7 +331,7 @@ class fat_arch(Struct):
 class mach_header(Struct):
     _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags']
     _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 4 * 7
+    SIZE = 28
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
@@ -344,7 +347,7 @@ class mach_header(Struct):
 class mach_header_64(Struct):
     _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags', 'reserved']
     _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 4 * 8
+    SIZE = 32
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
