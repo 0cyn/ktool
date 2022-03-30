@@ -20,6 +20,7 @@ from enum import Enum
 from typing import List, Union
 import re
 
+from kmacho import Struct
 from ktool.exceptions import *
 
 import pkg_resources
@@ -625,36 +626,50 @@ class log:
         return 'ktool.' + filename + ":" + line_name + ":" + call_from + '()'
 
     @staticmethod
-    def debug(msg: str = ""):
+    def debug(msg=""):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG.value:
+            if issubclass(msg.__class__, Struct):
+                msg = str(msg)
             log.LOG_FUNC(f'DEBUG - {log.line()} - {msg}')
 
     @staticmethod
     def debug_more(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG_MORE.value:
+            if issubclass(msg.__class__, Struct):
+                msg = str(msg)
             log.LOG_FUNC(f'DEBUG-2 - {log.line()} - {msg}')
 
     @staticmethod
     def debug_tm(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.DEBUG_TOO_MUCH.value:
+            if issubclass(msg.__class__, Struct):
+                msg = str(msg)
             log.LOG_FUNC(f'DEBUG-3 - {log.line()} - {msg}')
 
     @staticmethod
     def info(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.INFO.value:
+            if issubclass(msg.__class__, Struct):
+                msg = str(msg)
             log.LOG_FUNC(f'INFO - {log.line()} - {msg}')
 
     @staticmethod
     def warn(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.WARN.value:
+            if issubclass(msg.__class__, Struct):
+                msg = str(msg)
             log.LOG_ERR(f'WARN - {log.line()} - {msg}')
 
     @staticmethod
     def warning(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.WARN.value:
+            if issubclass(msg.__class__, Struct):
+                msg = str(msg)
             log.LOG_ERR(f'WARN - {log.line()} - {msg}')
 
     @staticmethod
     def error(msg: str = ""):
         if log.LOG_LEVEL.value >= LogLevel.ERROR.value:
+            if issubclass(msg.__class__, Struct):
+                msg = str(msg)
             log.LOG_ERR(f'ERROR - {log.line()} - {msg}')

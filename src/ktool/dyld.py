@@ -285,7 +285,7 @@ class Image:
             self.vm.fallback = self.fallback_vm
         else:
             if yell_about_misalignment:
-                log.warn("MachO cannot be aligned to 16k or 4k pages. Swapping to fallback mapping.")
+                log.info("MachO cannot be aligned to 16k or 4k pages. Swapping to fallback mapping.")
             self.vm: MisalignedVM = self.fallback_vm
             self.vm.detag_64 = detag_64
 

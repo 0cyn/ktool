@@ -28,12 +28,12 @@ except ModuleNotFoundError:
     Header = None
     HeaderGenerator = None
     pass
-from ktool.macho import Slice, MachOFile
+from ktool.macho import Slice, MachOFile, SlicedBackingFile
 from ktool.objc import ObjCImage
 from ktool.util import TapiYAMLWriter, ignore, log
 
 
-def load_macho_file(fp: Union[BinaryIO, BytesIO], use_mmaped_io=True) -> MachOFile:
+def load_macho_file(fp: Union[SlicedBackingFile, BinaryIO, BytesIO], use_mmaped_io=True) -> MachOFile:
     """
     This function takes a bare file and loads it as a MachOFile.
 
@@ -46,6 +46,12 @@ def load_macho_file(fp: Union[BinaryIO, BytesIO], use_mmaped_io=True) -> MachOFi
     """
     if isinstance(fp, BytesIO):
         use_mmaped_io = False
+    elif isinstance(fp, SlicedBackingFile):
+        use_mmaped_io = False
+        new_fp = BytesIO()
+        new_fp.write(bytes(fp.file))
+        new_fp.seek(0)
+        fp = new_fp
 
     return MachOFile(fp, use_mmaped_io=use_mmaped_io)
 
@@ -62,10 +68,10 @@ def reload_image(image: Image) -> Image:
     return load_image(image.slice)
 
 
-def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO], slice_index=0, load_symtab=True, load_imports=True,
+def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO, SlicedBackingFile], slice_index=0, load_symtab=True, load_imports=True,
                load_exports=True, use_mmaped_io=True) -> Image:
     """
-    Take a bare file, MachOFile, BytesIO, or Slice, and load MachO/dyld metadata about that item
+    Take a bare file, MachOFile, BytesIO, SlicedBackingFile, or Slice, and load MachO/dyld metadata about that item
 
     :param fp: a bare file, MachOFile, or Slice to load.
     :param slice_index: If a Slice is not being passed, and a file or MachOFile is a Fat MachO, which slice should be loaded?
@@ -82,6 +88,9 @@ def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO], slice_index=0, lo
     elif isinstance(fp, Slice):
         macho_slice = fp
     elif isinstance(fp, BytesIO):
+        macho_file = load_macho_file(fp, use_mmaped_io=False)
+        macho_slice: Slice = macho_file.slices[slice_index]
+    elif isinstance(fp, SlicedBackingFile):
         macho_file = load_macho_file(fp, use_mmaped_io=False)
         macho_slice: Slice = macho_file.slices[slice_index]
     else:

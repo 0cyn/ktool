@@ -52,6 +52,7 @@ class BackingFile:
             f.seek(0, os.SEEK_END)
             self.size = f.tell()
             f.seek(old_file_position)
+
         if not use_mmaped_io:
             self.file = bytearray(fp.read())
             self.size = len(self.file)
@@ -100,7 +101,7 @@ class SlicedBackingFile:
 
 
 class MachOFile:
-    def __init__(self, file, use_mmaped_io=True, from_base=0):
+    def __init__(self, file, use_mmaped_io=True):
         self.file_object = file
 
         self.uses_mmaped_io = use_mmaped_io
@@ -116,9 +117,9 @@ class MachOFile:
 
         self.magic = self.file.read_int(0, 4)
 
-        if self.magic == FAT_MAGIC or self.magic == FAT_CIGAM:
+        if self.magic in [FAT_MAGIC, FAT_CIGAM]:
             self.type = MachOFileType.FAT
-        elif self.magic == MH_MAGIC or self.magic == MH_CIGAM or self.magic == MH_MAGIC_64 or self.magic == MH_CIGAM_64:
+        elif self.magic in [MH_MAGIC, MH_CIGAM, MH_MAGIC_64, MH_CIGAM_64]:
             self.type = MachOFileType.THIN
         else:
             log.debug(f'Bad Magic: {hex(self.magic)}')
@@ -366,7 +367,7 @@ class MisalignedVM:
 
 
 class Slice:
-    def __init__(self, macho_file, sliced_backing_file: SlicedBackingFile, arch_struct: fat_arch=None, offset=0):
+    def __init__(self, macho_file, sliced_backing_file: Union[BackingFile, SlicedBackingFile], arch_struct: fat_arch=None, offset=0):
         self.file = sliced_backing_file
         self.macho_file = macho_file
         self.arch_struct: fat_arch = arch_struct
