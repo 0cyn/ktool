@@ -435,6 +435,7 @@ MachO Editing ---
 MachO Analysis ---
     dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
     json - Dump image metadata as json
+    cs - Codesigning info
     kcache - Kernel cache specific tools
     list - Print various lists (ObjC Classes, etc.)
     symbols - Print various tables (Symbols, imports, exports)
@@ -483,7 +484,16 @@ def _open(args):
 
 
 def serialize(args):
+    """
+----------
+Dump image metadata as json
 
+> ktool json [filename]
+
+Dump image metadata including objc metadata
+
+> ktool json --with-objc [filename]
+    """
     require_args(args, one_of=['filename'])
 
     log.LOG_LEVEL = LogLevel(-1)
@@ -519,7 +529,13 @@ def serialize(args):
 
 
 def ent(args):
+    """
+----------
+Interact with codesigning info
 
+Dump entitlements
+> ktool cs --ent [filename]
+    """
     require_args(args, one_of=['get_ent'])
 
     if args.get_ent:
