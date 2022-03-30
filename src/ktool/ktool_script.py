@@ -199,9 +199,10 @@ def main():
 
     parser_json = subparsers.add_parser('json', help='Dump Image metadata as json')
 
+    parser_json.add_argument('--with-objc', dest='with_objc', action='store_true')
     parser_json.add_argument('filename', nargs='?', default='')
 
-    parser_json.set_defaults(func=serialize)
+    parser_json.set_defaults(func=serialize, with_objc=False)
 
     # insert command: optool replacement
     parser_insert = subparsers.add_parser('insert', help='Insert data into MachO Binary')
@@ -433,6 +434,7 @@ MachO Editing ---
 
 MachO Analysis ---
     dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
+    json - Dump image metadata as json
     kcache - Kernel cache specific tools
     list - Print various lists (ObjC Classes, etc.)
     symbols - Print various tables (Symbols, imports, exports)
@@ -484,6 +486,8 @@ def serialize(args):
 
     require_args(args, one_of=['filename'])
 
+    log.LOG_LEVEL = LogLevel(-1)
+
     with open(args.filename, 'rb') as fp:
 
         macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
@@ -506,6 +510,10 @@ def serialize(args):
             slices.append(slice_dict)
 
         out_dict['slices'] = slices
+
+        if args.with_objc:
+            objc_image = ktool.load_objc_metadata(image)
+            out_dict['objc'] = objc_image.serialize()
 
         print(json.dumps(out_dict, indent=4, sort_keys=True))
 

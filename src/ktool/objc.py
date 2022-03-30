@@ -178,6 +178,13 @@ class ObjCImage(Constructable):
         self.cat_map: Dict[int, 'Category'] = {}
         self.prot_map: Dict[int, 'Protocol'] = {}
 
+    def serialize(self):
+        return {
+            'classes': [cls.serialize() for cls in self.classlist],
+            'categories': [cat.serialize() for cat in self.catlist],
+            'protocols': [prot.serialize() for prot in self.protolist]
+        }
+
     def vm_check(self, address):
         return self.image.vm.vm_check(address)
 
@@ -419,6 +426,7 @@ class Ivar(Constructable):
     def __init__(self, name, type_encoding, type_processor):
         self.name: str = name
         type_string: str = type_encoding
+        self.typestr = type_string
         if len(type_string) == 0:
             self.is_id = False
             self.type = '?'
@@ -428,6 +436,15 @@ class Ivar(Constructable):
             self.type: str = self._renderable_type(type_processor.process(type_string)[0])
         except IndexError:
             self.type: str = '?'
+
+    def serialize(self):
+        return {
+            'name': self.name,
+            'type': self.type,
+            'type_is_id': self.type,
+            'typestring': self.typestr,
+            'rendered': str(self)
+        }
 
     def __str__(self):
         ret = ""
@@ -574,6 +591,15 @@ class Method(Constructable):
         self.arguments = [self._renderable_type(i) for i in self.types[1:]]
 
         self.signature = self._build_method_signature()
+
+    def serialize(self):
+        return {
+            'selector': self.sel,
+            'arguments': self.arguments,
+            'return_type': self.return_string,
+            'signature': self.signature,
+            'typestring': self.type_string
+        }
 
     def __str__(self):
         ret = ""
@@ -795,6 +821,16 @@ class Class(Constructable):
         self.protocols = protocols
         self.ivars = ivars
 
+    def serialize(self):
+        return {
+            'name': self.name,
+            'superclass': self.superclass,
+            'methods': [meth.serialize() for meth in self.methods],
+            'properties': [prop.serialize() for prop in self.properties],
+            'protocols': [prot.name for prot in self.protocols],
+            'ivars': [ivar.serialize() for ivar in self.ivars]
+        }
+
     def __str__(self):
         ret = ""
         ret += self.name
@@ -844,11 +880,22 @@ class Property(Constructable):
             self.is_id = False
             self.attributes = []
             self.ivarname = ""
+            self.attr = None
 
         self.type = self._renderable_type(self.attr.type)
         self.is_id = self.attr.is_id
         self.attributes = self.attr.attributes
         self.ivarname = self.attr.ivar
+
+    def serialize(self):
+        return {
+            'name': self.name,
+            'type': self.type,
+            'is_id': self.is_id,
+            'ivar_name': self.ivarname,
+            'attributes': self.attributes,
+            'rendered': str(self)
+        }
 
     def __str__(self):
         if not hasattr(self, 'attributes'):
@@ -993,6 +1040,15 @@ class Category(Constructable):
         self.properties = properties
         self.protocols = []
 
+    def serialize(self):
+        return {
+            'name': self.name,
+            'classname': self.classname,
+            'methods': [method.serialize() for method in self.methods],
+            'properties': [prop.serialize() for prop in self.properties],
+            'protocols': [prot.name for prot in self.protocols]
+        }
+
 
 class Protocol(Constructable):
 
@@ -1082,6 +1138,14 @@ class Protocol(Constructable):
         self.opt_methods = opt_methods
 
         self.properties = properties
+
+    def serialize(self):
+        return {
+            'name': self.name,
+            'methods': [meth.serialize() for meth in self.methods],
+            'optional-methods': [meth.serialize() for meth in self.opt_methods],
+            'properties': [prop.serialize() for prop in self.properties]
+        }
 
     def __str__(self):
         return self.name
