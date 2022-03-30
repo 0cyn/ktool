@@ -19,6 +19,7 @@ from ktool import MachOFile, Image, log
 from ktool.dyld import ImageHeader, Dyld
 import ktool.kplistlib as plistlib
 from ktool.exceptions import UnsupportedFiletypeException
+from ktool.macho import SlicedBackingFile
 
 
 class kmod_info_64(Struct):
@@ -26,7 +27,7 @@ class kmod_info_64(Struct):
     """
     _FIELDNAMES = ['next_addr', 'info_version', 'id', 'name', 'version', 'reference_count', 'reference_list_addr',
                    'address', 'size', 'hdr_size', 'start_addr', 'stop_addr']
-    _SIZES = [uint64_t, int32_t, uint32_t, uint8_t*64, uint8_t*64, int32_t, uint64_t,
+    _SIZES = [uint64_t, int32_t, uint32_t, char_t[64], char_t[64], int32_t, uint64_t,
               uint64_t, uint64_t, uint64_t, uint64_t, uint64_t]
     SIZE = sum([0xffff & i for i in _SIZES])
 

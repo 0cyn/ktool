@@ -31,7 +31,7 @@ int32_t = type_sint | 4
 int64_t = type_sint | 8
 
 
-char_t = [type_str | i for i in range(17)]
+char_t = [type_str | i for i in range(65)]
 
 
 def _bytes_to_hex(data) -> str:
