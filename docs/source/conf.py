@@ -18,11 +18,11 @@ sys.path.insert(0, os.path.abspath('../../'))
 # -- Project information -----------------------------------------------------
 
 project = 'ktool'
-copyright = '2021, kat'
+copyright = '2022, kat'
 author = 'cynder'
 
 # The full version, including alpha/beta/rc tags
-release = '1.0.0'
+release = '1.2.0'
 
 # -- General configuration ---------------------------------------------------
 

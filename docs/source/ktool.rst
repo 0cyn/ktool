@@ -135,6 +135,10 @@ You should obtain an instance of this class using the public :python:`ktool.load
 
       ExternalDylib object that (admittedly, somewhat confusingly) actually represents this Image itself.
 
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
+
    .. py:method:: vm_check(address: int) -> bool
 
       Check if an address resolves within the VM translation table
@@ -243,6 +247,10 @@ ObjCImage
    .. py:attribute:: prot_map: Dict[int, Protocol]
 
       Map of Load addresses to protocols
+
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
 
    .. py:method:: vm_check(address: int) -> bool
 
@@ -404,6 +412,10 @@ Segment
 
       Size of the segment
 
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
+
 
 Section
 =================================
@@ -427,6 +439,10 @@ Section
    .. py:attribute:: size: int
 
       Size of the Section
+
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
 
 
 Header
@@ -527,6 +543,10 @@ ImageHeader
    .. py:attribute:: load_commands: List[load_command]
 
       List of load command structs
+
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
 
 
 ExternalDylib
@@ -689,6 +709,10 @@ Class
 
    .. py:attribute:: ivars: List[Ivar]
 
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
+
 
 Method
 =================================
@@ -726,6 +750,10 @@ Method
 
       Fully built method signature
 
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
+
 Property
 =================================
 
@@ -749,7 +777,11 @@ Property
 
    .. py:attribute:: ivarname 
 
-      Name of the ivar backing this property 
+      Name of the ivar backing this property
+
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
 
 Ivar
 =================================
@@ -769,6 +801,10 @@ Ivar
    .. py:attribute:: type: str 
 
       Renderable type
+
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
 
 Category 
 =================================
@@ -800,6 +836,10 @@ Category
    .. py:attribute:: properties: List[Property] 
 
    .. py:attribute:: protocols: List[Protocol]
+
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
 
    
 Protocol 
@@ -833,7 +873,11 @@ Protocol
 
       Methods that may (but are not required to) be implemented by classes conforming to this protocol
 
-   .. py:attribute:: properties: List[Property] 
+   .. py:attribute:: properties: List[Property]
+
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
 
 
 Type Processing / Encoding
