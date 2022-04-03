@@ -256,6 +256,9 @@ class Struct:
                 data = field_dat
             elif isinstance(field_dat, str):
                 data = field_dat.encode('utf-8')
+                pad_size = size & size_mask
+                if len(data) < pad_size:
+                    data += b'\x00' * (pad_size - len(data))
 
             assert data is not None
 
