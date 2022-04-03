@@ -23,7 +23,7 @@ from kmacho import (
     BINDING_OPCODE,
     LOAD_COMMAND_MAP,
     BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB,
-    BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64, CPUType, CPUSubTypeARM64
+    BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64, CPUType, CPUSubTypeARM64, MH_CIGAM, MH_MAGIC
 )
 from kmacho.base import Constructable
 from kmacho.fixups import *
@@ -73,6 +73,7 @@ class ImageHeader(Constructable):
                 load_cmd.off = offset
             except ValueError as ex:
                 if not ignore.MALFORMED:
+                    log.error(f'Bad Load Command at {hex(offset)} index {i-1}')
                     raise ex
                 unk_lc = macho_slice.load_struct(offset, unk_command)
                 load_cmd = unk_lc
@@ -99,8 +100,67 @@ class ImageHeader(Constructable):
         return image_header
 
     @classmethod
-    def from_values(cls, *args, **kwargs):
-        pass
+    def from_values(cls, is_64: bool,  cpu_type, cpu_subtype, filetype: MH_FILETYPE, flags: List[MH_FLAGS], load_commands: List):
+
+        image_header = ImageHeader()
+
+        struct_type = mach_header_64 if is_64 else mach_header
+
+        full_load_cmds_raw = bytearray()
+
+        lcs = []
+
+        lc_count = 0
+
+        off = struct_type.SIZE
+
+        for lc in load_commands:
+
+            if issubclass(lc.__class__, Struct):
+                assert len(lc.raw) == lc.__class__.SIZE
+                assert hasattr(lc, 'cmdsize')
+                lc.off = off
+                lcs.append(lc)
+                full_load_cmds_raw += bytearray(lc.raw)
+                lc_count += 1
+                off += lc.cmdsize
+
+            elif isinstance(lc, bytes) or isinstance(lc, bytearray):
+                full_load_cmds_raw += bytearray(lc)
+
+            elif isinstance(lc, Segment):
+                lc.cmd.off = off
+                lcs.append(lc.cmd)
+                dat = bytearray(lc.cmd.raw)
+                lc_count += 1
+                for sect in lc.sections.values():
+                    dat += sect.cmd.raw
+                assert len(dat) == lc.cmd.cmdsize
+                full_load_cmds_raw += dat
+                off += lc.cmd.cmdsize
+
+        embedded_flag = 0
+        for flag in flags:
+            embedded_flag |= flag.value
+
+        if is_64:
+            header = Struct.create_with_values(struct_type, [MH_MAGIC_64, cpu_type.value, cpu_subtype.value, filetype.value, lc_count, len(full_load_cmds_raw), embedded_flag, 0])
+        else:
+            header = Struct.create_with_values(struct_type, [MH_MAGIC, cpu_type.value, cpu_subtype.value, filetype.value, lc_count, len(full_load_cmds_raw), embedded_flag])
+
+        image_header.dyld_header = header
+
+        image_header.filetype = MH_FILETYPE(header.filetype)
+
+        for flag in MH_FLAGS:
+            if header.flags & flag.value:
+                image_header.flags.append(flag)
+
+        image_header.load_commands = lcs
+
+        image_header.raw = bytearray(header.raw) + full_load_cmds_raw
+
+        return image_header
 
     def __str__(self):
         return f'MachO Header - 64 bit VM: {self.is64} | File Type: {self.filetype} | Flags: {self.flags} | Load Cmd Count: {len(self.load_commands)}'
