@@ -450,6 +450,7 @@ Run `ktool [command]` for info/examples on using that command
 Global Flags:
     -f - Force Load (ignores malformations in the MachO and tries to load whatever it can)
     -v [-1 through 5] - Log verbosiy. -1 completely silences logging.
+    -V - Print version string (`ktool -V | cat`) to disable the animation
         """
     print(help_prompt.__doc__)
 
@@ -464,6 +465,9 @@ def process_patches(image) -> 'Image':
 
 
 def _open(args):
+    """
+ktool open [filename]
+    """
     try:
         log.LOG_LEVEL = LogLevel.DEBUG
         screen = KToolScreen(args.hard_fail)
