@@ -33,6 +33,9 @@ class MachOFileType(Enum):
 class BackingFile:
     def __init__(self, fp: Union[BinaryIO, BytesIO], use_mmaped_io=True):
         self.fp = fp
+        if isinstance(fp, BytesIO):
+            use_mmaped_io = False
+            assert fp.getbuffer().nbytes > 0
 
         if hasattr(fp, 'name'):
             self.name = os.path.basename(fp.name)
@@ -54,7 +57,10 @@ class BackingFile:
             f.seek(old_file_position)
 
         if not use_mmaped_io:
-            self.file = bytearray(fp.read())
+            fp.seek(0)
+            data = fp.read(fp.getbuffer().nbytes)
+            self.file = bytearray(data)
+            assert len(self.file) > 0
             self.size = len(self.file)
 
     def read_bytes(self, location, count):
@@ -122,7 +128,7 @@ class MachOFile:
         elif self.magic in [MH_MAGIC, MH_CIGAM, MH_MAGIC_64, MH_CIGAM_64]:
             self.type = MachOFileType.THIN
         else:
-            log.debug(f'Bad Magic: {hex(self.magic)}')
+            log.error(f'Bad Magic: {hex(self.magic)}')
             raise UnsupportedFiletypeException
 
         if self.type == MachOFileType.FAT:
@@ -130,6 +136,11 @@ class MachOFile:
             for off in range(0, self.header.nfat_archs):
                 offset = fat_header.SIZE + (off * fat_arch.SIZE)
                 arch_struct: fat_arch = self._load_struct(offset, fat_arch, "big")
+
+                if not self.file.read_int(arch_struct.offset, 4) in [MH_MAGIC, MH_CIGAM, MH_MAGIC_64, MH_CIGAM_64]:
+                    log.error(f'Slice {off} has bad magic {hex(self.file.read_int(arch_struct.offset, 4))}')
+                    continue
+
                 sliced_backing_file = SlicedBackingFile(self.file, arch_struct.offset, arch_struct.size)
                 log.debug_more(str(arch_struct))
                 self.slices.append(Slice(self, sliced_backing_file, arch_struct))
