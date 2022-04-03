@@ -266,10 +266,7 @@ class VM:
 
         if self.vm_base_addr is None:
             self.vm_base_addr = segment.vm_address
-        if self.dirty or segment.vm_address % self.page_size != 0:
-            self.dirty = True
-            log.warn(f'MachO File could not be aligned.')
-            raise MachOAlignmentError
+
         self.map_pages(segment.file_address, segment.vm_address, segment.size)
 
     def translate(self, address) -> int:
@@ -300,10 +297,12 @@ class VM:
 
             try:
                 return self.fallback.translate(address)
-            except ValueError:
-                raise ValueError(f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
+            except VMAddressingError:
+                raise VMAddressingError(f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
 
     def map_pages(self, physical_addr, virtual_addr, size):
+        if physical_addr % self.page_size != 0 or virtual_addr % self.page_size != 0 or size % self.page_size != 0:
+            raise MachOAlignmentError
         for i in range(size // self.page_size):
             self.page_table[virtual_addr + (i * self.page_size) >> self.page_size_bits] = physical_addr + (
                         i * self.page_size)
@@ -354,7 +353,7 @@ class MisalignedVM:
                 self.cache[vm_address] = file_addr
                 return file_addr
 
-        raise ValueError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
+        raise VMAddressingError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
 
     def add_segment(self, segment: Segment):
         if segment.file_address == 0 and segment.size != 0:

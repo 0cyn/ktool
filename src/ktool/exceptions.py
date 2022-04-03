@@ -24,6 +24,11 @@ class MachOAlignmentError(Exception):
     """
 
 
+class VMAddressingError(ValueError):
+    """
+    """
+
+
 class UnsupportedFiletypeException(Exception):
     """
     """
