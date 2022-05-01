@@ -74,7 +74,8 @@ class ImageHeader(Constructable):
                 load_cmd.off = offset
             except ValueError as ex:
                 if not ignore.MALFORMED:
-                    log.error(f'Bad Load Command at {hex(offset)} index {i-1}')
+                    log.error(f'Bad Load Command at {hex(offset)} index {i-1}\n        {hex(cmd)} - {hex(cmd_size)}')
+
                 unk_lc = macho_slice.load_struct(offset, unk_command)
                 load_cmd = unk_lc
             except KeyError as ex:
