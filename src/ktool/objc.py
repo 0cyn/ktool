@@ -17,6 +17,7 @@ from typing import List, Dict, Optional
 
 from kmacho.base import Constructable
 from ktool.dyld import Image
+from ktool.exceptions import VMAddressingError
 from ktool.structs import *
 from ktool.util import log, ignore, usi32_to_si32, opts, Queue, QueueItem
 
@@ -436,6 +437,8 @@ class Ivar(Constructable):
             self.type: str = self._renderable_type(type_processor.process(type_string)[0])
         except IndexError:
             self.type: str = '?'
+        except TypeError:
+            self.type: str = '?'
 
     def serialize(self):
         return {
@@ -508,10 +511,13 @@ class MethodList:
                 method = Method.from_image(self.objc_image, sel, types, self.meta, vm_ea, uses_relative_methods,
                                            rms_are_direct)
                 methods.append(method)
-                for method_type in method.types:
-                    if method_type.type == EncodedType.STRUCT:
-                        self.struct_list.append(method_type.value)
-
+                if method.types:
+                    for method_type in method.types:
+                        if method_type.type == EncodedType.STRUCT:
+                            self.struct_list.append(method_type.value)
+            except VMAddressingError as ex:
+                log.warning(f'Failed to load a method at {sel} with {ex.__class__.__name__}: {str(ex)}')
+                self.load_errors.append(f'Failed to load a method with {ex.__class__.__name__}: {str(ex)}')
             except Exception as ex:
                 if not ignore.OBJC_ERRORS:
                     raise ex
@@ -589,8 +595,14 @@ class Method(Constructable):
         self.type_string = type_string
         self.types = type_processor.process(type_string)
 
-        self.return_string = self._renderable_type(self.types[0])
-        self.arguments = [self._renderable_type(i) for i in self.types[1:]]
+        try:
+            self.return_string = self._renderable_type(self.types[0])
+        except TypeError:
+            self.return_string = '?'
+        try:
+            self.arguments = [self._renderable_type(i) for i in self.types[1:]]
+        except TypeError:
+            self.arguments = ['?' for i in range(self.sel.count(':'))]
 
         self.signature = self._build_method_signature()
 
@@ -725,10 +737,12 @@ class Class(Constructable):
                 try:
                     property = Property.from_image(objc_image, prop)
                     properties.append(property)
-                    if hasattr(property, 'attr'):
+                    if hasattr(property, 'attr') and property.attr:
                         if property.attr.type.type == EncodedType.STRUCT:
                             struct_list.append(property.attr.type.value)
-
+                except VMAddressingError as ex:
+                    log.warning(f'Failed to load a property in {name} with {ex.__class__.__name__}: {str(ex)}')
+                    load_errors.append(f'Failed to load a property with {ex.__class__.__name__}: {str(ex)}')
                 except Exception as ex:
                     if not ignore.OBJC_ERRORS:
                         raise ex
@@ -875,19 +889,27 @@ class Property(Constructable):
 
         try:
             self.attr = self.decode_property_attributes(type_processor, attr_string)
+            self.type = self._renderable_type(self.attr.type)
+            self.is_id = self.attr.is_id
+            self.attributes = self.attr.attributes
+            self.ivarname = self.attr.ivar
         except IndexError:
             log.warn(
                 f'issue with property {self.name} attr {attr_string}')
-            self.type = None
+            self.type = '?'
+            self.is_id = False
+            self.attributes = []
+            self.ivarname = ""
+            self.attr = None
+        except TypeError:
+            log.warn(
+                f'issue with property {self.name} attr {attr_string}')
+            self.type = '?'
             self.is_id = False
             self.attributes = []
             self.ivarname = ""
             self.attr = None
 
-        self.type = self._renderable_type(self.attr.type)
-        self.is_id = self.attr.is_id
-        self.attributes = self.attr.attributes
-        self.ivarname = self.attr.ivar
 
     def serialize(self):
         return {

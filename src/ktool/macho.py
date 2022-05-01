@@ -58,7 +58,7 @@ class BackingFile:
 
         if not use_mmaped_io:
             fp.seek(0)
-            data = fp.read(fp.getbuffer().nbytes)
+            data = fp.read()
             self.file = bytearray(data)
             assert len(self.file) > 0
             self.size = len(self.file)
@@ -157,7 +157,8 @@ class MachOFile:
         return struct
 
     def __del__(self):
-        self.file.close()
+        if hasattr(self, 'file') and hasattr(self.file, 'close'):
+            self.file.close()
 
 
 class Section:
