@@ -32,6 +32,8 @@ class CodesignInfo(Constructable):
         slots: List[BlobIndex] = []
         off = codesign_cmd.dataoff + SuperBlob.SIZE
 
+        req_dat = None
+
         entitlements = ""
         requirements = ""
         for i in range(swap_32(superblob.count)):
