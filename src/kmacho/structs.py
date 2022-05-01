@@ -442,7 +442,7 @@ class section_64(Struct):
     _FIELDNAMES = ['sectname', 'segname', 'addr', 'size', 'offset', 'align', 'reloff',
                    'nreloc', 'flags', 'reserved1', 'reserved2', 'reserved3']
     _SIZES = [char_t[16], char_t[16], uint64_t, uint64_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 32 + 16 + (4 * 8)
+    SIZE = 80
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
