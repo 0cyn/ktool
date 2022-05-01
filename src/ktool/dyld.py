@@ -686,7 +686,11 @@ class LD64:
         load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
 
         encoded = suffix.encode('utf-8') + b'\x00'
-        cmd_size = 0x8 * math.ceil(lc_type.SIZE + len(encoded) / 0x8)
+
+        while (len(encoded) + lc_type.SIZE) % 8 != 0:
+            encoded += b'\x00'
+
+        cmd_size = lc_type.SIZE + len(encoded)
 
         header_size = image.segments['__TEXT'].sections['__text'].file_address
 
