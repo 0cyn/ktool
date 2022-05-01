@@ -132,6 +132,7 @@ def ptr_arm64_type(ptr: 'dyld_chained_ptr'):
 DYLD_CHAINED_PTR_FMATS = {
     dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E: ptr_arm64e_type,
     dyld_chained_ptr_format.DYLD_CHAINED_PTR_64: ptr_arm64_type,
+    dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET: ptr_arm64_type,
     dyld_chained_ptr_format.DYLD_CHAINED_PTR_NOIDEA: ptr_arm64e_type
 }
 
@@ -256,6 +257,7 @@ class dyld_chained_import_addend64(Struct):
 DYLD_CHAINED_PTR_BASE = {
     dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E: dyld_chained_ptr_arm64e,
     dyld_chained_ptr_format.DYLD_CHAINED_PTR_NOIDEA: dyld_chained_ptr_arm64e,
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_64: dyld_chained_ptr_64
+    dyld_chained_ptr_format.DYLD_CHAINED_PTR_64: dyld_chained_ptr_64,
+    dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET: dyld_chained_ptr_64
 }
 
