@@ -28,6 +28,7 @@ from kmacho import (
 from kmacho.base import Constructable
 from kmacho.fixups import *
 from ktool.codesign import CodesignInfo
+from ktool.load_commands import SegmentLoadCommand
 from ktool.macho import Segment, Slice, VM, MisalignedVM
 from ktool.util import log, macho_is_malformed, ignore, bytes_to_hex
 
@@ -74,7 +75,6 @@ class ImageHeader(Constructable):
             except ValueError as ex:
                 if not ignore.MALFORMED:
                     log.error(f'Bad Load Command at {hex(offset)} index {i-1}')
-                    raise ex
                 unk_lc = macho_slice.load_struct(offset, unk_command)
                 load_cmd = unk_lc
             except KeyError as ex:
@@ -83,9 +83,8 @@ class ImageHeader(Constructable):
                     log.error(f'Load Command {str(LOAD_COMMAND(cmd))} doesn\'t have a mapped struct type')
                     log.error('*Please* file an issue on the github @ https://github.com/cxnder/ktool')
                     log.error()
-                    log.error(f'Run with the -f flag before the subcommand to try and force loading anyways')
+                    log.error(f'Run with the -f flag to hide this warning.')
                     log.error()
-                    raise ex
                 unk_lc = macho_slice.load_struct(offset, unk_command)
                 load_cmd = unk_lc
 
@@ -128,7 +127,7 @@ class ImageHeader(Constructable):
             elif isinstance(lc, bytes) or isinstance(lc, bytearray):
                 full_load_cmds_raw += bytearray(lc)
 
-            elif isinstance(lc, Segment):
+            elif isinstance(lc, Segment) or isinstance(lc, SegmentLoadCommand):
                 lc.cmd.off = off
                 lcs.append(lc.cmd)
                 dat = bytearray(lc.cmd.raw)
