@@ -460,16 +460,31 @@ class ImageHeaderTestCase(unittest.TestCase):
 class DyldTestCase(unittest.TestCase):
     """
     This operates primarily on the "Image" class, but Image doesn't handle loading its values in, Dyld does
-    we will test the cyclomatic complex portions of the Image class elsewhere.
+    we will test the cyclomatically complex portions of the Image class elsewhere.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
-        self.thin_lib = ScratchFile(open(scriptdir + 'bins/testlib1.dylib', 'rb'))
+        self.thin_lib = ScratchFile(open(scriptdir + '/bins/testlib1.dylib', 'rb'))
 
+    def test_install_name(self):
+        self.thin_lib.reset()
 
+        image = ktool.load_image(self.thin_lib.get())
 
+        self.assertEqual("bins/testlib1.dylib", image.install_name)
+
+    def test_linked_images(self):
+        self.thin_lib.reset()
+
+        image = ktool.load_image(self.thin_lib.get())
+
+        self.assertEqual(len(image.linked_images), 3)
+        self.assertEqual(image.linked_images[0].install_name,
+                         "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation")
+        self.assertEqual(image.linked_images[1].install_name, "/usr/lib/libSystem.B.dylib")
+        self.assertEqual(image.linked_images[2].install_name, "/usr/lib/libobjc.A.dylib")
 
 
 
