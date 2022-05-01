@@ -65,12 +65,16 @@ def enable_error_capture():
     error_buffer = ""
 
 
+def assert_error_printed(msg):
+    assert msg in error_buffer
+
+
 def disable_error_capture():
     log.LOG_ERR = print_err
 
 
 #  ---------
-#  To make testing easier, we use "scratch files"; base mach-os (testbin1, testbin1_fat) that we modify and reset
+#  To make testing easier, we use "scratch files"; base mach-os (testbin1, testbin1.fat) that we modify and reset
 #      in reliable ways. The underlying file should not matter whatsoever, we just need *any* mach-o.
 #  Tests should be written in a way entirely independent of the underlying file, manually writing the values we're going to test.
 #  ---------
@@ -118,7 +122,7 @@ class MachOLoaderTestCase(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
-        self.fat = ScratchFile(open(scriptdir + '/bins/testbin1_fat', 'rb'))
+        self.fat = ScratchFile(open(scriptdir + '/bins/testbin1.fat', 'rb'))
 
     def test_thin_type(self):
         self.thin.reset()
@@ -213,7 +217,7 @@ class SliceTestCase(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
-        self.fat = ScratchFile(open(scriptdir + '/bins/testbin1_fat', 'rb'))
+        self.fat = ScratchFile(open(scriptdir + '/bins/testbin1.fat', 'rb'))
 
     def test_patch(self):
         self.thin.reset()
@@ -406,6 +410,67 @@ class ImageHeaderTestCase(unittest.TestCase):
         diff_byte_array_set_assertion(bytearray(old_image_header_raw), bytearray(new_image_header_raw))
 
         ktool.load_image(self.thin.get())
+
+    def test_bad_load_command(self):
+        self.thin.reset()
+
+        image = ktool.load_image(self.thin.get())
+        image_header = image.macho_header
+
+        flags = image_header.flags
+        filetype = image_header.filetype
+        cpu_type = image.slice.type
+        cpu_subtype = image.slice.subtype
+
+        load_command_items = []
+
+        for command in image.macho_header.load_commands:
+            if isinstance(command, segment_command) or isinstance(command, segment_command_64):
+                load_command_items.append(Segment(image, command))
+            elif isinstance(command, dylib_command):
+                suffix = image.get_cstr_at(command.off + command.__class__.SIZE)
+                encoded = suffix.encode('utf-8') + b'\x00'
+                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                    encoded += b'\x00'
+                load_command_items.append(command)
+                load_command_items.append(encoded)
+            elif command.__class__ == dyld_info_command:
+                command.cmd = 0x99
+                load_command_items.append(command)
+            elif command.__class__ in [dylinker_command, build_version_command]:
+                load_command_items.append(command)
+                actual_size = command.cmdsize
+                dat = image.get_bytes_at(command.off + command.SIZE, actual_size - command.SIZE)
+                load_command_items.append(dat)
+            else:
+                load_command_items.append(command)
+
+        new_image_header = ImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+
+        self.thin.write(0, new_image_header.raw_bytes())
+
+        enable_error_capture()
+        ktool.load_image(self.thin.get())
+        disable_error_capture()
+
+        assert_error_printed("Bad Load Command ")
+        assert_error_printed("0x99 - 0x30")
+
+
+class DyldTestCase(unittest.TestCase):
+    """
+    This operates primarily on the "Image" class, but Image doesn't handle loading its values in, Dyld does
+    we will test the cyclomatic complex portions of the Image class elsewhere.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
+        self.thin_lib = ScratchFile(open(scriptdir + 'bins/testlib1.dylib', 'rb'))
+
+
+
+
 
 
 

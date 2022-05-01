@@ -20,24 +20,8 @@ on:
       - 'develop/**'
 
 jobs:
-  library-tests:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ secrets.PYTHON_VERSION }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest .
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Test with pytest
-      run: |
-        pytest -s tests/tests.py
   unit-tests:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python
@@ -46,14 +30,18 @@ jobs:
         python-version: ${{ secrets.PYTHON_VERSION }}
     - name: Install dependencies
       run: |
+        brew install ninja
         python -m pip install --upgrade pip
         pip install flake8 pytest .
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: Build test images
+      run: |
+        cd tests && ninja
     - name: Test with pytest
       run: |
         pytest -s tests/unit.py
   bin-tests:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -62,34 +50,36 @@ jobs:
           python-version: ${{ secrets.PYTHON_VERSION }}
       - name: Install dependencies
         run: |
+          brew install ninja
           python -m pip install --upgrade pip
           pip install flake8 pytest poetry
           poetry build
           python3 -m pip install $(ls dist/*.tar.gz | xargs)
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Build test images
+        run: |
+          cd tests && ninja
       - name: Test insert
         run: |
           ktool insert --lc load --payload /your/mother.dylib --out tests/bins/testbin1.insert.test tests/bins/testbin1
           ktool list --linked tests/bins/testbin1.insert.test | grep your/mother
       - name: Test edit
         run: |
-          ktool edit --iname your/mother.framework/Mother --out tests/bins/Search.edit.test tests/bins/Search
-          ktool info tests/bins/Search.edit.test | grep Mother
+          ktool edit --iname your/mother.framework/Mother --out tests/bins/testlib1.dylib.edit.test tests/bins/testlib1.dylib
+          ktool info tests/bins/testlib1.dylib | grep Mother
       - name: Test lipo
         run: |
-          ktool lipo --extract arm64 tests/bins/Search
-          ktool file tests/bins/Search.arm64
-          ktool lipo --extract x86_64 tests/bins/Search
-          ktool lipo --create --out tests/bins/Search.lipo.test tests/bins/Search.arm64 tests/bins/Search.x86_64
-          ktool file tests/bins/Search.lipo.test | grep "0x4d000"
+          ktool lipo --extract arm64 tests/bins/testbin1.fat
+          ktool file tests/bins/testbin1.fat.arm64
+          ktool lipo --extract x86_64 tests/bins/testbin1.fat
+          ktool lipo --create --out tests/bins/testbin1.fat.lipo.test tests/bins/testbin1.fat.arm64 tests/bins/testbin1.fat.x86_64
+          ktool file tests/bins/testbin1.fat.lipo.test | grep "0x11000"
       - name: test dump
         run: |
           ktool dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
-          ktool dump --tbd tests/bins/SpringBoardHome && cat SpringBoardHome.tbd | grep _SBHLibraryCategoryMap._sortedApplicationIdentifiersByCategoryIdentifier
       - name: test dump with mmaped-IO disabled
         run: |
           ktool --no-mmap dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
       - name: test symbols
         run: |
           ktool symbols --imports tests/bins/testbin1 | grep _OBJC_CLASS_$_NSObject
-          ktool symbols --exports tests/bins/Search | grep SPFeedbackManager

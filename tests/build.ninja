@@ -1,0 +1,29 @@
+
+
+rule build_library_x86
+    command = clang $in -o $out -framework Foundation -dynamiclib -arch x86_64
+
+rule build_library_arm6
+    command = clang $in -o $out -framework Foundation -arch arm64
+
+rule build_bin_x86
+    command = clang $in -o $out -framework Foundation -arch x86_64
+
+rule build_bin_arm64
+    command = clang $in -o $out -framework Foundation -arch arm64
+
+rule lipo_combine
+    command = lipo -create $in -output $out
+
+rule clean
+    command = rm -r $out
+
+
+build bins/testlib1.dylib: build_library_x86 src/testlib1.m
+build bins/testbin1: build_bin_x86 src/testbin1.m
+
+build .build/testbin1_arm: build_bin_arm64 src/testbin1.m
+build .build/testbin1_x86: build_bin_x86 src/testbin1.m
+build bins/testbin1.fat: lipo_combine .build/testbin1_arm .build/testbin1_x86
+build .build: clean bins/testbin1.fat
+
