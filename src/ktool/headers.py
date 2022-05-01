@@ -109,14 +109,14 @@ class TypeResolver:
 
 
 class HeaderGenerator:
-    def __init__(self, objc_image: ObjCImage):
+    def __init__(self, objc_image: ObjCImage, forward_declare_private_includes=False):
         self.type_resolver: TypeResolver = TypeResolver(objc_image)
 
         self.objc_image: ObjCImage = objc_image
         self.headers = {}
 
         for objc_class in objc_image.classlist:
-            self.headers[objc_class.name + '.h'] = Header(self.objc_image, self.type_resolver, objc_class)
+            self.headers[objc_class.name + '.h'] = Header(self.objc_image, self.type_resolver, objc_class, forward_declare_private_includes)
         for objc_cat in objc_image.catlist:
             if objc_cat.classname != "":
                 self.headers[f'{objc_cat.classname}+{objc_cat.name}.h'] = CategoryHeader(self.objc_image, objc_cat)
@@ -128,7 +128,11 @@ class HeaderGenerator:
         else:
             image_name = self.objc_image.name
 
-        self.headers[image_name + '.h'] = UmbrellaHeader(self.headers)
+        if image_name + '.h' in self.headers:
+            self.headers[image_name + '-Umbrella.h'] = UmbrellaHeader(self.headers)
+        else:
+            self.headers[image_name + '.h'] = UmbrellaHeader(self.headers)
+
         self.headers[image_name + '-Structs.h'] = StructHeader(objc_image)
 
 
@@ -151,12 +155,14 @@ class StructHeader:
 
 
 class Header:
-    def __init__(self, objc_image: 'ObjCImage', type_resolver, objc_class: Class):
+    def __init__(self, objc_image: 'ObjCImage', type_resolver, objc_class: Class, forward_declare_private_imports):
         self.interface: Interface = Interface(objc_class)
         self.objc_image = objc_image
         self.objc_class: Class = objc_class
 
         self.type_resolver: TypeResolver = type_resolver
+
+        self.forward_declare_private_imports = forward_declare_private_imports
 
         self.forward_declaration_classes: List[str] = []
         self.forward_declaration_protocols: List[str] = []
@@ -214,18 +220,26 @@ class Header:
                 if nam not in imported_classes:
                     imported_classes[nam] = nam
             else:
-                imported_classes[objc_class] = install_name
+                if self.forward_declare_private_imports:
+                    text.append(f'@class {objc_class};')
+                else:
+                    imported_classes[objc_class] = install_name
 
         for objc_class, install_name in imported_classes.items():
             text.append(f'#import <{install_name.split("/")[-1]}/{objc_class}.h>')
 
         text.append("")
 
-        for objc_class in self.locally_imported_classes:
-            text.append(f'#import "{objc_class}.h"')
-
-        for objc_protocol in self.locally_imported_protocols:
-            text.append(f'#import "{objc_protocol}-Protocol.h"')
+        if self.forward_declare_private_imports:
+            for objc_class in self.locally_imported_classes:
+                text.append(f'@class {objc_class};')
+            for objc_protocol in self.locally_imported_protocols:
+                text.append(f'@protocol {objc_protocol};')
+        else:
+            for objc_class in self.locally_imported_classes:
+                text.append(f'#import "{objc_class}.h"')
+            for objc_protocol in self.locally_imported_protocols:
+                text.append(f'#import "{objc_protocol}-Protocol.h"')
 
         text.append("")
 
@@ -431,8 +445,11 @@ class Interface:
 
         meths = "\n\n"
         for i in self.methods:
-            if '.cxx_' not in str(i):
-                meths += str(i) + ';\n'
+            if i.sel.strip() != "":
+                if '(unk)' in str(i):
+                    meths += f'// {str(i)} ;\n'
+                elif '.cxx_' not in str(i):
+                    meths += str(i) + ';\n'
 
         foot = "\n\n@end"
         return head + ivars + props + meths + foot
@@ -581,3 +598,5 @@ class UmbrellaHeader:
 
     def __str__(self):
         return self.text
+
+

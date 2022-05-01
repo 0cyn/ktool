@@ -137,7 +137,7 @@ def load_objc_metadata(image: Image) -> ObjCImage:
     return ObjCImage.from_image(image)
 
 
-def generate_headers(objc_image: ObjCImage, sort_items=False) -> Dict[str, Header]:
+def generate_headers(objc_image: ObjCImage, sort_items=False, forward_declare_private_imports=False) -> Dict[str, Header]:
     out = {}
 
     if sort_items:
@@ -149,7 +149,7 @@ def generate_headers(objc_image: ObjCImage, sort_items=False) -> Dict[str, Heade
             objc_proto.methods.sort(key=lambda h: h.signature)
             objc_proto.opt_methods.sort(key=lambda h: h.signature)
 
-    for header_name, header in HeaderGenerator(objc_image).headers.items():
+    for header_name, header in HeaderGenerator(objc_image, forward_declare_private_includes=forward_declare_private_imports).headers.items():
         out[header_name] = header
 
     return out

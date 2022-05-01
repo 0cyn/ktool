@@ -274,6 +274,7 @@ def main():
                              help="Specify Index of Slice (in FAT MachO) to examine")
     parser_dump.add_argument('--headers', dest='do_headers', action='store_true')
     parser_dump.add_argument('--class', dest='get_class')
+    parser_dump.add_argument('--fdec', dest='forward_declare', action='store_true')
     parser_dump.add_argument('--use-stab-for-sel', dest='usfs', action='store_true')
     parser_dump.add_argument('--hard-fail', dest='hard_fail', action='store_true')
     parser_dump.add_argument('--sorted', dest='sort_headers', action='store_true')
@@ -282,7 +283,7 @@ def main():
     parser_dump.add_argument('filename', nargs='?', default='')
 
     parser_dump.set_defaults(func=dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0,
-                             hard_fail=False, get_class=None)
+                             hard_fail=False, get_class=None, forward_declare=False)
 
     # list command: Lists lists of things contained in lists in the image.
     parser_list = subparsers.add_parser('list', help='Print various lists')
@@ -963,7 +964,7 @@ Dump header for a single class
 > ktool dump --class <classname> [filename]
 
 To dump a full set of headers for a bin/framework
-> ktool dump --headers --out <directory> [filename]
+> ktool dump --headers --fdec --out <directory> [filename]
 
 To dump .tbd files for a framework
 > ktool dump --tbd [filename]
@@ -979,11 +980,15 @@ To dump .tbd files for a framework
                 image.name = os.path.basename(args.filename)
 
             objc_image = ktool.load_objc_metadata(image)
-            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers)
+            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
+            found = False
             for header_name, header in objc_headers.items():
-                if args.get_class == header_name[:-2]:
+                if args.get_class.lower() == header_name[:-2].lower():
                     print(header.generate_highlighted_text())
+                    found = True
                     break
+            if not found:
+                print(f'{args.get_class} not found', file=sys.stderr)
 
     if args.do_headers:
 
@@ -1001,7 +1006,7 @@ To dump .tbd files for a framework
 
             objc_image = ktool.load_objc_metadata(image)
 
-            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers)
+            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
 
             for header_name, header in objc_headers.items():
                 if not args.outdir:
