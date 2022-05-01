@@ -497,7 +497,9 @@ class MethodList:
         for i in range(1, self.methlist_head.count + 1):
             if uses_relative_methods:
                 sel = self.objc_image.get_int_at(ea, 4, vm=False)
+                sel = usi32_to_si32(sel)
                 types = self.objc_image.get_int_at(ea + 4, 4, vm=False)
+                types = usi32_to_si32(types)
             else:
                 sel = self.objc_image.get_int_at(ea, 8, vm=False)
                 types = self.objc_image.get_int_at(ea + 8, 8, vm=False)
@@ -843,7 +845,7 @@ class Class(Constructable):
 attr_encodings = {
     "&": "retain",
     "N": "nonatomic",
-    "W": "__weak",
+    "W": "weak",
     "R": "readonly",
     "C": "copy"
 }
@@ -906,7 +908,7 @@ class Property(Constructable):
             ret += '(' + ', '.join(self.attributes) + ') '
 
         if self.type.startswith('<'):
-            ret += "id"
+            ret += "NSObject"
         ret += self.type + ' '
 
         if self.is_id:
