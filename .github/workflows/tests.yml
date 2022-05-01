@@ -66,7 +66,7 @@ jobs:
       - name: Test edit
         run: |
           ktool edit --iname your/mother.framework/Mother --out tests/bins/testlib1.dylib.edit.test tests/bins/testlib1.dylib
-          ktool info tests/bins/testlib1.dylib | grep Mother
+          ktool info tests/bins/testlib1.dylib.edit.test | grep Mother
       - name: Test lipo
         run: |
           ktool lipo --extract arm64 tests/bins/testbin1.fat
