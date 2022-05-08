@@ -554,7 +554,8 @@ class MachOImageHeader(Constructable):
                 suffix = ""
                 i = 0
                 while self.raw[command.off + command.__class__.SIZE + i] != "\x00":
-                    suffix += self.raw[command.off + command.__class__.SIZE + i].decode('utf-8')
+                    suffix += self.raw[command.off + command.__class__.SIZE + i].to_bytes(1, "little").decode('utf-8')
+                    i += 1
                 encoded = suffix.encode('utf-8') + b'\x00'
                 while (len(encoded) + command.__class__.SIZE) % 8 != 0:
                     encoded += b'\x00'
@@ -616,7 +617,8 @@ class MachOImageHeader(Constructable):
                 suffix = ""
                 i = 0
                 while self.raw[command.off + command.__class__.SIZE + i] != "\x00":
-                    suffix += self.raw[command.off + command.__class__.SIZE + i].decode('utf-8')
+                    suffix += self.raw[command.off + command.__class__.SIZE + i].to_bytes(1, "little").decode('utf-8')
+                    i += 1
                 encoded = suffix.encode('utf-8') + b'\x00'
                 while (len(encoded) + command.__class__.SIZE) % 8 != 0:
                     encoded += b'\x00'
