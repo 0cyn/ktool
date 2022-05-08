@@ -612,6 +612,7 @@ class MachOImageHeader(Constructable):
 
         for command in self.load_commands:
             if current_lc_index == index:
+                current_lc_index += 1
                 continue
 
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):

@@ -498,6 +498,16 @@ class ImageHeaderTestCase(unittest.TestCase):
         assert len(image_header.load_commands) + 1 == len(new_header.load_commands)
         assert b'/unit/test' in new_header.raw
 
+    def test_remove_cmd(self):
+
+        self.thin.reset()
+
+        image = ktool.load_image(self.thin.get())
+        image_header = image.macho_header
+        lc = image.macho_header.load_commands[5]
+
+        new_header = image.macho_header.remove_load_command(5)
+        assert (len(image_header.load_commands) - 1 == len(new_header.load_commands))
 
 class DyldTestCase(unittest.TestCase):
     """
