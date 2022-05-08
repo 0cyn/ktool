@@ -537,11 +537,13 @@ class MachOImageHeader(Constructable):
                 if isinstance(load_command, SegmentLoadCommand):
                     load_command_items.append(load_command)
                 elif isinstance(load_command, dylib_command):
-                    load_command_items.append(load_command)
                     assert suffix is not None, "Inserting dylib_command requires suffix"
                     encoded = suffix.encode('utf-8') + b'\x00'
                     while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
                         encoded += b'\x00'
+                    cmdsize = load_command.__class__.SIZE + len(encoded)
+                    load_command.cmdsize = cmdsize
+                    load_command_items.append(load_command)
                     load_command_items.append(encoded)
                 elif load_command.__class__ in [dylinker_command, build_version_command]:
                     load_command_items.append(load_command)
@@ -558,12 +560,12 @@ class MachOImageHeader(Constructable):
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname, command.vmaddr, command.fileoff, command.vmsize, command.maxprot, command.initprot, command.flags, sects)
                 load_command_items.append(seg)
             elif isinstance(command, dylib_command):
-                suffix = ""
+                _suffix = ""
                 i = 0
                 while self.raw[command.off + command.__class__.SIZE + i] != 0:
-                    suffix += chr(self.raw[command.off + command.__class__.SIZE + i])
+                    _suffix += chr(self.raw[command.off + command.__class__.SIZE + i])
                     i += 1
-                encoded = suffix.encode('utf-8') + b'\x00'
+                encoded = _suffix.encode('utf-8') + b'\x00'
                 while (len(encoded) + command.__class__.SIZE) % 8 != 0:
                     encoded += b'\x00'
                 load_command_items.append(command)
@@ -586,13 +588,15 @@ class MachOImageHeader(Constructable):
                 encoded = suffix.encode('utf-8') + b'\x00'
                 while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
                     encoded += b'\x00'
+                cmdsize = load_command.__class__.SIZE + len(encoded)
+                load_command.cmdsize = cmdsize
                 load_command_items.append(encoded)
             elif load_command.__class__ in [dylinker_command, build_version_command]:
                 load_command_items.append(load_command)
                 assert suffix is not None, f"Inserting {load_command.__class__.__name__} currently requires a byte suffix"
                 load_command_items.append(suffix)
 
-        self = MachOImageHeader.from_values(self.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+        return MachOImageHeader.from_values(self.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
 
     def remove_load_command(self, index):
 
@@ -640,7 +644,7 @@ class MachOImageHeader(Constructable):
                 load_command_items.append(command)
             current_lc_index += 1
 
-        self = MachOImageHeader.from_values(self.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+        return MachOImageHeader.from_values(self.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
 
 
 class PlatformType(Enum):

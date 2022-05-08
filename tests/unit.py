@@ -494,8 +494,9 @@ class ImageHeaderTestCase(unittest.TestCase):
 
         dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
         dylib_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.LOAD_DYLIB.value, 0, dylib_item.raw])
-        image.macho_header.insert_load_cmd(dylib_cmd, -1, suffix="/unit/test")
-
+        new_header = image.macho_header.insert_load_cmd(dylib_cmd, -1, suffix="/unit/test")
+        assert len(image_header.load_commands) + 1 == len(new_header.load_commands)
+        assert b'/unit/test' in new_header.raw
 
 
 class DyldTestCase(unittest.TestCase):
