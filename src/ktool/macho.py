@@ -612,7 +612,7 @@ class MachOImageHeader(Constructable):
 
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 sects = []
-                sect_data = command.raw[command.__class__.SIZE:]
+                sect_data = self.raw[command.off + command.__class__.SIZE:]
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
                     sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little")))
