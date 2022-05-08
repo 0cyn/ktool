@@ -16,7 +16,7 @@ from enum import Enum
 from typing import List, Dict, Optional
 
 from kmacho.base import Constructable
-from ktool.dyld import Image
+from ktool.loader import Image
 from ktool.exceptions import VMAddressingError
 from ktool.structs import *
 from ktool.util import log, ignore, usi32_to_si32, opts, Queue, QueueItem

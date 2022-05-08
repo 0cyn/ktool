@@ -42,7 +42,7 @@ from pygments.lexers.objective import ObjectiveCLexer
 from kmacho import LOAD_COMMAND
 
 from ktool.macho import MachOFile
-from ktool.dyld import Dyld
+from ktool.loader import MachOImageLoader
 from ktool.objc import ObjCImage
 from ktool.headers import HeaderGenerator
 from ktool.swift import load_swift_types, SwiftClass
@@ -1607,7 +1607,7 @@ class KToolMachOLoader:
 
     @staticmethod
     def slice_item(macho_slice, callback):
-        loaded_image = Dyld.load(macho_slice)
+        loaded_image = MachOImageLoader.load(macho_slice)
         if hasattr(macho_slice, 'type'):
             slice_nick = f'{macho_slice.type.name}:{macho_slice.subtype.name}' + " Slice"
         else:
@@ -1963,7 +1963,7 @@ class KToolKernelCacheLoader(KToolMachOLoader):
 
     @staticmethod
     def slice_item(macho_slice, callback):
-        loaded_image = Dyld.load(macho_slice)
+        loaded_image = MachOImageLoader.load(macho_slice)
         slice_nick = f'Kernel Cache'
         callback(f'Kernel Cache\nLoading MachO Image')
         slice_item = SidebarMenuItem(f'Kernel Cache', None, None)

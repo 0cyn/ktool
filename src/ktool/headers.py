@@ -14,14 +14,17 @@
 
 from typing import List, Dict
 
-from ktool.dyld import SymbolType, Image
+from ktool.loader import SymbolType, Image
 from ktool.objc import ObjCImage, Class, Category, Protocol, Property, Method, Ivar
 
 from ktool.util import KTOOL_VERSION
 
 from pygments import highlight
 from pygments.formatters.terminal import TerminalFormatter
-from pygments.lexers.objective import ObjectiveCLexer
+try:
+    from pygments.lexers.objective import ObjectiveCLexer
+except ImportError:
+    ObjectiveCLexer = None
 
 
 class HeaderUtils:
@@ -180,6 +183,8 @@ class Header:
         return self.text
 
     def generate_highlighted_text(self):
+        if ObjectiveCLexer is None:
+            return self.text
         if self.highlighted_text:
             return self.highlighted_text
 

@@ -18,13 +18,14 @@ import unittest
 from io import BytesIO
 import random
 
-from ktool.dyld import ImageHeader
+from ktool.loader import MachOImageHeader
 
 import ktool
 from ktool.headers import *
 from ktool.macho import *
 from ktool.objc import *
 from ktool.util import *
+from ktool.image import *
 
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))
@@ -401,7 +402,7 @@ class ImageHeaderTestCase(unittest.TestCase):
             else:
                 load_command_items.append(command)
 
-        new_image_header = ImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+        new_image_header = MachOImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
 
         self.thin.write(0, new_image_header.raw_bytes())
 
@@ -445,7 +446,7 @@ class ImageHeaderTestCase(unittest.TestCase):
             else:
                 load_command_items.append(command)
 
-        new_image_header = ImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+        new_image_header = MachOImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
 
         self.thin.write(0, new_image_header.raw_bytes())
 
@@ -485,9 +486,6 @@ class DyldTestCase(unittest.TestCase):
                          "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation")
         self.assertEqual(image.linked_images[1].install_name, "/usr/lib/libSystem.B.dylib")
         self.assertEqual(image.linked_images[2].install_name, "/usr/lib/libobjc.A.dylib")
-
-
-
 
 
 if __name__ == '__main__':

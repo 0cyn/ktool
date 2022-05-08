@@ -13,15 +13,17 @@
 #
 
 import os
-from collections import namedtuple
 from enum import Enum
 from io import BytesIO
-from typing import Tuple, Dict, Union, BinaryIO
+from typing import Tuple, Dict, Union, BinaryIO, List
 
 from kmacho import *
+from kmacho.base import Constructable
 from kmacho.structs import *
+from kmacho.load_commands import SegmentLoadCommand
 from ktool.exceptions import *
-from ktool.util import log
+from ktool.util import log, ignore
+
 mmap = None
 
 
@@ -233,150 +235,6 @@ class Segment:
         return sections
 
 
-class VM:
-    """
-    New Virtual Address translation based on actual VM -> physical pages
-
-    """
-
-    def __init__(self, page_size):
-        self.page_size = page_size
-        self.page_size_bits = (self.page_size - 1).bit_length()
-        self.page_table = {}
-        self.tlb = {}
-        self.vm_base_addr = None
-        self.dirty = False
-
-        self.fallback: Union[None, MisalignedVM] = None
-
-        self.detag_kern_64 = False
-        self.detag_64 = False
-
-    def vm_check(self, address):
-        try:
-            self.translate(address)
-            return True
-        except ValueError:
-            return False
-
-    def add_segment(self, segment: Segment):
-        if segment.name == '__PAGEZERO':
-            return
-
-        self.fallback.add_segment(segment)
-
-        if self.vm_base_addr is None:
-            self.vm_base_addr = segment.vm_address
-
-        self.map_pages(segment.file_address, segment.vm_address, segment.size)
-
-    def translate(self, address) -> int:
-
-        l_addr = address
-
-        if self.detag_kern_64:
-            address = address | (0xFFFF << 12*4)
-
-        if self.detag_64:
-            address = address & 0xFFFFFFFFF
-
-        try:
-            return self.tlb[address]
-        except KeyError:
-            pass
-
-        page_offset = address & self.page_size - 1
-        page_location = address >> self.page_size_bits
-        try:
-            phys_page = self.page_table[page_location]
-            physical_location = phys_page + page_offset
-            self.tlb[address] = physical_location
-            return physical_location
-        except KeyError:
-
-            log.info(f'Address {hex(address)} not mapped, attempting fallback')
-
-            try:
-                return self.fallback.translate(address)
-            except VMAddressingError:
-                raise VMAddressingError(f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
-
-    def map_pages(self, physical_addr, virtual_addr, size):
-        if physical_addr % self.page_size != 0 or virtual_addr % self.page_size != 0 or size % self.page_size != 0:
-            raise MachOAlignmentError
-        for i in range(size // self.page_size):
-            self.page_table[virtual_addr + (i * self.page_size) >> self.page_size_bits] = physical_addr + (
-                        i * self.page_size)
-
-
-vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr", "name"])
-
-
-class MisalignedVM:
-    """
-    This is the manual backup if the image cant be mapped to 16/4k segments
-    """
-
-    def __init__(self, macho_slice):
-        self.slice = macho_slice
-
-        self.detag_kern_64 = False
-        self.detag_64 = False
-
-        self.map = {}
-        self.stats = {}
-        self.vm_base_addr = 0
-        self.sorted_map = {}
-        self.cache = {}
-
-    def vm_check(self, vm_address):
-        try:
-            self.translate(vm_address)
-            return True
-        except ValueError:
-            return False
-
-    def translate(self, vm_address: int) -> int:
-
-        if self.detag_kern_64:
-            vm_address = vm_address | (0xFFFF << 12*4)
-
-        if self.detag_64:
-            vm_address = vm_address & 0xFFFFFFFFF
-
-        if vm_address in self.cache:
-            return self.cache[vm_address]
-
-        for o in self.map.values():
-            # noinspection PyChainedComparisons
-            if vm_address >= o.vmaddr and o.vmend >= vm_address:
-                file_addr = o.fileaddr + vm_address - o.vmaddr
-                self.cache[vm_address] = file_addr
-                return file_addr
-
-        raise VMAddressingError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
-
-    def add_segment(self, segment: Segment):
-        if segment.file_address == 0 and segment.size != 0:
-            self.vm_base_addr = segment.vm_address
-
-        if len(segment.sections) == 0:
-            seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,
-                             segment.name)
-            log.info(str(seg_obj))
-            self.map[segment.name] = seg_obj
-            self.stats[segment.name] = 0
-        else:
-            for section in segment.sections.values():
-                name = section.name if section.name not in self.map.keys() else section.name + '2'
-                sect_obj = vm_obj(section.vm_address, section.vm_address + section.size, section.size,
-                                  section.file_address, name)
-                log.info(str(sect_obj))
-                self.map[name] = sect_obj
-                self.sorted_map = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
-                self.stats[name] = 0
-
-
 class Slice:
     def __init__(self, macho_file, sliced_backing_file: Union[BackingFile, SlicedBackingFile], arch_struct: fat_arch=None, offset=0):
         self.file = sliced_backing_file
@@ -501,3 +359,298 @@ class Slice:
                       f'https://github.com/cxnder/ktool')
 
             return CPUSubTypeARM64.ALL
+
+
+class MachOImageHeader(Constructable):
+    """
+    This class represents the Mach-O Header
+    It contains the basic header info along with all load commands within it.
+
+    It doesn't handle complex abstraction logic, it simply loads in the load commands as their raw structs
+    """
+
+    @classmethod
+    def from_image(cls, macho_slice, offset=0) -> 'ImageHeader':
+
+        image_header = cls()
+
+        header: mach_header = macho_slice.load_struct(offset, mach_header)
+
+        if header.magic == MH_MAGIC_64:
+            header: mach_header_64 = macho_slice.load_struct(offset, mach_header_64)
+            image_header.is64 = True
+
+        raw = header.raw
+
+        image_header.filetype = MH_FILETYPE(header.filetype)
+
+        for flag in MH_FLAGS:
+            if header.flags & flag.value:
+                image_header.flags.append(flag)
+
+        offset += header.SIZE
+
+        load_commands = []
+
+        for i in range(1, header.loadcnt + 1):
+            cmd = macho_slice.get_int_at(offset, 4)
+            cmd_size = macho_slice.get_int_at(offset + 4, 4)
+
+            cmd_raw = macho_slice.get_bytes_at(offset, cmd_size)
+            try:
+                load_cmd = Struct.create_with_bytes(LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)], cmd_raw)
+                load_cmd.off = offset
+            except ValueError as ex:
+                if not ignore.MALFORMED:
+                    log.error(f'Bad Load Command at {hex(offset)} index {i-1}\n        {hex(cmd)} - {hex(cmd_size)}')
+
+                unk_lc = macho_slice.load_struct(offset, unk_command)
+                load_cmd = unk_lc
+            except KeyError as ex:
+                if not ignore.MALFORMED:
+                    log.error()
+                    log.error(f'Load Command {str(LOAD_COMMAND(cmd))} doesn\'t have a mapped struct type')
+                    log.error('*Please* file an issue on the github @ https://github.com/cxnder/ktool')
+                    log.error()
+                    log.error(f'Run with the -f flag to hide this warning.')
+                    log.error()
+                unk_lc = macho_slice.load_struct(offset, unk_command)
+                load_cmd = unk_lc
+
+            load_commands.append(load_cmd)
+            raw += cmd_raw
+            offset += load_cmd.cmdsize
+
+        image_header.raw = raw
+        image_header.dyld_header = header
+        image_header.load_commands = load_commands
+
+        return image_header
+
+    @classmethod
+    def from_values(cls, is_64: bool,  cpu_type, cpu_subtype, filetype: MH_FILETYPE, flags: List[MH_FLAGS], load_commands: List):
+
+        image_header = cls()
+
+        struct_type = mach_header_64 if is_64 else mach_header
+
+        full_load_cmds_raw = bytearray()
+
+        lcs = []
+
+        lc_count = 0
+
+        off = struct_type.SIZE
+
+        for lc in load_commands:
+
+            if issubclass(lc.__class__, Struct):
+                assert len(lc.raw) == lc.__class__.SIZE
+                assert hasattr(lc, 'cmdsize')
+                lc.off = off
+                lcs.append(lc)
+                full_load_cmds_raw += bytearray(lc.raw)
+                lc_count += 1
+                off += lc.cmdsize
+
+            elif isinstance(lc, bytes) or isinstance(lc, bytearray):
+                full_load_cmds_raw += bytearray(lc)
+
+            elif isinstance(lc, Segment) or isinstance(lc, SegmentLoadCommand):
+                lc.cmd.off = off
+                lcs.append(lc.cmd)
+                dat = bytearray(lc.cmd.raw)
+                lc_count += 1
+                for sect in lc.sections.values():
+                    dat += sect.cmd.raw
+                assert len(dat) == lc.cmd.cmdsize
+                full_load_cmds_raw += dat
+                off += lc.cmd.cmdsize
+
+        embedded_flag = 0
+        for flag in flags:
+            embedded_flag |= flag.value
+
+        if is_64:
+            header = Struct.create_with_values(struct_type, [MH_MAGIC_64, cpu_type.value, cpu_subtype.value, filetype.value, lc_count, len(full_load_cmds_raw), embedded_flag, 0])
+        else:
+            header = Struct.create_with_values(struct_type, [MH_MAGIC, cpu_type.value, cpu_subtype.value, filetype.value, lc_count, len(full_load_cmds_raw), embedded_flag])
+
+        image_header.dyld_header = header
+
+        image_header.filetype = MH_FILETYPE(header.filetype)
+
+        for flag in MH_FLAGS:
+            if header.flags & flag.value:
+                image_header.flags.append(flag)
+
+        image_header.load_commands = lcs
+
+        image_header.raw = bytearray(header.raw) + full_load_cmds_raw
+
+        return image_header
+
+    def __str__(self):
+        return f'MachO Header - 64 bit VM: {self.is64} | File Type: {self.filetype} | Flags: {self.flags} | Load Cmd Count: {len(self.load_commands)}'
+
+    def __init__(self):
+        self.is64 = False
+        self.dyld_header: Union[mach_header, mach_header_64, None] = None
+        self.filetype = MH_FILETYPE(0)
+        self.flags: List[MH_FLAGS] = []
+        self.load_commands = []
+        self.raw = bytearray()
+
+    def serialize(self):
+        return {
+            'filetype': self.filetype.name,
+            'flags': [flag.name for flag in self.flags],
+            'is_64_bit': self.is64,
+            'dyld_header': self.dyld_header.serialize(),
+            'load_commands': [cmd.serialize() for cmd in self.load_commands]
+        }
+
+    def raw_bytes(self) -> bytes:
+        return self.raw
+
+    def insert_load_cmd(self, load_command, index=-1, suffix=None):
+        image_header = self
+
+        flags = image_header.flags
+        filetype = image_header.filetype
+        cpu_type = self.dyld_header.cpu_type
+        cpu_subtype = self.dyld_header.cpu_subtype
+
+        load_command_items = []
+
+        current_lc_index = 0
+
+        for command in self.load_commands:
+            if current_lc_index == index:
+                if isinstance(load_command, SegmentLoadCommand):
+                    load_command_items.append(load_command)
+                elif isinstance(load_command, dylib_command):
+                    load_command_items.append(load_command)
+                    assert suffix is not None, "Inserting dylib_command requires suffix"
+                    encoded = suffix.encode('utf-8') + b'\x00'
+                    while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
+                        encoded += b'\x00'
+                    load_command_items.append(encoded)
+                elif load_command.__class__ in [dylinker_command, build_version_command]:
+                    load_command_items.append(load_command)
+                    assert suffix is not None, f"Inserting {load_command.__class__.__name__} currently requires a " \
+                                               f"byte suffix "
+                    load_command_items.append(suffix)
+
+            if isinstance(command, segment_command) or isinstance(command, segment_command_64):
+                sects = []
+                sect_data = command.raw[command.__class__.SIZE:]
+                struct_class = section_64 if isinstance(command, segment_command_64) else section
+                for i in range(command.nsects):
+                    sects.append(Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little"))
+                seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname, command.vmaddr, command.fileoff, command.vmsize, command.maxprot, command.initprot, command.flags, sects)
+                load_command_items.append(seg)
+            elif isinstance(command, dylib_command):
+                suffix = ""
+                i = 0
+                while self.raw[command.off + command.__class__.SIZE + i] != "\x00":
+                    suffix += self.raw[command.off + command.__class__.SIZE + i].decode('utf-8')
+                encoded = suffix.encode('utf-8') + b'\x00'
+                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                    encoded += b'\x00'
+                load_command_items.append(command)
+                load_command_items.append(encoded)
+            elif command.__class__ in [dylinker_command, build_version_command]:
+                load_command_items.append(command)
+                actual_size = command.cmdsize
+                dat = self.raw[command.off + command.SIZE:(command.off + command.SIZE) + actual_size - command.SIZE]
+                load_command_items.append(dat)
+            else:
+                load_command_items.append(command)
+            current_lc_index += 1
+
+        if index == -1:
+            if isinstance(load_command, SegmentLoadCommand):
+                load_command_items.append(load_command)
+            elif isinstance(load_command, dylib_command):
+                load_command_items.append(load_command)
+                assert suffix is not None, "Inserting dylib_command requires suffix"
+                encoded = suffix.encode('utf-8') + b'\x00'
+                while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
+                    encoded += b'\x00'
+                load_command_items.append(encoded)
+            elif load_command.__class__ in [dylinker_command, build_version_command]:
+                load_command_items.append(load_command)
+                assert suffix is not None, f"Inserting {load_command.__class__.__name__} currently requires a byte suffix"
+                load_command_items.append(suffix)
+
+        self = MachOImageHeader.from_values(self.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+
+    def remove_load_command(self, index):
+
+        image_header = self
+
+        flags = image_header.flags
+        filetype = image_header.filetype
+        cpu_type = self.dyld_header.cpu_type
+        cpu_subtype = self.dyld_header.cpu_subtype
+
+        load_command_items = []
+        current_lc_index = 0
+
+        for command in self.load_commands:
+            if current_lc_index == index:
+                continue
+
+            if isinstance(command, segment_command) or isinstance(command, segment_command_64):
+                sects = []
+                sect_data = command.raw[command.__class__.SIZE:]
+                struct_class = section_64 if isinstance(command, segment_command_64) else section
+                for i in range(command.nsects):
+                    sects.append(Struct.create_with_bytes(struct_class,
+                                                          sect_data[i * struct_class.SIZE:(i + 1) * struct_class.SIZE],
+                                                          "little"))
+                seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
+                                                     command.vmaddr, command.fileoff, command.vmsize, command.maxprot,
+                                                     command.initprot, command.flags, sects)
+                load_command_items.append(seg)
+            elif isinstance(command, dylib_command):
+                suffix = ""
+                i = 0
+                while self.raw[command.off + command.__class__.SIZE + i] != "\x00":
+                    suffix += self.raw[command.off + command.__class__.SIZE + i].decode('utf-8')
+                encoded = suffix.encode('utf-8') + b'\x00'
+                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                    encoded += b'\x00'
+                load_command_items.append(command)
+                load_command_items.append(encoded)
+            elif command.__class__ in [dylinker_command, build_version_command]:
+                load_command_items.append(command)
+                actual_size = command.cmdsize
+                dat = self.raw[command.off + command.SIZE:(command.off + command.SIZE) + actual_size - command.SIZE]
+                load_command_items.append(dat)
+            else:
+                load_command_items.append(command)
+            current_lc_index += 1
+
+        self = MachOImageHeader.from_values(self.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+
+
+class PlatformType(Enum):
+    MACOS = 1
+    IOS = 2
+    TVOS = 3
+    WATCHOS = 4
+    BRIDGE_OS = 5
+    MAC_CATALYST = 6
+    IOS_SIMULATOR = 7
+    TVOS_SIMULATOR = 8
+    WATCHOS_SIMULATOR = 9
+    DRIVER_KIT = 10
+    UNK = 64
+
+
+class ToolType(Enum):
+    CLANG = 1
+    SWIFT = 2
+    LD = 3

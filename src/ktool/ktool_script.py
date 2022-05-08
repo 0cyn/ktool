@@ -27,8 +27,12 @@ from enum import Enum
 from typing import Union
 from kimg4.img4 import IM4P
 
-# noinspection PyProtectedMember
-from pkg_resources import packaging
+try:
+    # noinspection PyProtectedMember
+    from pkg_resources import packaging
+except ImportError:
+    # noinspection PyProtectedMember
+    from pkg_resources._vendor import packaging
 
 import ktool
 from kmacho import LOAD_COMMAND
@@ -39,8 +43,7 @@ from ktool import (
     ignore,
     log,
     LogLevel,
-    Table,
-    LD64
+    Table
 )
 
 from ktool.swift import *
@@ -694,9 +697,9 @@ commands currently supported:
                     last_dylib_command_index = i + 1
 
             dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
-
-            LD64.insert_load_cmd_with_str(image, lc, [dylib_item.raw], args.payload, last_dylib_command_index)
-
+            dylib_cmd = Struct.create_with_values(dylib_command, [lc.value, 0, dylib_item.raw])
+            image.macho_header.insert_load_cmd(dylib_cmd, last_dylib_command_index, suffix=args.payload)
+            image.slice.patch(0, image.macho_header.raw)
             log.info("Reloading MachO Slice to verify integrity")
             image = process_patches(image)
             patched_libraries.append(image)
@@ -742,13 +745,10 @@ Modify the install name of a image
                         break
 
                 dylib_item = Struct.create_with_values(dylib, [0x18, 2, 0, 0])
-                LD64.remove_load_command(image, id_dylib_index)
-
-                image = process_patches(image)
-
-                LD64.insert_load_cmd_with_str(image, LOAD_COMMAND.ID_DYLIB, [dylib_item.raw], new_iname, id_dylib_index)
-
-                image = process_patches(image)
+                image.macho_header.remove_load_command(id_dylib_index)
+                new_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB, 0, dylib_item.raw])
+                image.macho_header.insert_load_cmd(new_cmd, id_dylib_index, new_iname)
+                image.slice.patch(0, image.macho_header.raw)
 
                 patched_libraries.append(image)
 
