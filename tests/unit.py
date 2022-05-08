@@ -176,6 +176,34 @@ class MachOLoaderTestCase(unittest.TestCase):
         self.assertEqual(slice_count, len(macho.slices))
 
 
+class SegmentLCTestCase(unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
+
+    def test_constructable(self):
+        self.thin.reset()
+
+        image = ktool.load_image(self.thin.get())
+        image_header = image.macho_header
+
+        old_command: segment_command_64 = image_header.load_commands[1]
+        old_dat = image.get_bytes_at(old_command.off, old_command.cmdsize)
+
+        text = image.segments['__TEXT']
+        cmd: segment_command = text.cmd
+        text_sections = []
+        for s in text.sections.values():
+            text_sections.append(s)
+        lc = SegmentLoadCommand.from_values(image_header.is64, '__TEXT', text.vm_address, text.file_address, text.size,
+                                            cmd.maxprot, cmd.initprot, cmd.flags, text_sections)
+        new_dat = lc.raw_bytes()
+
+        diff_byte_array_set_assertion(bytearray(old_dat), bytearray(new_dat))
+
+
+
 class VMTestCase(unittest.TestCase):
     def test_good_16k_page_vm_map(self):
         vm = VM(0x4000)
@@ -456,6 +484,18 @@ class ImageHeaderTestCase(unittest.TestCase):
 
         assert_error_printed("Bad Load Command ")
         assert_error_printed("0x99 - 0x30")
+
+    def test_insert_cmd(self):
+
+        self.thin.reset()
+
+        image = ktool.load_image(self.thin.get())
+        image_header = image.macho_header
+
+        dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
+        dylib_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.LOAD_DYLIB.value, 0, dylib_item.raw])
+        image.macho_header.insert_load_cmd(dylib_cmd, -1, suffix="/unit/test")
+
 
 
 class DyldTestCase(unittest.TestCase):

@@ -430,6 +430,13 @@ class MachOImageHeader(Constructable):
     @classmethod
     def from_values(cls, is_64: bool,  cpu_type, cpu_subtype, filetype: MH_FILETYPE, flags: List[MH_FLAGS], load_commands: List):
 
+        if isinstance(cpu_type, int):
+            cpu_type = CPUType(cpu_type)
+        if isinstance(cpu_subtype, int):
+            cpu_subtype = CPU_SUBTYPES[cpu_type](cpu_subtype)
+        if isinstance(filetype, int):
+            filetype = MH_FILETYPE(filetype)
+
         image_header = cls()
 
         struct_type = mach_header_64 if is_64 else mach_header
@@ -463,7 +470,7 @@ class MachOImageHeader(Constructable):
                 lc_count += 1
                 for sect in lc.sections.values():
                     dat += sect.cmd.raw
-                assert len(dat) == lc.cmd.cmdsize
+                assert len(dat) == lc.cmd.cmdsize, f'{lc.cmd}, \n[{",".join([str(i.cmd) for i in lc.sections.values()])}]'
                 full_load_cmds_raw += dat
                 off += lc.cmd.cmdsize
 
@@ -544,7 +551,7 @@ class MachOImageHeader(Constructable):
 
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 sects = []
-                sect_data = command.raw[command.__class__.SIZE:]
+                sect_data = self.raw[command.off + command.__class__.SIZE:]
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
                     sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little")))
