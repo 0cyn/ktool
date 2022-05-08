@@ -10,14 +10,14 @@ on:
       - '**/*.txt'
     branches:
       - master
-      - 'develop/**'
+      - next
   pull_request:
     paths-ignore:
       - '**/*.md'
       - '**/*.txt'
     branches:
       - master
-      - 'develop/**'
+      - next
 
 jobs:
   unit-tests:
