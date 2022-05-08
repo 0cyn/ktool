@@ -745,9 +745,9 @@ Modify the install name of a image
                         break
 
                 dylib_item = Struct.create_with_values(dylib, [0x18, 2, 0, 0])
-                image.macho_header.remove_load_command(id_dylib_index)
+                new_header = image.macho_header.remove_load_command(id_dylib_index)
                 new_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB, 0, dylib_item.raw])
-                new_header = image.macho_header.insert_load_cmd(new_cmd, id_dylib_index, new_iname)
+                new_header = new_header.insert_load_cmd(new_cmd, id_dylib_index, new_iname)
                 image.slice.patch(0, new_header.raw)
 
                 patched_libraries.append(image)
