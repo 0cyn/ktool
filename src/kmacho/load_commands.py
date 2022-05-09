@@ -78,7 +78,7 @@ class SegmentLoadCommand(LoadCommand):
         return lc
 
     @classmethod
-    def from_values(cls, is_64, name, vm_addr, file_addr, size, maxprot, initprot, flags, sections):
+    def from_values(cls, is_64, name, vm_addr, vm_size, file_addr, file_size, maxprot, initprot, flags, sections):
         lc = SegmentLoadCommand()
 
         assert len(name) <= 16
@@ -90,7 +90,7 @@ class SegmentLoadCommand(LoadCommand):
         cmdsize = command_type.SIZE
         cmdsize += (len(sections) * section_type.SIZE)
 
-        command = Struct.create_with_values(command_type, [cmd, cmdsize, name, vm_addr, size, file_addr, size, maxprot, initprot, len(sections), flags])
+        command = Struct.create_with_values(command_type, [cmd, cmdsize, name, vm_addr, vm_size, file_addr, file_size, maxprot, initprot, len(sections), flags])
 
         lc.cmd = command
 

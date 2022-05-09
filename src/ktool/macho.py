@@ -198,6 +198,7 @@ class Segment:
         self.vm_address = cmd.vmaddr
         self.file_address = cmd.fileoff
         self.size = cmd.vmsize
+        self.file_size = cmd.filesize
         self.name = cmd.segname
 
         self.sections: Dict[str, Section] = self._process_sections()
@@ -557,7 +558,9 @@ class MachOImageHeader(Constructable):
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
                     sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little")))
-                seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname, command.vmaddr, command.fileoff, command.vmsize, command.maxprot, command.initprot, command.flags, sects)
+                seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
+                                                     command.vmaddr, command.vmsize, command.fileoff, command.filesize,
+                                                     command.maxprot, command.initprot, command.flags, sects)
                 load_command_items.append(seg)
             elif isinstance(command, dylib_command):
                 _suffix = ""
@@ -622,8 +625,8 @@ class MachOImageHeader(Constructable):
                 for i in range(command.nsects):
                     sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little")))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
-                                                     command.vmaddr, command.fileoff, command.vmsize, command.maxprot,
-                                                     command.initprot, command.flags, sects)
+                                                     command.vmaddr, command.vmsize, command.fileoff, command.filesize,
+                                                     command.maxprot, command.initprot, command.flags, sects)
                 load_command_items.append(seg)
             elif isinstance(command, dylib_command):
                 suffix = ""

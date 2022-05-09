@@ -160,6 +160,18 @@ class Struct:
             return self._rebuild_raw()
         return super().__getattribute__(item)
 
+    def __eq__(self, other):
+        try:
+            for field in self._fields:
+                if self.__getattribute__(field) != getattr(other, field):
+                    return False
+        except AttributeError:
+            return False
+        return True
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def __str__(self):
         text = f'{self.__class__.__name__}('
         for field in self._fields:

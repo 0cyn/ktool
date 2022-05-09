@@ -13,6 +13,7 @@
 #
 import math
 import os
+import pprint
 import sys
 import unittest
 from io import BytesIO
@@ -40,18 +41,21 @@ def diff_byte_array_set_assertion(old: bytearray, new: bytearray):
     if old != new:
         diff = "        Old       New\n"
         for index in range(0, len(old), 4):
-            old_bytes = old[index:index+4]
-            new_bytes = new[index:index+4]
+            old_bytes = old[index:index + 4]
+            new_bytes = new[index:index + 4]
             set_is_diff = False
             for sub_index, byte in enumerate(old_bytes):
-                if byte != new_bytes[sub_index]:
+                try:
+                    if byte != new_bytes[sub_index]:
+                        set_is_diff = True
+                except IndexError:
                     set_is_diff = True
             if set_is_diff:
                 diff += hex(index).ljust(8)
                 diff += old_bytes.hex() + '  '
                 diff += new_bytes.hex() + '  '
                 diff += "\n"
-        print(diff, file=sys.stderr)
+        print(diff)
         raise AssertionError
 
 
@@ -74,11 +78,11 @@ def disable_error_capture():
     log.LOG_ERR = print_err
 
 
-#  ---------
-#  To make testing easier, we use "scratch files"; base mach-os (testbin1, testbin1.fat) that we modify and reset
-#      in reliable ways. The underlying file should not matter whatsoever, we just need *any* mach-o.
-#  Tests should be written in a way entirely independent of the underlying file, manually writing the values we're going to test.
-#  ---------
+# ---------
+# To make testing easier, we use "scratch files"; base mach-os (testbin1, testbin1.fat) that we modify and
+# reset in reliable ways. The underlying file should not matter whatsoever, we just need *any* mach-o. Tests should
+# be written in a way entirely independent of the underlying file, manually writing the values we're going to test.
+# ---------
 
 class ScratchFile:
     def __init__(self, fp):
@@ -116,6 +120,15 @@ class ScratchFile:
         self.scratch.write(self.backup.read())
         self.backup.seek(0)
         self.scratch.seek(0)
+
+
+class StructTestCase(unittest.TestCase):
+    def test_equality_check(self):
+        s1 = Struct.create_with_values(linkedit_data_command, [0x34 | LC_REQ_DYLD, 0x10, 0xc000, 0xd0], "little")
+        s2 = Struct.create_with_values(linkedit_data_command, [0x34 | LC_REQ_DYLD, 0x10, 0xc000, 0xd0], "little")
+        s3 = Struct.create_with_values(linkedit_data_command, [0x34 | LC_REQ_DYLD, 0x10, 0xc000, 0xe0], "little")
+        assert s1 == s2
+        assert s1 != s3
 
 
 class MachOLoaderTestCase(unittest.TestCase):
@@ -196,12 +209,12 @@ class SegmentLCTestCase(unittest.TestCase):
         text_sections = []
         for s in text.sections.values():
             text_sections.append(s)
-        lc = SegmentLoadCommand.from_values(image_header.is64, '__TEXT', text.vm_address, text.file_address, text.size,
+        lc = SegmentLoadCommand.from_values(image_header.is64, '__TEXT', text.vm_address, text.size, text.file_address,
+                                            text.file_size,
                                             cmd.maxprot, cmd.initprot, cmd.flags, text_sections)
         new_dat = lc.raw_bytes()
 
         diff_byte_array_set_assertion(bytearray(old_dat), bytearray(new_dat))
-
 
 
 class VMTestCase(unittest.TestCase):
@@ -266,7 +279,8 @@ class SliceTestCase(unittest.TestCase):
         macho_slice.patch(0x0, b'\xDE\xAD\xBE\xEF')
         self.fat.write(macho_slice.offset, 0xDEADBEEF)
 
-        self.assertEqual(macho_slice.full_bytes_for_slice(), bytes(bytearray(self.fat.get().read())[macho_slice.offset:macho_slice.offset+macho_slice.size]))
+        self.assertEqual(macho_slice.full_bytes_for_slice(), bytes(
+            bytearray(self.fat.get().read())[macho_slice.offset:macho_slice.offset + macho_slice.size]))
 
     def test_find(self):
         self.thin.reset()
@@ -394,6 +408,7 @@ class ImageHeaderTestCase(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
+        self.thin_lib = ScratchFile(open(scriptdir + '/bins/testlib1.dylib', 'rb'))
 
     def test_constructable(self):
         self.thin.reset()
@@ -430,7 +445,8 @@ class ImageHeaderTestCase(unittest.TestCase):
             else:
                 load_command_items.append(command)
 
-        new_image_header = MachOImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+        new_image_header = MachOImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags,
+                                                        load_command_items)
 
         self.thin.write(0, new_image_header.raw_bytes())
 
@@ -474,7 +490,8 @@ class ImageHeaderTestCase(unittest.TestCase):
             else:
                 load_command_items.append(command)
 
-        new_image_header = MachOImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+        new_image_header = MachOImageHeader.from_values(image.macho_header.is64, cpu_type, cpu_subtype, filetype, flags,
+                                                        load_command_items)
 
         self.thin.write(0, new_image_header.raw_bytes())
 
@@ -495,8 +512,15 @@ class ImageHeaderTestCase(unittest.TestCase):
         dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
         dylib_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.LOAD_DYLIB.value, 0, dylib_item.raw])
         new_header = image.macho_header.insert_load_cmd(dylib_cmd, -1, suffix="/unit/test")
+
         assert len(image_header.load_commands) + 1 == len(new_header.load_commands)
         assert b'/unit/test' in new_header.raw
+        assert image_header.raw != new_header.raw
+
+        self.thin.write(0, new_header.raw)
+
+        new_image = ktool.load_image(self.thin.get())
+        assert new_image.linked_images[-1].install_name == '/unit/test'
 
     def test_remove_cmd(self):
 
@@ -504,10 +528,41 @@ class ImageHeaderTestCase(unittest.TestCase):
 
         image = ktool.load_image(self.thin.get())
         image_header = image.macho_header
-        lc = image.macho_header.load_commands[5]
 
         new_header = image.macho_header.remove_load_command(5)
         assert (len(image_header.load_commands) - 1 == len(new_header.load_commands))
+        self.thin.write(0, new_header.raw_bytes())
+
+        ktool.load_image(self.thin.get())
+
+    def test_replace_load_command(self):
+        self.thin_lib.reset()
+
+        image = ktool.load_image(self.thin_lib.get())
+        image_header = image.macho_header
+        old_commands = [*image_header.load_commands]
+
+        new_header = image.macho_header.remove_load_command(4)
+        assert (len(image_header.load_commands) - 1 == len(new_header.load_commands))
+        self.thin_lib.write(0, new_header.raw_bytes())
+
+        image = ktool.load_image(self.thin_lib.get())
+        image_header = image.macho_header
+
+        dylib_item = Struct.create_with_values(dylib, [0x18, 0x1, 0x000000, 0x000000])
+        dylib_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB.value, 0, dylib_item.raw])
+        new_header = image.macho_header.insert_load_cmd(dylib_cmd, 4, suffix="/unit/test/iname")
+
+        self.thin_lib.write(0, new_header.raw)
+
+        new_image = ktool.load_image(self.thin_lib.get())
+        assert new_image.install_name == '/unit/test/iname'
+
+        for i, cmd in enumerate(new_header.load_commands):
+            if not cmd == old_commands[i]:
+                log.error(f'{str(cmd)} != {str(old_commands[i])}')
+                raise AssertionError
+
 
 class DyldTestCase(unittest.TestCase):
     """

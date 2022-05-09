@@ -83,7 +83,7 @@ class VM:
 
     def map_pages(self, physical_addr, virtual_addr, size):
         if physical_addr % self.page_size != 0 or virtual_addr % self.page_size != 0 or size % self.page_size != 0:
-            raise MachOAlignmentError
+            raise MachOAlignmentError(f'Tried to map {hex(virtual_addr)}+{hex(size)} to {hex(physical_addr)}')
         for i in range(size // self.page_size):
             self.page_table[virtual_addr + (i * self.page_size) >> self.page_size_bits] = physical_addr + (
                         i * self.page_size)
