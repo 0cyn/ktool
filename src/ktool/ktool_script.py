@@ -472,6 +472,7 @@ def _open(args):
     """
 ktool open [filename]
     """
+    # noinspection PyUnreachableCode
     try:
         log.LOG_LEVEL = LogLevel.DEBUG
         screen = KToolScreen(args.hard_fail)
@@ -898,7 +899,7 @@ Print the list of function starts
                 print('(Weak) ' + extlib.install_name if extlib.weak else '' + extlib.install_name)
         elif args.get_fstarts:
             for addr in image.function_starts:
-                print(f'Addr: {hex(addr)} -> {image.symbols[addr].fullname if addr in image.symbols else ""}')
+                print(f'{hex(addr)} -> {image.symbols[addr].fullname if addr in image.symbols else ""}')
 
 
 def _file(args):
@@ -1067,7 +1068,8 @@ Dump info for a specific kext
                     break
 
         if isinstance(kext, Kext):
-            bundle_text = f"Bundle ID: {kext.id}\nExecutable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}"
+            bundle_text = f"Bundle ID: {kext.id}\nExecutable Name: {kext.executable_name}\n{kext.info_string}\n" \
+                          f"Version: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}"
             print(bundle_text)
         else:
             print('Kext Not Found')

@@ -864,7 +864,8 @@ attr_encodings = {
     "C": "copy"
 }
 
-property_attr = namedtuple("property_attr", ["type", "attributes", "ivar", "is_id", "typestr"])
+property_attr = namedtuple("property_attr", ["type", "attributes", "ivar", "is_id", "typestr", "getter", "setter",
+                                             "is_dynamic"])
 
 
 class Property(Constructable):
@@ -885,31 +886,45 @@ class Property(Constructable):
         pass
 
     def __init__(self, name, attr_string, type_processor):
-        self.name = name
+        self.name: str = name
 
         try:
             self.attr = self.decode_property_attributes(type_processor, attr_string)
+            self.attr_string = attr_string
             self.type = self._renderable_type(self.attr.type)
             self.is_id = self.attr.is_id
             self.attributes = self.attr.attributes
             self.ivarname = self.attr.ivar
+            if self.attr.getter:
+                self.getter = self.attr.getter
+            else:
+                self.getter = self.name
+            if self.attr.setter:
+                self.setter = self.attr.setter
+            else:
+                self.setter = "set" + self.name[0].upper() + self.name[1:]
         except IndexError:
             log.warn(
                 f'issue with property {self.name} attr {attr_string}')
             self.type = '?'
+            self.attr_string = ""
             self.is_id = False
             self.attributes = []
             self.ivarname = ""
+            self.getter = ""
+            self.setter = ""
             self.attr = None
         except TypeError:
             log.warn(
                 f'issue with property {self.name} attr {attr_string}')
             self.type = '?'
+            self.attr_string = ""
             self.is_id = False
             self.attributes = []
             self.ivarname = ""
+            self.getter = ""
+            self.setter = ""
             self.attr = None
-
 
     def serialize(self):
         return {
@@ -918,6 +933,9 @@ class Property(Constructable):
             'is_id': self.is_id,
             'ivar_name': self.ivarname,
             'attributes': self.attributes,
+            'attr_string': self.attr_string,
+            'getter': self.getter,
+            'setter': self.setter,
             'rendered': str(self)
         }
 
@@ -958,6 +976,9 @@ class Property(Constructable):
         is_id = False
         ivar = ""
         property_attributes = []
+        getter = None
+        setter = None
+        is_dynamic = False
 
         for attribute in attribute_strings:
             indicator = attribute[0]
@@ -969,10 +990,20 @@ class Property(Constructable):
                 continue
             if indicator == "V":
                 ivar = attribute[1:]
+            if indicator == "G":
+                getter = attribute[1:]
+            if indicator == "S":
+                setter = attribute[1:]
+            if indicator == "D":
+                is_dynamic = True
             if indicator in attr_encodings:
                 property_attributes.append(attr_encodings[indicator])
+        if getter:
+            property_attributes.append(f'getter={getter}')
+        if setter:
+            property_attributes.append(f'setter={setter}')
 
-        return property_attr(ptype, property_attributes, ivar, is_id, type_str)
+        return property_attr(ptype, property_attributes, ivar, is_id, type_str, getter, setter, is_dynamic)
 
 
 class Category(Constructable):
