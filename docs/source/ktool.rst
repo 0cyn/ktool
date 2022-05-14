@@ -54,7 +54,7 @@ This class represents the Mach-O Binary as a whole.
 It's the root object in the massive tree of information we're going to build up about the binary
 
 This class on its own does not handle populating its fields.
-The Dyld class set is responsible for loading in and processing the raw values to it.
+The MachOImageLoader class set is responsible for loading in and processing the raw values to it.
 
 You should obtain an instance of this class using the public :python:`ktool.load_image()` API
 
@@ -65,9 +65,9 @@ You should obtain an instance of this class using the public :python:`ktool.load
    It can be initialized without a Slice if you are building a Mach-O Representation from runtime data.
 
    .. py:attribute:: macho_header
-      :type: ImageHeader
+      :type: MachOImageHeader
 
-      if Image was initialized with a macho_slice, this attribute will contain an ImageHeader with basic info loaded from the Mach-O Header
+      if Image was initialized with a macho_slice, this attribute will contain an MachOImageHeader with basic info loaded from the Mach-O Header
 
    .. py:attribute:: base_name
       :type: str
@@ -80,9 +80,9 @@ You should obtain an instance of this class using the public :python:`ktool.load
       Install Name of the image (if it exists). "" if the library does not have one.
 
    .. py:attribute:: linked_images
-      :type: List[ExternalDylib]
+      :type: List[LinkedImage]
 
-      List of :python:`ExternalDylib` s this image links
+      List of :python:`LinkedImage` s this image links
 
    .. py:attribute:: segments
       :type: Dict[str, Segment]
@@ -131,9 +131,9 @@ You should obtain an instance of this class using the public :python:`ktool.load
       Reference to the VM translation table object the :python:`Image` uses. You probably shouldn't use this, but it's here if you need it.
 
    .. py:attribute:: dylib
-      :type: ExternalDylib
+      :type: LinkedImage
 
-      ExternalDylib object that (admittedly, somewhat confusingly) actually represents this Image itself.
+      LinkedImage that represents this Image itself.
 
    .. py:method:: serialize() -> dict
 
@@ -176,11 +176,55 @@ You should obtain an instance of this class using the public :python:`ktool.load
       Decode uleb from starting address, returning the value, and the end address of the leb128
 
 
-
-Dyld
+MachOImageHeader
 =================================
 
-.. py:class:: Dyld
+.. py:class:: MachOImageHeader
+
+   the class method :python:`from_image()` should be used for loading this class.
+
+   .. py:classmethod:: from_image(macho_slice) -> MachOImageHeader
+
+      Load an MachOImageHeader from a macho_slice
+
+   .. py:attribute:: is64: bool
+
+      Is this image a 64 bit Mach-O?
+
+   .. py:attribute:: dyld_header: Union[dyld_header, dyld_header_64]
+
+      Dyld Header struct
+
+   .. py:attribute:: filetype: MH_FILETYPE
+
+      MachO Filetype
+
+   .. py:attribute:: flags: MH_FLAGS
+
+      MachO File Flags
+
+   .. py:attribute:: load_commands: List[load_command]
+
+      List of load command structs
+
+   .. py:method:: insert_load_cmd(load_command, index=-1, suffix=None) -> MachOImageHeader
+
+      Insert a load command.
+
+   .. py:method:: remove_load_command(index) -> MachOImageHeader
+
+      Remove a load command.
+
+   .. py:method:: serialize() -> dict
+
+      Return image metadata as a dictionary of json-serializable keys and objects
+
+
+
+MachOImageLoader
+=================================
+
+.. py:class:: MachOImageLoader
 
    .. warning:: Do not use this! Use :python:`ktool.load_image()` !!
 
@@ -189,26 +233,6 @@ Dyld
    .. py:classmethod:: load(macho_slice: Slice, load_symtab=True, load_imports=True, load_exports=True) -> Image
 
       Take a MachO Slice object and Load an image.
-
-
-LD64
-=================================
-
-.. py:class:: LD64
-
-   .. py:classmethod:: insert_load_cmd(image: Image, lc: LOAD_COMMAND, fields: List, index=-1)
-
-      Insert a load command into the MachO header and patch the image in memory to reflect this.
-
-      If index is -1, it will be inserted at the end.
-
-   .. py:classmethod:: insert_load_cmd_with_str(image: Image, lc: LOAD_COMMAND, fields: List, suffix: str, index=-1)
-
-      Insert a load command which contains a string suffix (e.g LOAD_DYLIB commands)
-
-   .. py:classmethod:: remove_load_command(image: Image, index)
-
-      Remove Load Command at :python:`index`
 
 
 ObjCImage
@@ -465,6 +489,9 @@ ktool.macho
 .. py:module:: ktool.macho
 
 
+ktool.image
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 VM / MisalignedVM
 =================================
 
@@ -507,60 +534,26 @@ Their outward APIs are (nearly) identical.
       If this is not a :python:`MisalignedVM`, this attribute exists and contains the page size of the VM
 
 
-ktool.dyld
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:module:: ktool.dyld
-
-
-ImageHeader
+LinkedImage
 =================================
 
-.. py:class:: ImageHeader
-
-   the class method :python:`from_image()` should be used for loading this class.
-
-   .. py:classmethod:: from_image(macho_slice) -> ImageHeader
-
-      Load an ImageHeader from a macho_slice
-
-   .. py:attribute:: is64: bool 
-
-      Is this image a 64 bit Mach-O? 
-
-   .. py:attribute:: dyld_header: Union[dyld_header, dyld_header_64]
-
-      Dyld Header struct 
-
-   .. py:attribute:: filetype: MH_FILETYPE
-
-      MachO Filetype 
-
-   .. py:attribute:: flags: MH_FLAGS
-
-      MachO File Flags 
-
-   .. py:attribute:: load_commands: List[load_command]
-
-      List of load command structs
-
-   .. py:method:: serialize() -> dict
-
-      Return image metadata as a dictionary of json-serializable keys and objects
-
-
-ExternalDylib
-=================================
-
-.. py:class:: ExternalDylib(image: Image, cmd)
+.. py:class:: LinkedImage(image: Image, cmd)
 
    .. py:attribute:: install_name: str
 
-      Full Install name of the image 
+      Full Install name of the image
 
    .. py:attribute:: local: bool
 
-      Whether this "ExternalDylib" is actually local (ID_DYLIB)
+      Whether this "LinkedImage" is actually local (ID_DYLIB)
+
+
+
+
+ktool.loader
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:module:: ktool.loader
 
 
 Symbol
@@ -775,7 +768,19 @@ Property
 
       Property Attributes (e.g. nonatomic, readonly, weak)
 
-   .. py:attribute:: ivarname 
+   .. py:attribute:: attr_string: str
+
+      Property Attribute String
+
+   .. py:attribute:: getter: str
+
+      Property getter name
+
+   .. py:attribute:: setter: str
+
+      Property setter name
+
+   .. py:attribute:: ivarname: str
 
       Name of the ivar backing this property
 
