@@ -78,7 +78,7 @@ class SegmentLoadCommand(LoadCommand):
         return lc
 
     @classmethod
-    def from_values(cls, is_64, name, vm_addr, file_addr, size, maxprot, initprot, flags, sections):
+    def from_values(cls, is_64, name, vm_addr, vm_size, file_addr, file_size, maxprot, initprot, flags, sections):
         lc = SegmentLoadCommand()
 
         assert len(name) <= 16
@@ -86,11 +86,11 @@ class SegmentLoadCommand(LoadCommand):
         command_type = segment_command_64 if is_64 else segment_command
         section_type = section_64 if is_64 else section
         cmd = 0x19 if is_64 else 0x1
-        # 'cmd', 'cmdsize', 'segname', 'vmaddr', 'vmsize', 'fileoff', 'filesize', 'maxprot', 'initprot', 'nsects', 'flags'
+
         cmdsize = command_type.SIZE
         cmdsize += (len(sections) * section_type.SIZE)
 
-        command = Struct.create_with_values(command_type, [cmd, cmdsize, name, vm_addr, size, file_addr, size, maxprot, initprot, len(sections), flags])
+        command = Struct.create_with_values(command_type, [cmd, cmdsize, name, vm_addr, vm_size, file_addr, file_size, maxprot, initprot, len(sections), flags])
 
         lc.cmd = command
 
@@ -128,4 +128,4 @@ class SegmentLoadCommand(LoadCommand):
 
         self.sections = {}
 
-
+# TODO: Constructable wrapper for dylinker_command, build_version_command

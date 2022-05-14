@@ -18,7 +18,7 @@
 from typing import Dict, Union, BinaryIO, List
 from io import BytesIO
 
-from ktool.dyld import Dyld, Image
+from ktool.loader import MachOImageLoader, Image
 from ktool.generator import TBDGenerator, FatMachOGenerator
 try:
     from ktool.headers import HeaderGenerator, Header
@@ -97,7 +97,7 @@ def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO, SlicedBackingFile]
         macho_file = load_macho_file(fp, use_mmaped_io=use_mmaped_io)
         macho_slice: Slice = macho_file.slices[slice_index]
 
-    return Dyld.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports, load_exports=load_exports)
+    return MachOImageLoader.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports, load_exports=load_exports)
 
 
 def macho_verify(fp: Union[BinaryIO, MachOFile, Slice, Image]) -> None:

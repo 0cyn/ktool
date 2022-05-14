@@ -16,7 +16,7 @@ from io import BytesIO
 import ktool
 from kmacho.structs import *
 from ktool import MachOFile, Image, log
-from ktool.dyld import ImageHeader, Dyld
+from ktool.loader import MachOImageHeader, MachOImageLoader
 import ktool.kplistlib as plistlib
 from ktool.exceptions import UnsupportedFiletypeException
 from ktool.macho import SlicedBackingFile
@@ -86,15 +86,15 @@ class MergedKext(Kext):
 
         # cool. we have a basic set of stuff in place, lets bootstrap up an Image from it.
 
-        self.mach_header = ImageHeader.from_image(self.backing_slice, file_base_addr)
+        self.mach_header = MachOImageHeader.from_image(self.backing_slice, file_base_addr)
         self.image = Image(self.backing_slice)
         self.image.macho_header = self.mach_header
         self.image.vm_realign(yell_about_misalignment=False)
 
         # noinspection PyProtectedMember
-        Dyld._parse_load_commands(self.image)
+        MachOImageLoader._parse_load_commands(self.image)
         # noinspection PyProtectedMember
-        Dyld._process_image(self.image)
+        MachOImageLoader._process_image(self.image)
 
         for segment in image.segments.values():
             segment.vm_address = segment.vm_address | 0xffff000000000000

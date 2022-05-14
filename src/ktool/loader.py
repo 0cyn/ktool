@@ -1,6 +1,6 @@
 #
 #  ktool | ktool
-#  dyld.py
+#  loader.py
 #
 #  This file includes a lot of utilities, classes, and abstractions
 #  designed for replicating certain functionality within dyld.
@@ -12,7 +12,6 @@
 #
 #  Copyright (c) kat 2021.
 #
-import math
 from collections import namedtuple
 from typing import List, Union, Dict
 
@@ -23,422 +22,17 @@ from kmacho import (
     BINDING_OPCODE,
     LOAD_COMMAND_MAP,
     BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB,
-    BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64, CPUType, CPUSubTypeARM64, MH_CIGAM, MH_MAGIC
+    BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64, CPUType, CPUSubTypeARM64, MH_MAGIC
 )
 from kmacho.base import Constructable
 from kmacho.fixups import *
 from ktool.codesign import CodesignInfo
-from ktool.load_commands import SegmentLoadCommand
-from ktool.macho import Segment, Slice, VM, MisalignedVM
+from ktool.macho import Segment, Slice, MachOImageHeader, PlatformType
 from ktool.util import log, macho_is_malformed, ignore, bytes_to_hex
+from ktool.image import Image, os_version, LinkedImage
 
 
-class ImageHeader(Constructable):
-    """
-    This class represents the Mach-O Header
-    It contains the basic header info along with all load commands within it.
-
-    It doesn't handle complex abstraction logic, it simply loads in the load commands as their raw structs
-    """
-
-    @classmethod
-    def from_image(cls, macho_slice, offset=0) -> 'ImageHeader':
-
-        image_header = ImageHeader()
-
-        header: mach_header = macho_slice.load_struct(offset, mach_header)
-
-        if header.magic == MH_MAGIC_64:
-            header: mach_header_64 = macho_slice.load_struct(offset, mach_header_64)
-            image_header.is64 = True
-
-        raw = header.raw
-
-        image_header.filetype = MH_FILETYPE(header.filetype)
-
-        for flag in MH_FLAGS:
-            if header.flags & flag.value:
-                image_header.flags.append(flag)
-
-        offset += header.SIZE
-
-        load_commands = []
-
-        for i in range(1, header.loadcnt + 1):
-            cmd = macho_slice.get_int_at(offset, 4)
-            cmd_size = macho_slice.get_int_at(offset + 4, 4)
-
-            cmd_raw = macho_slice.get_bytes_at(offset, cmd_size)
-            try:
-                load_cmd = Struct.create_with_bytes(LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)], cmd_raw)
-                load_cmd.off = offset
-            except ValueError as ex:
-                if not ignore.MALFORMED:
-                    log.error(f'Bad Load Command at {hex(offset)} index {i-1}\n        {hex(cmd)} - {hex(cmd_size)}')
-
-                unk_lc = macho_slice.load_struct(offset, unk_command)
-                load_cmd = unk_lc
-            except KeyError as ex:
-                if not ignore.MALFORMED:
-                    log.error()
-                    log.error(f'Load Command {str(LOAD_COMMAND(cmd))} doesn\'t have a mapped struct type')
-                    log.error('*Please* file an issue on the github @ https://github.com/cxnder/ktool')
-                    log.error()
-                    log.error(f'Run with the -f flag to hide this warning.')
-                    log.error()
-                unk_lc = macho_slice.load_struct(offset, unk_command)
-                load_cmd = unk_lc
-
-            load_commands.append(load_cmd)
-            raw += cmd_raw
-            offset += load_cmd.cmdsize
-
-        image_header.raw = raw
-        image_header.dyld_header = header
-        image_header.load_commands = load_commands
-
-        return image_header
-
-    @classmethod
-    def from_values(cls, is_64: bool,  cpu_type, cpu_subtype, filetype: MH_FILETYPE, flags: List[MH_FLAGS], load_commands: List):
-
-        image_header = ImageHeader()
-
-        struct_type = mach_header_64 if is_64 else mach_header
-
-        full_load_cmds_raw = bytearray()
-
-        lcs = []
-
-        lc_count = 0
-
-        off = struct_type.SIZE
-
-        for lc in load_commands:
-
-            if issubclass(lc.__class__, Struct):
-                assert len(lc.raw) == lc.__class__.SIZE
-                assert hasattr(lc, 'cmdsize')
-                lc.off = off
-                lcs.append(lc)
-                full_load_cmds_raw += bytearray(lc.raw)
-                lc_count += 1
-                off += lc.cmdsize
-
-            elif isinstance(lc, bytes) or isinstance(lc, bytearray):
-                full_load_cmds_raw += bytearray(lc)
-
-            elif isinstance(lc, Segment) or isinstance(lc, SegmentLoadCommand):
-                lc.cmd.off = off
-                lcs.append(lc.cmd)
-                dat = bytearray(lc.cmd.raw)
-                lc_count += 1
-                for sect in lc.sections.values():
-                    dat += sect.cmd.raw
-                assert len(dat) == lc.cmd.cmdsize
-                full_load_cmds_raw += dat
-                off += lc.cmd.cmdsize
-
-        embedded_flag = 0
-        for flag in flags:
-            embedded_flag |= flag.value
-
-        if is_64:
-            header = Struct.create_with_values(struct_type, [MH_MAGIC_64, cpu_type.value, cpu_subtype.value, filetype.value, lc_count, len(full_load_cmds_raw), embedded_flag, 0])
-        else:
-            header = Struct.create_with_values(struct_type, [MH_MAGIC, cpu_type.value, cpu_subtype.value, filetype.value, lc_count, len(full_load_cmds_raw), embedded_flag])
-
-        image_header.dyld_header = header
-
-        image_header.filetype = MH_FILETYPE(header.filetype)
-
-        for flag in MH_FLAGS:
-            if header.flags & flag.value:
-                image_header.flags.append(flag)
-
-        image_header.load_commands = lcs
-
-        image_header.raw = bytearray(header.raw) + full_load_cmds_raw
-
-        return image_header
-
-    def __str__(self):
-        return f'MachO Header - 64 bit VM: {self.is64} | File Type: {self.filetype} | Flags: {self.flags} | Load Cmd Count: {len(self.load_commands)}'
-
-    def __init__(self):
-        self.is64 = False
-        self.dyld_header = None
-        self.filetype = MH_FILETYPE(0)
-        self.flags: List[MH_FLAGS] = []
-        self.load_commands = []
-        self.raw = bytearray()
-
-    def serialize(self):
-        return {
-            'filetype': self.filetype.name,
-            'flags': [flag.name for flag in self.flags],
-            'is_64_bit': self.is64,
-            'dyld_header': self.dyld_header.serialize(),
-            'load_commands': [cmd.serialize() for cmd in self.load_commands]
-        }
-
-    def raw_bytes(self) -> bytes:
-        return self.raw
-
-
-class Image:
-    """
-    This class represents the Mach-O Binary as a whole.
-
-    It's the root object in the massive tree of information we're going to build up about the binary
-
-    This class on its own does not handle populating its fields.
-    The Dyld class set is responsible for loading in and processing the raw values to it.
-    """
-
-    def __init__(self, macho_slice: Slice):
-        """
-        Create a MachO image
-
-        :param macho_slice: MachO Slice being processed
-        :type macho_slice: MachO Slice
-        """
-        self.slice: Slice = macho_slice
-
-        self.vm = None
-
-        self.fallback_vm = MisalignedVM(self.slice)
-
-        if self.slice:
-            self.macho_header: ImageHeader = ImageHeader.from_image(macho_slice=macho_slice)
-
-            self.vm_realign()
-
-        self.base_name = ""  # copy of self.name
-        self.install_name = ""
-
-        self.linked_images: List[ExternalDylib] = []
-
-        self.segments: Dict[str, Segment] = {}
-
-        self.info: Union[dyld_info_command, None] = None
-        self.dylib: Union[ExternalDylib, None] = None
-        self.uuid = None
-        self.codesign_info: Union[CodesignInfo, None] = None
-
-        self._codesign_cmd = None
-
-        self.platform: PlatformType = PlatformType.UNK
-
-        self.allowed_clients: List[str] = []
-
-        self.rpath: Union[str, None] = None
-
-        self.minos = os_version(0, 0, 0)
-        self.sdk_version = os_version(0, 0, 0)
-
-        self.imports: List[Symbol] = []
-        self.exports: List[Symbol] = []
-
-        self.symbols: Dict[int, Symbol] = {}
-        self.import_table: Dict[int, Symbol] = {}
-        self.export_table: Dict[int, Symbol] = {}
-
-        self.entry_point = 0
-
-        self.function_starts: List[int] = []
-
-        self.thread_state: List[int] = []
-        self._entry_off = 0
-
-        self.binding_table = None
-        self.weak_binding_table = None
-        self.lazy_binding_table = None
-        self.export_trie: Union[ExportTrie, None] = None
-
-        self.chained_fixups = None
-
-        self.symbol_table: Union[SymbolTable, None] = None
-
-        self.struct_cache: Dict[int, Struct] = {}
-
-    def serialize(self):
-        image_dict = {
-            'macho_header': self.macho_header.serialize()
-        }
-
-        if self.install_name != "":
-            image_dict['install_name'] = self.install_name
-
-        linked = []
-        for ext_dylib in self.linked_images:
-            linked.append(ext_dylib.serialize())
-
-        image_dict['linked'] = linked
-
-        segments = {}
-
-        for seg_name, seg in self.segments.items():
-            segments[seg_name] = seg.serialize()
-
-        image_dict['segments'] = segments
-        if self.uuid:
-            image_dict['uuid'] = bytes_to_hex(self.uuid)
-
-        image_dict['platform'] = self.platform.name
-
-        image_dict['allowed-clients'] = self.allowed_clients
-
-        if self.rpath:
-            image_dict['rpath'] = self.rpath
-
-        image_dict['imports'] = [sym.serialize() for sym in self.imports]
-        image_dict['exports'] = [sym.serialize() for sym in self.exports]
-        image_dict['symbols'] = [sym.serialize() for sym in self.symbols.values()]
-
-        image_dict['entry_point'] = self.entry_point
-
-        image_dict['function_starts'] = self.function_starts
-
-        image_dict['thread_state'] = self.thread_state
-
-        image_dict['minos'] = f'{self.minos.x}.{self.minos.y}{self.minos.z}'
-        image_dict['sdk_version'] = f'{self.sdk_version.x}.{self.sdk_version.y}.{self.sdk_version.z}'
-
-        return image_dict
-
-    def vm_realign(self, yell_about_misalignment=True):
-
-        align_by = 0x4000
-        aligned = False
-
-        detag_64 = False
-
-        segs = []
-        for cmd in self.macho_header.load_commands:
-            if cmd.cmd in [LOAD_COMMAND.SEGMENT.value, LOAD_COMMAND.SEGMENT_64.value]:
-                segs.append(cmd)
-            if cmd.cmd == LOAD_COMMAND.LC_DYLD_CHAINED_FIXUPS:
-                detag_64 = True
-
-        if self.slice.type == CPUType.ARM64 and self.slice.subtype == CPUSubTypeARM64.ARM64E:
-            detag_64 = True
-
-        while not aligned:
-            aligned = True
-            for cmd in segs:
-                cmd: segment_command_64 = cmd
-                if cmd.vmaddr % align_by != 0:
-                    if align_by == 0x4000:
-                        align_by = 0x1000
-                        aligned = False
-                        break
-                    else:
-                        align_by = 0
-                        aligned = True
-                        break
-
-        if align_by != 0:
-            log.info(f'Aligned to {hex(align_by)} pages')
-            self.vm: VM = VM(page_size=align_by)
-            self.vm.detag_64 = detag_64
-            self.vm.fallback = self.fallback_vm
-        else:
-            if yell_about_misalignment:
-                log.info("MachO cannot be aligned to 16k or 4k pages. Swapping to fallback mapping.")
-            self.vm: MisalignedVM = self.fallback_vm
-            self.vm.detag_64 = detag_64
-
-    def vm_check(self, address):
-        return self.vm.vm_check(address)
-
-    def get_int_at(self, offset: int, length: int, vm=False, section_name=None):
-        """
-        Get a sequence of bytes (as an int) from a location
-
-        :param offset: Offset within the image
-        :param length: Amount of bytes to get
-        :param vm: Is `offset` a VM address
-        :param section_name: Section Name if vm==True (improves translation time slightly)
-        :return: `length` Bytes at `offset`
-        """
-        if vm:
-            offset = self.vm.translate(offset)
-        return self.slice.get_int_at(offset, length)
-
-    def get_bytes_at(self, offset: int, length: int, vm=False, section_name=None):
-        """
-        Get a sequence of bytes from a location
-
-        :param offset: Offset within the image
-        :param length: Amount of bytes to get
-        :param vm: Is `offset` a VM address
-        :param section_name: Section Name if vm==True (improves translation time slightly)
-        :return: `length` Bytes at `offset`
-        """
-        if vm:
-            offset = self.vm.translate(offset)
-        return self.slice.get_bytes_at(offset, length)
-
-    def load_struct(self, address: int, struct_type, vm=False, section_name=None, endian="little", force_reload=False):
-        """
-        Load a struct (struct_type_t) from a location and return the processed object
-
-        :param address: Address to load struct from
-        :param struct_type: type of struct (e.g. dyld_header)
-        :param vm:  Is `address` a VM address?
-        :param section_name: if `vm==True`, the section name (slightly improves translation speed)
-        :param endian: Endianness of bytes to read.
-        :return: Loaded struct
-        """
-        if address not in self.struct_cache or force_reload:
-            if vm:
-                address = self.vm.translate(address)
-            struct = self.slice.load_struct(address, struct_type, endian)
-            self.struct_cache[address] = struct
-            return struct
-
-        return self.struct_cache[address]
-
-    def get_str_at(self, address: int, count: int, vm=False, section_name=None, force=False):
-        """
-        Get string with set length from location (to be used essentially only for loading segment names)
-
-        :param address: Address of string start
-        :param count: Length of string
-        :param vm: Is `address` a VM address?
-        :param section_name: if `vm==True`, the section name (unused here, really)
-        :return: The loaded string.
-        """
-        if vm:
-            address = self.vm.translate(address)
-        return self.slice.get_str_at(address, count, force=force)
-
-    def get_cstr_at(self, address: int, limit: int = 0, vm=False, section_name=None):
-        """
-        Load a C style string from a location, stopping once a null byte is encountered.
-
-        :param address: Address to load string from
-        :param limit: Limit of the length of bytes, 0 = unlimited
-        :param vm: Is `address` a VM address?
-        :param section_name: if `vm==True`, the section name (vastly improves VM lookup time)
-        :return: The loaded C string
-        """
-        if vm:
-            address = self.vm.translate(address)
-        return self.slice.get_cstr_at(address, limit)
-
-    def decode_uleb128(self, readHead: int):
-        """
-        Decode a uleb128 integer from a location
-
-        :param readHead: Start location
-        :return: (end location, value)
-        """
-        return self.slice.decode_uleb128(readHead)
-
-
-class Dyld:
+class MachOImageLoader:
     """
     This class takes our initialized "Image" object, parses through the raw data behind it, and fills out its properties.
 
@@ -461,10 +55,10 @@ class Dyld:
         image = Image(macho_slice)
 
         log.info("Processing Load Commands")
-        Dyld._parse_load_commands(image, load_symtab, load_imports, load_exports)
+        MachOImageLoader._parse_load_commands(image, load_symtab, load_imports, load_exports)
 
         log.info("Processing Image")
-        Dyld._process_image(image)
+        MachOImageLoader._process_image(image)
         return image
 
     @classmethod
@@ -586,12 +180,12 @@ class Dyld:
                                              z=image.get_int_at(cmd.off + 8, 1))
 
             elif load_command == LOAD_COMMAND.ID_DYLIB:
-                image.dylib = ExternalDylib(image, cmd)
+                image.dylib = LinkedImage(image, cmd)
                 log.debug(f'Loaded local dylib_command with install_name {image.dylib.install_name}')
 
             elif isinstance(cmd, dylib_command):
                 # noinspection PyTypeChecker
-                external_dylib = ExternalDylib(image, cmd)
+                external_dylib = LinkedImage(image, cmd)
 
                 image.linked_images.append(external_dylib)
                 log.debug(f'Loaded linked dylib_command with install name {external_dylib.install_name}')
@@ -650,137 +244,6 @@ class Dyld:
         elif image._entry_off > 0:
             # noinspection PyProtectedMember
             image.entry_point = image.vm.vm_base_addr + image._entry_off
-
-
-class LD64:
-    @classmethod
-    def insert_load_cmd(cls, image: Image, lc, fields, index=-1):
-        lc_type = LOAD_COMMAND_MAP[lc]
-
-        load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
-
-        off = mach_header.SIZE
-        off += image.macho_header.dyld_header.loadsize
-        raw = load_cmd.raw
-        size = len(load_cmd.raw)
-
-        if index != -1:
-            b_load_cmd = image.macho_header.load_commands[index - 1]
-            off = b_load_cmd.off + b_load_cmd.cmdsize
-            after_bytes = image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + 32]
-            image.slice.patch(off, raw)
-            image.slice.patch(off + size, after_bytes)
-        else:
-            image.slice.patch(off, raw)
-
-        image.macho_header.load_commands.append(load_cmd)
-
-        image.macho_header.dyld_header.loadcnt += 1
-        image.macho_header.dyld_header.loadsize += size
-
-        image.slice.patch(image.macho_header.dyld_header.off, image.macho_header.dyld_header.raw[:image.macho_header.dyld_header.__class__.SIZE])
-
-    @classmethod
-    def insert_load_cmd_with_str(cls, image: Image, lc, fields, suffix, index=-1):
-        lc_type = LOAD_COMMAND_MAP[lc]
-        load_cmd = Struct.create_with_values(lc_type, [lc.value, lc_type.SIZE] + fields)
-
-        encoded = suffix.encode('utf-8') + b'\x00'
-
-        while (len(encoded) + lc_type.SIZE) % 8 != 0:
-            encoded += b'\x00'
-
-        cmd_size = lc_type.SIZE + len(encoded)
-
-        header_size = image.segments['__TEXT'].sections['__text'].file_address
-
-        # verify our lc will actually fit
-        assert image.macho_header.dyld_header.loadsize + len(image.macho_header.dyld_header.raw)  + cmd_size < header_size
-
-        load_cmd.cmdsize = cmd_size
-        raw = load_cmd.raw + encoded + (b'\x00' * (cmd_size - (lc_type.SIZE + len(encoded))))
-
-        full_header = bytearray()
-
-        pre_load_cmd = image.macho_header.load_commands[index - 1] if index != -1 else image.macho_header.load_commands[-1]
-        off = pre_load_cmd.off + pre_load_cmd.cmdsize
-
-        full_header += bytearray(image.macho_header.raw_bytes()[:off])
-        patch_after = bytearray()
-
-        if index != -1:
-            patch_after = bytearray(image.macho_header.raw_bytes()[off:image.macho_header.dyld_header.loadsize + len(image.macho_header.dyld_header.raw)])
-
-        full_header += bytearray(raw)
-        full_header += patch_after
-
-        image.macho_header.dyld_header.loadcnt += 1
-        image.macho_header.dyld_header.loadsize -= len(raw)
-
-        full_header = bytearray(image.macho_header.dyld_header.raw) + full_header[len(image.macho_header.dyld_header.raw):]
-
-        image.slice.patch(0, bytes(full_header))
-
-    @classmethod
-    def remove_load_command(cls, image: Image, index):
-        b_load_cmd = image.macho_header.load_commands.pop(index)
-
-        full_header = bytearray()
-
-        off = b_load_cmd.off + b_load_cmd.cmdsize
-        full_header += bytearray(image.macho_header.raw_bytes()[:b_load_cmd.off])  # add everything up to the target
-        full_header += bytearray(image.macho_header.raw_bytes()[off:])  # add everything after the target command
-        full_header += bytearray(b'\x00' * b_load_cmd.cmdsize)  # replace the now junk copies of displaced commands
-
-        image.macho_header.dyld_header.loadcnt -= 1
-        image.macho_header.dyld_header.loadsize -= b_load_cmd.cmdsize
-
-        full_header = bytearray(image.macho_header.dyld_header.raw) + full_header[len(image.macho_header.dyld_header.raw):]
-
-        image.slice.patch(0, bytes(full_header))
-
-
-class ExternalDylib:
-    def __init__(self, source_image: Image, cmd):
-        self.cmd = cmd
-        self.source_image = source_image
-
-        self.install_name = self._get_name(cmd)
-        self.weak = cmd.cmd == LOAD_COMMAND.LOAD_WEAK_DYLIB.value
-        self.local = cmd.cmd == LOAD_COMMAND.ID_DYLIB.value
-
-    def serialize(self):
-        return {
-            'install_name': self.install_name,
-            'load_command': LOAD_COMMAND(self.cmd.cmd).name
-        }
-
-    def _get_name(self, cmd) -> str:
-        read_address = cmd.off + dylib_command.SIZE
-        return self.source_image.get_cstr_at(read_address)
-
-
-os_version = namedtuple("os_version", ["x", "y", "z"])
-
-
-class PlatformType(Enum):
-    MACOS = 1
-    IOS = 2
-    TVOS = 3
-    WATCHOS = 4
-    BRIDGE_OS = 5
-    MAC_CATALYST = 6
-    IOS_SIMULATOR = 7
-    TVOS_SIMULATOR = 8
-    WATCHOS_SIMULATOR = 9
-    DRIVER_KIT = 10
-    UNK = 64
-
-
-class ToolType(Enum):
-    CLANG = 1
-    SWIFT = 2
-    LD = 3
 
 
 class SymbolType(Enum):

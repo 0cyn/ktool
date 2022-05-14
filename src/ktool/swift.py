@@ -18,7 +18,7 @@ from kswift.structs import *
 from kswift.demangle import demangle
 from ktool import ObjCImage
 
-from ktool.dyld import Image
+from ktool.loader import Image
 from ktool.macho import Section
 from ktool.objc import Class
 from ktool.util import usi32_to_si32

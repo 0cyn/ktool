@@ -17,7 +17,7 @@ from collections import namedtuple
 
 from kmacho.structs import *
 from ktool.util import log
-from ktool.dyld import Dyld, SymbolType, Image
+from ktool.loader import MachOImageLoader, SymbolType, Image
 from ktool.macho import Slice
 from ktool.objc import ObjCImage
 
@@ -130,7 +130,7 @@ class FatMachOGenerator:
         :return: fat_arch_for_slice item.
         :rtype: fat_arch_for_slice
         """
-        lib = Dyld.load(fat_slice)
+        lib = MachOImageLoader.load(fat_slice)
         cpu_type = lib.macho_header.dyld_header.cpu_type
         cpu_subtype = lib.macho_header.dyld_header.cpu_subtype
 
