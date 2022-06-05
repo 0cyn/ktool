@@ -521,7 +521,7 @@ class MachOImageHeader(Constructable):
     def raw_bytes(self) -> bytes:
         return self.raw
 
-    def insert_load_cmd(self, load_command, index=-1, suffix=None):
+    def insert_load_command(self, load_command, index=-1, suffix=None):
         image_header = self
 
         flags = image_header.flags
@@ -537,7 +537,7 @@ class MachOImageHeader(Constructable):
             if current_lc_index == index:
                 if isinstance(load_command, SegmentLoadCommand):
                     load_command_items.append(load_command)
-                elif isinstance(load_command, dylib_command):
+                elif load_command.__class__ in [dylib_command, rpath_command]:
                     assert suffix is not None, "Inserting dylib_command requires suffix"
                     encoded = suffix.encode('utf-8') + b'\x00'
                     while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
@@ -562,7 +562,7 @@ class MachOImageHeader(Constructable):
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
                                                      command.maxprot, command.initprot, command.flags, sects)
                 load_command_items.append(seg)
-            elif isinstance(command, dylib_command):
+            elif command.__class__ in [dylib_command, rpath_command]:
                 _suffix = ""
                 i = 0
                 while self.raw[command.off + command.__class__.SIZE + i] != 0:
@@ -585,9 +585,9 @@ class MachOImageHeader(Constructable):
         if index == -1:
             if isinstance(load_command, SegmentLoadCommand):
                 load_command_items.append(load_command)
-            elif isinstance(load_command, dylib_command):
+            elif load_command.__class__ in [dylib_command, rpath_command]:
                 load_command_items.append(load_command)
-                assert suffix is not None, "Inserting dylib_command requires suffix"
+                assert suffix is not None, f"Inserting {load_command.__class__.__name__} requires suffix"
                 encoded = suffix.encode('utf-8') + b'\x00'
                 while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
                     encoded += b'\x00'
@@ -628,7 +628,7 @@ class MachOImageHeader(Constructable):
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
                                                      command.maxprot, command.initprot, command.flags, sects)
                 load_command_items.append(seg)
-            elif isinstance(command, dylib_command):
+            elif command.__class__ in [dylib_command, rpath_command]:
                 suffix = ""
                 i = 0
                 while self.raw[command.off + command.__class__.SIZE + i] != 0:
@@ -647,6 +647,89 @@ class MachOImageHeader(Constructable):
             else:
                 load_command_items.append(command)
             current_lc_index += 1
+
+        return MachOImageHeader.from_values(self.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
+
+    def replace_load_command(self, load_command, index=-1, suffix=None):
+
+        image_header = self
+
+        flags = image_header.flags
+        filetype = image_header.filetype
+        cpu_type = self.dyld_header.cpu_type
+        cpu_subtype = self.dyld_header.cpu_subtype
+
+        load_command_items = []
+
+        current_lc_index = 0
+
+        for command in self.load_commands:
+            if current_lc_index == index:
+                if isinstance(load_command, SegmentLoadCommand):
+                    load_command_items.append(load_command)
+                elif load_command.__class__ in [dylib_command, rpath_command]:
+                    assert suffix is not None, "Inserting dylib_command requires suffix"
+                    encoded = suffix.encode('utf-8') + b'\x00'
+                    while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
+                        encoded += b'\x00'
+                    cmdsize = load_command.__class__.SIZE + len(encoded)
+                    load_command.cmdsize = cmdsize
+                    load_command_items.append(load_command)
+                    load_command_items.append(encoded)
+                elif load_command.__class__ in [dylinker_command, build_version_command]:
+                    load_command_items.append(load_command)
+                    assert suffix is not None, f"Inserting {load_command.__class__.__name__} currently requires a " \
+                                               f"byte suffix "
+                    load_command_items.append(suffix)
+                current_lc_index += 1
+                continue
+
+            if isinstance(command, segment_command) or isinstance(command, segment_command_64):
+                sects = []
+                sect_data = self.raw[command.off + command.__class__.SIZE:]
+                struct_class = section_64 if isinstance(command, segment_command_64) else section
+                for i in range(command.nsects):
+                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little")))
+                seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
+                                                     command.vmaddr, command.vmsize, command.fileoff, command.filesize,
+                                                     command.maxprot, command.initprot, command.flags, sects)
+                load_command_items.append(seg)
+            elif command.__class__ in [dylib_command, rpath_command]:
+                _suffix = ""
+                i = 0
+                while self.raw[command.off + command.__class__.SIZE + i] != 0:
+                    _suffix += chr(self.raw[command.off + command.__class__.SIZE + i])
+                    i += 1
+                encoded = _suffix.encode('utf-8') + b'\x00'
+                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                    encoded += b'\x00'
+                load_command_items.append(command)
+                load_command_items.append(encoded)
+            elif command.__class__ in [dylinker_command, build_version_command]:
+                load_command_items.append(command)
+                actual_size = command.cmdsize
+                dat = self.raw[command.off + command.SIZE:(command.off + command.SIZE) + actual_size - command.SIZE]
+                load_command_items.append(dat)
+            else:
+                load_command_items.append(command)
+            current_lc_index += 1
+
+        if index == -1:
+            if isinstance(load_command, SegmentLoadCommand):
+                load_command_items.append(load_command)
+            elif load_command.__class__ in [dylib_command, rpath_command]:
+                load_command_items.append(load_command)
+                assert suffix is not None, "Inserting dylib_command requires suffix"
+                encoded = suffix.encode('utf-8') + b'\x00'
+                while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
+                    encoded += b'\x00'
+                cmdsize = load_command.__class__.SIZE + len(encoded)
+                load_command.cmdsize = cmdsize
+                load_command_items.append(encoded)
+            elif load_command.__class__ in [dylinker_command, build_version_command]:
+                load_command_items.append(load_command)
+                assert suffix is not None, f"Inserting {load_command.__class__.__name__} currently requires a byte suffix"
+                load_command_items.append(suffix)
 
         return MachOImageHeader.from_values(self.is64, cpu_type, cpu_subtype, filetype, flags, load_command_items)
 
