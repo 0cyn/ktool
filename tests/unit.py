@@ -31,7 +31,6 @@ from ktool.image import *
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))
 
-sys.path.extend([f'{scriptdir}/../src'])
 log.LOG_LEVEL = LogLevel.WARN
 
 error_buffer = ""
@@ -131,128 +130,14 @@ class StructTestCase(unittest.TestCase):
         assert s1 != s3
 
 
-class MachOLoaderTestCase(unittest.TestCase):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
-        self.fat = ScratchFile(open(scriptdir + '/bins/testbin1.fat', 'rb'))
-
-    def test_thin_type(self):
-        self.thin.reset()
-        macho = ktool.load_macho_file(self.thin.get())
-        assert macho.type == MachOFileType.THIN
-
-    def test_fat_type(self):
-        self.fat.reset()
-        macho = ktool.load_macho_file(self.fat.get())
-        assert macho.type == MachOFileType.FAT
-
-    def test_bad_magic(self):
-        self.thin.reset()
-        self.thin.write(0, 0xDEADBEEF)
-
-        enable_error_capture()
-        with self.assertRaises(UnsupportedFiletypeException) as context:
-            ktool.load_macho_file(self.thin.get())
-        disable_error_capture()
-
-    def test_bad_fat_offset(self):
-        self.fat.reset()
-        macho = ktool.load_macho_file(self.fat.get())
-
-        # corrupt the second offset
-        header: fat_header = macho._load_struct(0, fat_header, "big")
-        for off in range(1, header.nfat_archs):
-            offset = fat_header.SIZE + (off * fat_arch.SIZE)
-            arch_struct: fat_arch = macho._load_struct(offset, fat_arch, "big")
-            arch_struct.offset = 0xDEADBEEF
-            self.fat.write(arch_struct.off, arch_struct.raw)
-
-        enable_error_capture()
-
-        macho = ktool.load_macho_file(self.fat.get())
-        # Verify we correctly show the error
-        self.assertIn("has bad magic 0x0", error_buffer)
-
-        disable_error_capture()
-
-        # Verify the slice wasn't loaded
-        self.assertLess(len(macho.slices), 2)
-
-    def test_slice_count(self):
-        self.fat.reset()
-
-        macho = ktool.load_macho_file(self.fat.get())
-        header: fat_header = macho._load_struct(0, fat_header, "big")
-        slice_count = header.nfat_archs
-        self.assertEqual(slice_count, len(macho.slices))
-
-
-class SegmentLCTestCase(unittest.TestCase):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
-
-    def test_constructable(self):
-        self.thin.reset()
-
-        image = ktool.load_image(self.thin.get())
-        image_header = image.macho_header
-
-        old_command: segment_command_64 = image_header.load_commands[1]
-        old_dat = image.get_bytes_at(old_command.off, old_command.cmdsize)
-
-        text = image.segments['__TEXT']
-        cmd: segment_command = text.cmd
-        text_sections = []
-        for s in text.sections.values():
-            text_sections.append(s)
-        lc = SegmentLoadCommand.from_values(image_header.is64, '__TEXT', text.vm_address, text.size, text.file_address,
-                                            text.file_size,
-                                            cmd.maxprot, cmd.initprot, cmd.flags, text_sections)
-        new_dat = lc.raw_bytes()
-
-        diff_byte_array_set_assertion(bytearray(old_dat), bytearray(new_dat))
-
-
-class VMTestCase(unittest.TestCase):
-    def test_good_16k_page_vm_map(self):
-        vm = VM(0x4000)
-
-        vm_base = random.randint(100, 200) * 0x4000
-        file_base = random.randint(1, 100) * 0x4000
-        diff = vm_base - file_base
-        size = 0x4000 * 2
-
-        vm.map_pages(file_base, vm_base, size)
-
-        for address in range(vm_base, vm_base + size, 4):
-            correct_address = address - diff
-            translated_address = vm.translate(address)
-            self.assertEqual(correct_address, translated_address)
-
-    def test_bad_16k_page_vm_map(self):
-        vm = VM(0x4000)
-
-        vm_base = random.randint(100, 200) * 0x4000
-        file_base = random.randint(1, 100) * 0x4000
-        vm_base -= 1
-
-        with self.assertRaises(MachOAlignmentError) as context:
-            vm.map_pages(vm_base, file_base, 0x4000)
-
-        vm_base += 1
-        file_base -= 1
-
-        with self.assertRaises(MachOAlignmentError) as context:
-            vm.map_pages(vm_base, file_base, 0x4000)
-
-        file_base += 1
-
-        with self.assertRaises(MachOAlignmentError) as context:
-            vm.map_pages(vm_base, file_base, 0x3999)
+class BackingFileTestCase(unittest.TestCase):
+    def test_with_mmaped_and_actual_file_pointer(self):
+        # Rest of our tests use this class but only with our scratch files (which dont invoke binaryIO or mmaped io)
+        fp = open(scriptdir + '/bins/testbin1', 'rb')
+        bf = BackingFile(fp, use_mmaped_io=True)
+        self.assertNotEqual(bf.size, 0)
+        bf.write(0, b'\xde\xad\xbe\xef')
+        self.assertEqual(bf.read_bytes(0, 4), b'\xde\xad\xbe\xef')
 
 
 class SliceTestCase(unittest.TestCase):
@@ -330,6 +215,10 @@ class SliceTestCase(unittest.TestCase):
         macho_slice = macho.slices[0]
         size = macho_slice.size
         loadsize = macho_slice.get_int_at(20, 4) + 32
+
+        # slipping in SlicedBackingFile.read_int test here
+        self.assertEqual(loadsize, macho_slice.file.read_int(20, 4) + 32)
+
         random_location = random.randint(loadsize, size)
 
         write = b'\xDE\xAD\xBE\xEF'
@@ -511,7 +400,7 @@ class ImageHeaderTestCase(unittest.TestCase):
 
         dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
         dylib_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.LOAD_DYLIB.value, 0, dylib_item.raw])
-        new_header = image.macho_header.insert_load_cmd(dylib_cmd, -1, suffix="/unit/test")
+        new_header = image.macho_header.insert_load_command(dylib_cmd, -1, suffix="/unit/test")
 
         assert len(image_header.load_commands) + 1 == len(new_header.load_commands)
         assert b'/unit/test' in new_header.raw
@@ -542,16 +431,9 @@ class ImageHeaderTestCase(unittest.TestCase):
         image_header = image.macho_header
         old_commands = [*image_header.load_commands]
 
-        new_header = image.macho_header.remove_load_command(4)
-        assert (len(image_header.load_commands) - 1 == len(new_header.load_commands))
-        self.thin_lib.write(0, new_header.raw_bytes())
-
-        image = ktool.load_image(self.thin_lib.get())
-        image_header = image.macho_header
-
         dylib_item = Struct.create_with_values(dylib, [0x18, 0x1, 0x000000, 0x000000])
         dylib_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB.value, 0, dylib_item.raw])
-        new_header = image.macho_header.insert_load_cmd(dylib_cmd, 4, suffix="/unit/test/iname")
+        new_header = image.macho_header.replace_load_command(dylib_cmd, 4, suffix="/unit/test/iname")
 
         self.thin_lib.write(0, new_header.raw)
 
@@ -562,6 +444,131 @@ class ImageHeaderTestCase(unittest.TestCase):
             if not cmd == old_commands[i]:
                 log.error(f'{str(cmd)} != {str(old_commands[i])}')
                 raise AssertionError
+
+
+
+class MachOLoaderTestCase(unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
+        self.fat = ScratchFile(open(scriptdir + '/bins/testbin1.fat', 'rb'))
+
+    def test_thin_type(self):
+        self.thin.reset()
+        macho = ktool.load_macho_file(self.thin.get())
+        assert macho.type == MachOFileType.THIN
+
+    def test_fat_type(self):
+        self.fat.reset()
+        macho = ktool.load_macho_file(self.fat.get())
+        assert macho.type == MachOFileType.FAT
+
+    def test_bad_magic(self):
+        self.thin.reset()
+        self.thin.write(0, 0xDEADBEEF)
+
+        enable_error_capture()
+        with self.assertRaises(UnsupportedFiletypeException) as context:
+            ktool.load_macho_file(self.thin.get())
+        disable_error_capture()
+
+    def test_bad_fat_offset(self):
+        self.fat.reset()
+        macho = ktool.load_macho_file(self.fat.get())
+
+        # corrupt the second offset
+        header: fat_header = macho._load_struct(0, fat_header, "big")
+        for off in range(1, header.nfat_archs):
+            offset = fat_header.SIZE + (off * fat_arch.SIZE)
+            arch_struct: fat_arch = macho._load_struct(offset, fat_arch, "big")
+            arch_struct.offset = 0xDEADBEEF
+            self.fat.write(arch_struct.off, arch_struct.raw)
+
+        enable_error_capture()
+
+        macho = ktool.load_macho_file(self.fat.get())
+        # Verify we correctly show the error
+        self.assertIn("has bad magic 0x0", error_buffer)
+
+        disable_error_capture()
+
+        # Verify the slice wasn't loaded
+        self.assertLess(len(macho.slices), 2)
+
+    def test_slice_count(self):
+        self.fat.reset()
+
+        macho = ktool.load_macho_file(self.fat.get())
+        header: fat_header = macho._load_struct(0, fat_header, "big")
+        slice_count = header.nfat_archs
+        self.assertEqual(slice_count, len(macho.slices))
+
+
+class SegmentLCTestCase(unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
+
+    def test_constructable(self):
+        self.thin.reset()
+
+        image = ktool.load_image(self.thin.get())
+        image_header = image.macho_header
+
+        old_command: segment_command_64 = image_header.load_commands[1]
+        old_dat = image.get_bytes_at(old_command.off, old_command.cmdsize)
+
+        text = image.segments['__TEXT']
+        cmd: segment_command = text.cmd
+        text_sections = []
+        for s in text.sections.values():
+            text_sections.append(s)
+        lc = SegmentLoadCommand.from_values(image_header.is64, '__TEXT', text.vm_address, text.size, text.file_address,
+                                            text.file_size,
+                                            cmd.maxprot, cmd.initprot, cmd.flags, text_sections)
+        new_dat = lc.raw_bytes()
+
+        diff_byte_array_set_assertion(bytearray(old_dat), bytearray(new_dat))
+
+
+class VMTestCase(unittest.TestCase):
+    def test_good_16k_page_vm_map(self):
+        vm = VM(0x4000)
+
+        vm_base = random.randint(100, 200) * 0x4000
+        file_base = random.randint(1, 100) * 0x4000
+        diff = vm_base - file_base
+        size = 0x4000 * 2
+
+        vm.map_pages(file_base, vm_base, size)
+
+        for address in range(vm_base, vm_base + size, 4):
+            correct_address = address - diff
+            translated_address = vm.translate(address)
+            self.assertEqual(correct_address, translated_address)
+
+    def test_bad_16k_page_vm_map(self):
+        vm = VM(0x4000)
+
+        vm_base = random.randint(100, 200) * 0x4000
+        file_base = random.randint(1, 100) * 0x4000
+        vm_base -= 1
+
+        with self.assertRaises(MachOAlignmentError) as context:
+            vm.map_pages(vm_base, file_base, 0x4000)
+
+        vm_base += 1
+        file_base -= 1
+
+        with self.assertRaises(MachOAlignmentError) as context:
+            vm.map_pages(vm_base, file_base, 0x4000)
+
+        file_base += 1
+
+        with self.assertRaises(MachOAlignmentError) as context:
+            vm.map_pages(vm_base, file_base, 0x3999)
 
 
 class DyldTestCase(unittest.TestCase):
