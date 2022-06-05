@@ -30,6 +30,7 @@ from ktool.image import *
 
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))
+sys.path.extend([f'{scriptdir}/../src'])
 
 log.LOG_LEVEL = LogLevel.WARN
 
@@ -215,9 +216,6 @@ class SliceTestCase(unittest.TestCase):
         macho_slice = macho.slices[0]
         size = macho_slice.size
         loadsize = macho_slice.get_int_at(20, 4) + 32
-
-        # slipping in SlicedBackingFile.read_int test here
-        self.assertEqual(loadsize, macho_slice.file.read_int(20, 4) + 32)
 
         random_location = random.randint(loadsize, size)
 
