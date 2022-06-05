@@ -77,9 +77,9 @@ jobs:
       - name: test dump
         run: |
           ktool dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
-      - name: test dump with mmaped-IO disabled
+      - name: test dump with mmaped-IO enabled
         run: |
-          ktool --no-mmap dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
+          ktool --mmap dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
       - name: test symbols
         run: |
           ktool symbols --imports tests/bins/testbin1 | grep _OBJC_CLASS_$_NSObject
