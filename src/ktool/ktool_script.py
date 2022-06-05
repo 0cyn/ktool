@@ -699,7 +699,7 @@ commands currently supported:
 
             dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
             dylib_cmd = Struct.create_with_values(dylib_command, [lc.value, 0, dylib_item.raw])
-            new_header = image.macho_header.insert_load_cmd(dylib_cmd, last_dylib_command_index, suffix=args.payload)
+            new_header = image.macho_header.insert_load_command(dylib_cmd, last_dylib_command_index, suffix=args.payload)
             image.slice.patch(0, new_header.raw)
             log.info("Reloading MachO Slice to verify integrity")
             image = process_patches(image)
@@ -745,11 +745,8 @@ Modify the install name of a image
                         id_dylib_index = i
                         break
                 dylib_item = Struct.create_with_values(dylib, [0x18, 0x1, 0x000000, 0x000000])
-                new_header = image.macho_header.remove_load_command(id_dylib_index)
-                image.slice.patch(0, new_header.raw)
-                image = ktool.load_image(image.slice)
                 new_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB, 0, dylib_item.raw])
-                new_header = image.macho_header.insert_load_cmd(new_cmd, id_dylib_index, new_iname)
+                new_header = image.macho_header.replace_load_command(new_cmd, id_dylib_index, new_iname)
                 image.slice.patch(0, new_header.raw)
                 patched_libraries.append(image)
 
