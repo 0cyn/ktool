@@ -57,7 +57,7 @@ from ktool.kcache import KernelCache, Kext, EmbeddedKext
 
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
-MMAP_ENABLED = True
+MMAP_ENABLED = False
 
 # noinspection PyShadowingBuiltins
 print = ktool_print
@@ -186,8 +186,8 @@ def main():
     parser.add_argument('-v', dest='logging_level', type=int)
     parser.add_argument('-f', dest='force_load', action='store_true')
     parser.add_argument('-V', dest='get_vers', action='store_true')
-    parser.add_argument('--no-mmap', dest='no_mmap', action='store_true', help='Disable mmaped IO')
-    parser.set_defaults(func=help_prompt, bench=False, membench=False, force_load=False, no_mmap=False, logging_level=1,
+    parser.add_argument('--mmap', dest='mmap', action='store_true', help='Enable mmaped IO')
+    parser.set_defaults(func=help_prompt, bench=False, membench=False, force_load=False, mmap=False, logging_level=1,
                         get_vers=False)
 
     subparsers = parser.add_subparsers(help='sub-command help')
@@ -375,9 +375,9 @@ def main():
         # kind of a hack using a class attribute in ktool.util but it works.
         ignore.MALFORMED = True
 
-    if args.no_mmap:
+    if args.mmap:
         global MMAP_ENABLED
-        MMAP_ENABLED = False
+        MMAP_ENABLED = True
 
     if args.membench:
         import tracemalloc

@@ -33,7 +33,7 @@ from ktool.objc import ObjCImage
 from ktool.util import TapiYAMLWriter, ignore, log
 
 
-def load_macho_file(fp: Union[SlicedBackingFile, BinaryIO, BytesIO], use_mmaped_io=True) -> MachOFile:
+def load_macho_file(fp: Union[SlicedBackingFile, BinaryIO, BytesIO], use_mmaped_io=False) -> MachOFile:
     """
     This function takes a bare file and loads it as a MachOFile.
 

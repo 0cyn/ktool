@@ -33,7 +33,7 @@ class MachOFileType(Enum):
 
 
 class BackingFile:
-    def __init__(self, fp: Union[BinaryIO, BytesIO], use_mmaped_io=True):
+    def __init__(self, fp: Union[BinaryIO, BytesIO], use_mmaped_io=False):
         self.fp = fp
         if isinstance(fp, BytesIO):
             use_mmaped_io = False
