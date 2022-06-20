@@ -36,7 +36,7 @@ jobs:
         cd tests && ninja
     - name: Test with pytest
       run: |
-        pytest -s tests/unit.py
+        PYTHONPATH="./src" pytest -s tests/unit.py
   bin-tests:
     runs-on: macos-latest
     steps:
