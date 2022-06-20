@@ -12,6 +12,7 @@ from ktool.macho import Slice, SlicedBackingFile, MachOImageHeader, Segment, Pla
 
 
 os_version = namedtuple("os_version", ["x", "y", "z"])
+_fakeseg = namedtuple("_fakeseg", ["vm_address", "file_address", "size"])
 
 
 class VM:
@@ -28,7 +29,7 @@ class VM:
         self.vm_base_addr = None
         self.dirty = False
 
-        self.fallback: Union[None, MisalignedVM] = None
+        self.fallback: MisalignedVM = MisalignedVM()
 
         self.detag_kern_64 = False
         self.detag_64 = False
@@ -43,8 +44,6 @@ class VM:
     def add_segment(self, segment: Segment):
         if segment.name == '__PAGEZERO':
             return
-
-        self.fallback.add_segment(segment)
 
         if self.vm_base_addr is None:
             self.vm_base_addr = segment.vm_address
@@ -74,13 +73,21 @@ class VM:
             self.tlb[address] = physical_location
             return physical_location
         except KeyError:
-
             log.info(f'Address {hex(address)} not mapped, attempting fallback')
 
             try:
                 return self.fallback.translate(address)
             except VMAddressingError:
                 raise VMAddressingError(f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
+
+    def detranslate(self, file_address):
+        """
+        This method is slow, and should only be used for introspection, and not things that need to be fast.
+
+        :param file_address:
+        :return:
+        """
+        return self.fallback.detranslate(file_address)
 
     def map_pages(self, physical_addr, virtual_addr, size):
         if physical_addr % self.page_size != 0 or virtual_addr % self.page_size != 0 or size % self.page_size != 0:
@@ -89,18 +96,19 @@ class VM:
             self.page_table[virtual_addr + (i * self.page_size) >> self.page_size_bits] = physical_addr + (
                         i * self.page_size)
 
+        seg = _fakeseg(vm_address=virtual_addr, file_address=physical_addr, size=size)
+        self.fallback.add_segment(seg)
 
-vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr", "name"])
+
+vm_obj = namedtuple("vm_obj", ["vmaddr", "vmend", "size", "fileaddr"])
 
 
 class MisalignedVM:
     """
-    This is the manual backup if the image cant be mapped to 16/4k segments
+    This is the manual backup if the image can't be mapped to 16/4k segments
     """
 
-    def __init__(self, macho_slice):
-        self.slice = macho_slice
-
+    def __init__(self):
         self.detag_kern_64 = False
         self.detag_64 = False
 
@@ -137,25 +145,27 @@ class MisalignedVM:
 
         raise VMAddressingError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
 
-    def add_segment(self, segment: Segment):
+    def detranslate(self, file_address):
+        """
+        This method is slow, and should only be used for introspection, and not things that need to be fast.
+
+        :param file_address:
+        :return:
+        """
+        for o in self.map.values():
+            file_start = o.fileaddr
+            file_end = o.fileaddr + o.size
+            if file_start <= file_address <= file_end:
+                return o.vmaddr + (file_address - file_start)
+        raise VMAddressingError("Could not detranslate address")
+
+    def add_segment(self, segment: Union[Segment, _fakeseg]):
         if segment.file_address == 0 and segment.size != 0:
             self.vm_base_addr = segment.vm_address
 
-        if len(segment.sections) == 0:
-            seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address,
-                             segment.name)
-            log.info(str(seg_obj))
-            self.map[segment.name] = seg_obj
-            self.stats[segment.name] = 0
-        else:
-            for section in segment.sections.values():
-                name = section.name if section.name not in self.map.keys() else section.name + '2'
-                sect_obj = vm_obj(section.vm_address, section.vm_address + section.size, section.size,
-                                  section.file_address, name)
-                log.info(str(sect_obj))
-                self.map[name] = sect_obj
-                self.sorted_map = {k: v for k, v in sorted(self.map.items(), key=lambda item: item[1].vmaddr)}
-                self.stats[name] = 0
+        seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address)
+        log.info(str(seg_obj))
+        self.map[segment.file_address] = seg_obj
 
 
 class LinkedImage:
@@ -188,7 +198,7 @@ class Image:
     The Dyld class set is responsible for loading in and processing the raw values to it.
     """
 
-    def __init__(self, macho_slice: Slice):
+    def __init__(self, macho_slice: Slice, force_misaligned_vm=False):
         """
         Create a MachO image
 
@@ -199,12 +209,13 @@ class Image:
 
         self.vm = None
 
-        self.fallback_vm = MisalignedVM(self.slice)
-
         if self.slice:
             self.macho_header: MachOImageHeader = MachOImageHeader.from_image(macho_slice=macho_slice)
 
-            self.vm_realign()
+            if force_misaligned_vm:
+                self.vm = MisalignedVM()
+            else:
+                self.vm_realign()
 
         self.base_name = ""  # copy of self.name
         self.install_name = ""
@@ -334,11 +345,10 @@ class Image:
             log.info(f'Aligned to {hex(align_by)} pages')
             self.vm: VM = VM(page_size=align_by)
             self.vm.detag_64 = detag_64
-            self.vm.fallback = self.fallback_vm
         else:
             if yell_about_misalignment:
                 log.info("MachO cannot be aligned to 16k or 4k pages. Swapping to fallback mapping.")
-            self.vm: MisalignedVM = self.fallback_vm
+            self.vm: MisalignedVM = MisalignedVM()
             self.vm.detag_64 = detag_64
 
     def vm_check(self, address):
