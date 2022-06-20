@@ -24,7 +24,7 @@ from katlib.log import log, LogLevel
 
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))
-sys.path.extend([f'{scriptdir}/../src'])
+sys.path.insert(0, os.path.abspath(f'{scriptdir}/../src'))
 
 log.LOG_LEVEL = LogLevel.WARN
 
@@ -84,11 +84,20 @@ class ScratchFile:
         self.backup = BytesIO()
         self.fp = fp
         data = fp.read()
-        self.fp.close()
+        if hasattr(self.fp, 'close'):
+            self.fp.close()
         self.backup.write(data)
         self.backup.seek(0)
         self.scratch.write(data)
         self.scratch.seek(0)
+
+    def copy(self):
+        fp = self.get()
+        new = ScratchFile(fp)
+        new.scratch = BytesIO()
+        new.scratch.write(self.scratch.read())
+        self.scratch.seek(0)
+        return new
 
     def get(self):
         copy = BytesIO()
@@ -116,6 +125,13 @@ class ScratchFile:
         self.scratch.seek(0)
 
 
+# *I* watch the watchmen
+class TestTests(unittest.TestCase):
+    def test_is_importing_source_tree(self):
+        assert MY_DIR != ""
+        assert "src/ktool/util" in MY_DIR
+
+
 class StructTestCase(unittest.TestCase):
     def test_equality_check(self):
         s1 = Struct.create_with_values(linkedit_data_command, [0x34 | LC_REQ_DYLD, 0x10, 0xc000, 0xd0], "little")
@@ -133,6 +149,7 @@ class BackingFileTestCase(unittest.TestCase):
         self.assertNotEqual(bf.size, 0)
         bf.write(0, b'\xde\xad\xbe\xef')
         self.assertEqual(bf.read_bytes(0, 4), b'\xde\xad\xbe\xef')
+        fp.close()
 
 
 class SliceTestCase(unittest.TestCase):
@@ -438,7 +455,6 @@ class ImageHeaderTestCase(unittest.TestCase):
                 raise AssertionError
 
 
-
 class MachOLoaderTestCase(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
@@ -534,12 +550,67 @@ class VMTestCase(unittest.TestCase):
         diff = vm_base - file_base
         size = 0x4000 * 2
 
+        k_seg_start = 0xFFFFFFFFFFFF0000
+        vm.map_pages(0x4000 * 300, k_seg_start, 0x4000)
+
         vm.map_pages(file_base, vm_base, size)
 
         for address in range(vm_base, vm_base + size, 4):
             correct_address = address - diff
             translated_address = vm.translate(address)
             self.assertEqual(correct_address, translated_address)
+            self.assertEqual(vm.detranslate(translated_address), address)
+
+        vm.detag_64 = True
+        translated_address = vm.translate(vm_base + 0x1234000000000)
+        self.assertEqual(translated_address, vm_base - diff)
+        vm.detag_64 = False
+
+        vm.detag_kern_64 = True
+        tagged_k64_addr = 0x1234FFFFFFFF0008
+        self.assertEqual(vm.translate(tagged_k64_addr), 0x4000 * 300 + 0x8)
+        vm.detag_kern_64 = False
+
+        self.assertFalse(vm.vm_check(-4000))
+        self.assertTrue(vm.vm_check(vm_base))
+
+        with self.assertRaises(VMAddressingError):
+            vm.detranslate(-4)
+
+    def test_fallback_vm(self):
+
+        vm: VM = VM(0x4000)
+
+        vm_base = random.randint(100, 200) * 0x4000
+        file_base = random.randint(1, 100) * 0x4000
+        diff = vm_base - file_base
+        size = 0x4000 * 2
+
+        vm.map_pages(file_base, vm_base, size)
+        k_seg_start = 0xFFFFFFFFFFFF0000
+        vm.map_pages(0x4000 * 300, k_seg_start, 0x4000)
+        vm: MisalignedVM = vm.fallback
+
+        for address in range(vm_base, vm_base + size, 4):
+            correct_address = address - diff
+            translated_address = vm.translate(address)
+            self.assertEqual(correct_address, translated_address)
+            self.assertEqual(vm.detranslate(translated_address), address)
+
+        vm.detag_64 = True
+        translated_address = vm.translate(vm_base + 0x1234000000000)
+        self.assertEqual(translated_address, vm_base - diff)
+        vm.detag_64 = False
+
+        vm.detag_kern_64 = True
+        tagged_k64_addr = 0x1234FFFFFFFF0008
+        self.assertEqual(vm.translate(tagged_k64_addr), 0x4000 * 300 + 0x8)
+        vm.detag_kern_64 = False
+
+        self.assertFalse(vm.vm_check(-4000))
+        self.assertTrue(vm.vm_check(vm_base))
+
+
 
     def test_bad_16k_page_vm_map(self):
         vm = VM(0x4000)
@@ -561,6 +632,104 @@ class VMTestCase(unittest.TestCase):
 
         with self.assertRaises(MachOAlignmentError) as context:
             vm.map_pages(vm_base, file_base, 0x3999)
+
+
+class ImageTestCase(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.thin = ScratchFile(open(scriptdir + '/bins/testbin1', 'rb'))
+
+    def test_serialization(self):
+        self.thin.reset()
+
+        img = ktool.load_image(self.thin.get())
+        img.rpath = "asdf"
+        img.install_name = "asdf"
+        img_dict = img.serialize()
+        out = json.dumps(img_dict)
+        assert out
+        re_in = json.loads(out)
+        assert re_in
+
+    def test_vm_realignment(self):
+        self.thin.reset()
+
+        image = ktool.load_image(self.thin.get())
+
+        macho_header: mach_header_64 = image.macho_header.dyld_header
+
+        macho_header.cpu_type = CPUType.ARM64.value
+        macho_header.cpu_subtype = CPUSubTypeARM64.ARM64E.value
+
+        raw = macho_header.raw
+
+        self.thin.write(0, raw)
+
+        image = ktool.load_image(self.thin.get())
+        self.assertTrue(image.vm.detag_64)
+
+        self.thin.reset()
+        image = ktool.load_image(self.thin.get())
+
+        dat = self.thin.read(0x80, 8)
+        dat = int.from_bytes(dat, "little")
+        dat += 0x1000
+        self.thin.write(0x80, dat.to_bytes(8, "little"))
+        dat = self.thin.read(0x88, 8)
+        dat = int.from_bytes(dat, "little")
+        dat -= 0x1000
+        self.thin.write(0x88, dat.to_bytes(8, "little"))
+        image = ktool.load_image(self.thin.get())
+
+        self.thin.reset()
+        image = ktool.load_image(self.thin.get())
+        dat = self.thin.read(0x80, 8)
+        dat = int.from_bytes(dat, "little")
+        dat += 0x1004
+        self.thin.write(0x80, dat.to_bytes(8, "little"))
+        dat = self.thin.read(0x88, 8)
+        dat = int.from_bytes(dat, "little")
+        dat -= 0x1004
+        self.thin.write(0x88, dat.to_bytes(8, "little"))
+        image = ktool.load_image(self.thin.get())
+
+    def test_rw_prims(self):
+        self.thin.reset()
+
+        str_and_cstr_test_string = 'AAAA AAAA'
+        str_size = len(str_and_cstr_test_string)
+        str_test_location = 0x1000
+        cstr_test_location = 0x2000
+        self.thin.write(str_test_location, str_and_cstr_test_string.encode("utf-8"))
+        self.thin.write(cstr_test_location, str_and_cstr_test_string.encode("utf-8") + b'\0')
+
+        image = ktool.load_image(self.thin.get())
+        # we already know the slice to be functional by this point
+        macho_slice = image.slice
+
+        vm_base = image.vm.detranslate(0)
+
+        self.assertTrue(image.vm_check(vm_base))
+        self.assertEqual(image.vm.translate(vm_base), 0)
+
+        self.assertEqual(macho_slice.get_int_at(0, 4), image.get_int_at(0, 4))
+        self.assertEqual(macho_slice.get_int_at(0, 4), image.get_int_at(vm_base, 4, vm=True))
+
+        self.assertEqual(macho_slice.get_bytes_at(0, 4), image.get_bytes_at(0, 4))
+        self.assertEqual(macho_slice.get_bytes_at(0, 4), image.get_bytes_at(vm_base, 4, vm=True))
+
+        self.assertEqual(macho_slice.load_struct(0, mach_header_64, "little"),
+                         image.load_struct(0, mach_header_64, endian="little", vm=False, force_reload=True))
+        self.assertEqual(macho_slice.load_struct(0, mach_header_64, "little"),
+                         image.load_struct(vm_base, mach_header_64, vm=True, endian="little", force_reload=True))
+
+        self.assertEqual(str_and_cstr_test_string, image.get_str_at(str_test_location, str_size))
+        self.assertEqual(str_and_cstr_test_string,
+                         image.get_str_at(image.vm.detranslate(str_test_location), str_size, vm=True))
+
+        self.assertEqual(str_and_cstr_test_string, image.get_cstr_at(cstr_test_location))
+        self.assertEqual(str_and_cstr_test_string,
+                         image.get_cstr_at(image.vm.detranslate(cstr_test_location), vm=True))
 
 
 class DyldTestCase(unittest.TestCase):

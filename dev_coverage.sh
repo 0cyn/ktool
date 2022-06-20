@@ -1,0 +1,1 @@
+PYTHONPATH="./src" coverage run --source=src tests/unit.py; coverage html; open htmlcov/index.html
