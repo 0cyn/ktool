@@ -41,10 +41,11 @@ class MachOImageLoader:
     """
 
     @classmethod
-    def load(cls, macho_slice: Slice, load_symtab=True, load_imports=True, load_exports=True) -> Image:
+    def load(cls, macho_slice: Slice, load_symtab=True, load_imports=True, load_exports=True, force_misaligned_vm=False) -> Image:
         """
         Take a slice of a macho file and process it using the dyld functions
 
+        :param force_misaligned_vm:
         :param load_exports: Load Exports
         :param load_imports: Load Imports
         :param load_symtab: Load Symbol Table
@@ -54,7 +55,10 @@ class MachOImageLoader:
         :rtype: Image
         """
         log.info("Loading image")
-        image = Image(macho_slice)
+        image = Image(macho_slice, force_misaligned_vm)
+
+        if force_misaligned_vm:
+            image.vm = MisalignedVM()
 
         log.info("Processing Load Commands")
         MachOImageLoader._parse_load_commands(image, load_symtab, load_imports, load_exports)
@@ -79,7 +83,11 @@ class MachOImageLoader:
                 segment = Segment(image, cmd)
 
                 log.info(f'Loaded Segment {segment.name}')
-                image.vm.add_segment(segment)
+                try:
+                    image.vm.add_segment(segment)
+                except MachOAlignmentError:
+                    image.vm = image.vm.fallback
+                    image.vm.add_segment(segment)
                 image.segments[segment.name] = segment
 
             elif load_command in [LOAD_COMMAND.THREAD, LOAD_COMMAND.UNIXTHREAD]:

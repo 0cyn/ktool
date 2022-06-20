@@ -71,7 +71,7 @@ def reload_image(image: Image) -> Image:
 
 
 def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO, SlicedBackingFile], slice_index=0, load_symtab=True, load_imports=True,
-               load_exports=True, use_mmaped_io=True) -> Image:
+               load_exports=True, use_mmaped_io=True, force_misaligned_vm=False) -> Image:
     """
     Take a bare file, MachOFile, BytesIO, SlicedBackingFile, or Slice, and load MachO/dyld metadata about that item
 
@@ -99,7 +99,7 @@ def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO, SlicedBackingFile]
         macho_file = load_macho_file(fp, use_mmaped_io=use_mmaped_io)
         macho_slice: Slice = macho_file.slices[slice_index]
 
-    return MachOImageLoader.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports, load_exports=load_exports)
+    return MachOImageLoader.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports, load_exports=load_exports, force_misaligned_vm=force_misaligned_vm)
 
 
 def macho_verify(fp: Union[BinaryIO, MachOFile, Slice, Image]) -> None:

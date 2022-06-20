@@ -286,10 +286,11 @@ def main():
     parser_dump.add_argument('--sorted', dest='sort_headers', action='store_true')
     parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
+    parser_dump.add_argument('--force-misaligned-vm', dest='force_misaligned', action="store_true", help="Force misaligned VM")
     parser_dump.add_argument('filename', nargs='?', default='')
 
     parser_dump.set_defaults(func=dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0,
-                             hard_fail=False, get_class=None, forward_declare=False)
+                             hard_fail=False, get_class=None, forward_declare=False, force_misaligned=False)
 
     # list command: Lists lists of things contained in lists in the image.
     parser_list = subparsers.add_parser('list', help='Print various lists')
@@ -975,7 +976,7 @@ To dump .tbd files for a framework
 
     if args.get_class:
         with open(args.filename, 'rb') as fp:
-            image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+            image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED, force_misaligned_vm=args.force_misaligned)
 
             if image.name == "":
                 image.name = os.path.basename(args.filename)
