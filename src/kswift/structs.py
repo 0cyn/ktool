@@ -12,6 +12,8 @@
 #  Copyright (c) kat 2022.
 #
 
+import enum
+from katlib.structs import *
 
 """
 struct _NominalTypeDescriptor {
@@ -22,9 +24,6 @@ struct _NominalTypeDescriptor {
     var numberOfFields: Int32
     var fieldOffsetVector: Int32
 }"""
-import enum
-
-from kmacho.structs import *
 
 """
 struct _FieldDescriptor {

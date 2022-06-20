@@ -12,7 +12,7 @@
 #  Copyright (c) kat 2021.
 #
 
-from kmacho.structs import Struct
+from katlib.structs import *
 
 
 class objc2_class(Struct):
