@@ -129,4 +129,37 @@ class SegmentLoadCommand(LoadCommand):
 
         self.sections = {}
 
+
+class SymtabLoadCommand(LoadCommand):
+    @classmethod
+    def from_image(cls, command: symtab_command):
+        lc = SymtabLoadCommand()
+
+        lc.cmd = command
+
+        lc.symtab_offset = command.symoff
+        lc.symtab_entry_count = command.nsyms
+        lc.string_table_offset = command.stroff
+        lc.string_table_size = command.strsize
+
+        return lc
+
+    @classmethod
+    def from_values(cls, symtab_offset, symtab_size, string_table_offset, string_table_size):
+        cmd = Struct.create_with_values(symtab_command, [LOAD_COMMAND.SYMTAB.value, symtab_command.SIZE, symtab_offset,
+                                                         symtab_size, string_table_offset, string_table_size])
+
+        return cls.from_image(cmd)
+
+    def __init__(self):
+        self.cmd = None
+
+        self.symtab_offset = 0
+        self.symtab_entry_count = 0
+        self.string_table_offset = 0
+        self.string_table_size = 0
+
+    def raw_bytes(self):
+        return self.cmd.raw
+
 # TODO: Constructable wrapper for dylinker_command, build_version_command
