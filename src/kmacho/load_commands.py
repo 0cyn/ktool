@@ -13,7 +13,8 @@
 #
 from typing import Union
 
-from kmacho import segment_command, segment_command_64, section_64, section, SectionType, S_FLAGS_MASKS, Struct
+from kmacho import segment_command, segment_command_64, section_64, section, SectionType, S_FLAGS_MASKS, Struct, \
+    symtab_command, LOAD_COMMAND
 from kmacho.base import Constructable
 
 

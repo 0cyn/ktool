@@ -11,22 +11,16 @@
 #
 #  Copyright (c) kat 2022.
 #
-import math
-import os
-import pprint
-import sys
 import unittest
-from io import BytesIO
+
+import json
 import random
 
-from ktool.loader import MachOImageHeader
-
 import ktool
-from ktool.headers import *
 from ktool.macho import *
-from ktool.objc import *
 from ktool.util import *
 from ktool.image import *
+from katlib.log import log, LogLevel
 
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))

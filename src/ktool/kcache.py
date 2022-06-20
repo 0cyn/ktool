@@ -14,12 +14,12 @@
 from io import BytesIO
 
 import ktool
-from kmacho.structs import *
-from ktool import MachOFile, Image, log
+from katlib.structs import *
+from ktool import MachOFile, Image
+from katlib.log import log
 from ktool.loader import MachOImageHeader, MachOImageLoader
-import ktool.kplistlib as plistlib
+import katlib.kplistlib as plistlib
 from ktool.exceptions import UnsupportedFiletypeException
-from ktool.macho import SlicedBackingFile
 
 
 class kmod_info_64(Struct):

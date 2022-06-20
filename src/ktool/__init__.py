@@ -14,4 +14,6 @@ except ModuleNotFoundError:
     Header = None
     HeaderGenerator = None
     pass
-from ktool.util import KTOOL_VERSION, ignore, log, LogLevel, Table
+from ktool.util import KTOOL_VERSION, ignore, Table
+
+from katlib.log import LogLevel, log

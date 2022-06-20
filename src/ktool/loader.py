@@ -27,9 +27,11 @@ from kmacho import (
 from kmacho.base import Constructable
 from kmacho.fixups import *
 from ktool.codesign import CodesignInfo
+from ktool.exceptions import MachOAlignmentError
 from ktool.macho import Segment, Slice, MachOImageHeader, PlatformType
-from ktool.util import log, macho_is_malformed, ignore, bytes_to_hex
-from ktool.image import Image, os_version, LinkedImage
+from katlib.log import log
+from ktool.util import macho_is_malformed, ignore, bytes_to_hex
+from ktool.image import Image, os_version, LinkedImage, MisalignedVM
 
 
 class MachOImageLoader:

@@ -16,7 +16,7 @@ from typing import List
 from kmacho.base import Constructable
 from kmacho.structs import linkedit_data_command
 from kmacho.codesign import *
-from ktool.util import log
+from katlib.log import log
 
 
 def swap_32(value: int):

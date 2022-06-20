@@ -19,7 +19,8 @@ from kmacho.base import Constructable
 from ktool.loader import Image
 from ktool.exceptions import VMAddressingError
 from ktool.structs import *
-from ktool.util import log, ignore, usi32_to_si32, opts, Queue, QueueItem
+from ktool.util import ignore, usi32_to_si32, opts, Queue, QueueItem
+from katlib.log import log
 
 type_encodings = {
     "c": "char",

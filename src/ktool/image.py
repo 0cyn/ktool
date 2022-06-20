@@ -6,7 +6,8 @@ from kmacho import LOAD_COMMAND, dylib_command, dyld_info_command, Struct, CPUSu
 from kmacho.base import Constructable
 from ktool.codesign import CodesignInfo
 from ktool.exceptions import VMAddressingError, MachOAlignmentError
-from ktool.util import bytes_to_hex, log
+from ktool.util import bytes_to_hex
+from katlib.log import log
 from ktool.macho import Slice, SlicedBackingFile, MachOImageHeader, Segment, PlatformType, ToolType
 
 

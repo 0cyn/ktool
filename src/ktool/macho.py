@@ -22,7 +22,8 @@ from kmacho.base import Constructable
 from kmacho.structs import *
 from kmacho.load_commands import SegmentLoadCommand
 from ktool.exceptions import *
-from ktool.util import log, ignore
+from katlib.log import log
+from ktool.util import ignore
 
 mmap = None
 
@@ -45,13 +46,10 @@ class BackingFile:
             self.name = ''
         if use_mmaped_io:
             # noinspection PyBroadException
-            try:
-                assert not isinstance(fp, BytesIO)
-                global mmap
-                import mmap
-                self.file = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_COPY)
-            except Exception:
-                use_mmaped_io = False
+            assert not isinstance(fp, BytesIO)
+            global mmap
+            import mmap
+            self.file = mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_COPY)
             f = fp
             old_file_position = f.tell()
             f.seek(0, os.SEEK_END)
@@ -68,8 +66,8 @@ class BackingFile:
     def read_bytes(self, location, count):
         return bytes(self.file[location:location+count])
 
-    def read_int(self, location, count):
-        return int.from_bytes(self.read_bytes(location, count), "big")
+    def read_int(self, location, count, endian="big"):
+        return int.from_bytes(self.read_bytes(location, count), endian)
 
     def write(self, location, data: bytes):
         data = bytearray(data)
@@ -99,8 +97,8 @@ class SlicedBackingFile:
     def read_bytes(self, location, count):
         return bytes(self.file[location:location+count])
 
-    def read_int(self, location, count):
-        return int.from_bytes(self.read_bytes(location, count), "big")
+    def read_int(self, location, count, endian="big"):
+        return int.from_bytes(self.read_bytes(location, count), endian)
 
     def write(self, location, data: bytes):
         count = len(data)

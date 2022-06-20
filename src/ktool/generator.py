@@ -16,7 +16,7 @@ import os
 from collections import namedtuple
 
 from kmacho.structs import *
-from ktool.util import log
+from katlib.log import log
 from ktool.loader import MachOImageLoader, SymbolType, Image
 from ktool.macho import Slice
 from ktool.objc import ObjCImage

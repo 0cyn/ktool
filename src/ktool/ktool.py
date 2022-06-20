@@ -30,7 +30,9 @@ except ModuleNotFoundError:
     pass
 from ktool.macho import Slice, MachOFile, SlicedBackingFile
 from ktool.objc import ObjCImage
-from ktool.util import TapiYAMLWriter, ignore, log
+from ktool.util import TapiYAMLWriter, ignore
+
+from katlib.log import log
 
 
 def load_macho_file(fp: Union[SlicedBackingFile, BinaryIO, BytesIO], use_mmaped_io=False) -> MachOFile:

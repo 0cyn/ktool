@@ -41,10 +41,11 @@ from ktool import (
     MachOFileType,
     KTOOL_VERSION,
     ignore,
-    log,
     LogLevel,
     Table
 )
+
+from katlib.log import log
 
 from ktool.swift import *
 
@@ -54,6 +55,8 @@ from ktool.util import opts, version_output, ktool_print
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
 from ktool.kcache import KernelCache, Kext, EmbeddedKext
+
+from kmacho.structs import *
 
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
