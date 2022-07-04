@@ -171,7 +171,7 @@ class MisalignedVM:
 
         seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address)
         log.info(str(seg_obj))
-        self.map[segment.file_address] = seg_obj
+        self.map[segment.vm_address] = seg_obj
 
 
 class LinkedImage:
