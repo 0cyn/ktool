@@ -44,6 +44,7 @@ class Bitfield:
 
     def decode_bitfield(self, value):
         loc = 0
+        assert self.size == len(value)
         for field_name, field_size in self.fields.items():
             field_size = field_size & size_mask
             byte = loc // 8
@@ -107,6 +108,7 @@ class Struct:
 
         for field in instance._fields:
             value = instance._field_sizes[field]
+            instance._field_offsets[field] = current_off
 
             field_value = None
 
@@ -132,6 +134,7 @@ class Struct:
             elif isinstance(value, Bitfield):
                 size = value.size
                 data = raw[current_off:current_off+size]
+                assert len(data) == size
                 value.decode_bitfield(data)
                 for f, fv in value.decoded_fields.items():
                     setattr(instance, f, fv)
@@ -142,8 +145,10 @@ class Struct:
                 data = raw[current_off:current_off+size]
                 field_value = Struct.create_with_bytes(value, data)
 
+            else:
+                raise AssertionError
 
-            if field_value:
+            if field_value is not None:
                 setattr(instance, field, field_value)
             inst_raw += data
             current_off += size
@@ -203,6 +208,8 @@ class Struct:
                 pad_size = size & size_mask
                 if len(data) < pad_size:
                     data += b'\x00' * (pad_size - len(data))
+            elif issubclass(size, Struct):
+                data = field_dat.raw
 
             assert data is not None
 
@@ -222,33 +229,54 @@ class Struct:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __repr__(self):
+        return str(self)
+
     def __str__(self):
         text = f'{self.__class__.__name__}('
         for field in self._fields:
             field_item = None
-            if isinstance(getattr(self, field), str):
-                field_item = getattr(self, field)
-            elif isinstance(getattr(self, field), bytearray) or isinstance(getattr(self, field), bytes):
-                field_item = getattr(self, field)
-            elif isinstance(getattr(self, field), int):
-                field_item = hex(getattr(self, field))
-            elif issubclass(getattr(self, field), Struct):
-                field_item = str(getattr(self, field))
+            try:
+                attr = getattr(self, field)
+            except AttributeError:
+                attr = self._field_sizes[field]
+            if isinstance(attr, str):
+                field_item = attr
+            elif isinstance(attr, bytearray) or isinstance(attr, bytes):
+                field_item = attr
+            elif isinstance(attr, int):
+                field_item = hex(attr)
+            elif isinstance(attr, Bitfield):
+                attr: Bitfield = attr
+                field_item = ''
+                for subfield in attr.fields:
+                    field_item += subfield + '=' + str(getattr(self, subfield)) + ', '
+            elif issubclass(attr.__class__, Struct):
+                field_item = str(attr)
             text += f'{field}={field_item}, '
         return text[:-2] + ')'
 
     def render_indented(self, indent_size=2) -> str:
         text = f'{self.__class__.__name__}\n'
         for field in self._fields:
+            try:
+                attr = getattr(self, field)
+            except AttributeError:
+                attr = self._field_sizes[field]
             field_item = None
-            if isinstance(getattr(self, field), str):
-                field_item = getattr(self, field)
-            elif isinstance(getattr(self, field), bytearray) or isinstance(getattr(self, field), bytes):
-                field_item = getattr(self, field)
-            elif isinstance(getattr(self, field), int):
-                field_item = hex(getattr(self, field))
-            elif issubclass(getattr(self, field).__class__, Struct):
-                field_item = '\n' + " "*(indent_size+2) + getattr(self, field).render_indented(indent_size+2)
+            if isinstance(attr, str):
+                field_item = attr
+            elif isinstance(attr, bytearray) or isinstance(attr, bytes):
+                field_item = attr
+            elif isinstance(attr, int):
+                field_item = hex(attr)
+            elif isinstance(attr, Bitfield):
+                attr: Bitfield = attr
+                field_item = '\n'
+                for subfield in attr.fields:
+                    field_item += " "*(indent_size+2) + subfield + '=' + str(getattr(self, subfield)) + '\n'
+            elif issubclass(attr.__class__, Struct):
+                field_item = '\n' + " "*(indent_size+2) + attr.render_indented(indent_size+2)
             text += f'{" "*indent_size}{field}={field_item}\n'
         return text
 
