@@ -117,7 +117,7 @@ class SwiftType(Constructable):
 
         typedesc = image.load_struct(type_location, NominalTypeDescriptor, vm=True)
         name = image.get_cstr_at(type_location + 8 + typedesc.mangledName, vm=True)
-        kind = ContextDescriptorKind(image.get_int_at(typedesc.off, 1, vm=False) & 0x1f)
+        kind = ContextDescriptorKind(image.get_uint_at(typedesc.off, 1, vm=False) & 0x1f)
 
         if kind == ContextDescriptorKind.Class:
             return SwiftClass.from_image(image, objc_image, type_location)
@@ -152,7 +152,7 @@ def load_swift_types(image: Image):
     types = []
 
     for ea in range(sect_start, sect_start + sect_size, 4):
-        typeref = usi32_to_si32(image.get_int_at(ea, 4, vm=True))
+        typeref = usi32_to_si32(image.get_uint_at(ea, 4, vm=True))
         type_loc = ea + typeref
         types.append(SwiftType.from_image(image, objc_image, type_loc))
 

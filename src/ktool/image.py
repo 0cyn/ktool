@@ -360,7 +360,7 @@ class Image:
     def vm_check(self, address):
         return self.vm.vm_check(address)
 
-    def get_int_at(self, offset: int, length: int, vm=False, section_name=None):
+    def get_uint_at(self, offset: int, length: int, vm=False):
         """
         Get a sequence of bytes (as an int) from a location
 
@@ -372,7 +372,7 @@ class Image:
         """
         if vm:
             offset = self.vm.translate(offset)
-        return self.slice.get_int_at(offset, length)
+        return self.slice.get_uint_at(offset, length)
 
     def get_bytes_at(self, offset: int, length: int, vm=False, section_name=None):
         """

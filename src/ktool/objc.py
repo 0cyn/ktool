@@ -116,7 +116,7 @@ class ObjCImage(Constructable):
             for i in range(0, cnt):
                 ptr = sect.vm_address + i * 0x8
                 if objc_image.vm_check(ptr):
-                    loc = image.get_int_at(ptr, 0x8, vm=True)
+                    loc = image.get_uint_at(ptr, 0x8, vm=True)
                     try:
                         proto = image.load_struct(loc, objc2_prot, vm=True)
                         item = QueueItem()
@@ -190,8 +190,8 @@ class ObjCImage(Constructable):
     def vm_check(self, address):
         return self.image.vm.vm_check(address)
 
-    def get_int_at(self, offset: int, length: int, vm=False, sectname=None):
-        return self.image.get_int_at(offset, length, vm, sectname)
+    def get_uint_at(self, offset: int, length: int, vm=False, sectname=None):
+        return self.image.get_uint_at(offset, length, vm)
 
     def load_struct(self, addr: int, struct_type, vm=True, sectname=None, endian="little"):
         return self.image.load_struct(addr, struct_type, vm, sectname, endian)
@@ -500,13 +500,13 @@ class MethodList:
 
         for i in range(1, self.methlist_head.count + 1):
             if uses_relative_methods:
-                sel = self.objc_image.get_int_at(ea, 4, vm=False)
+                sel = self.objc_image.get_uint_at(ea, 4, vm=False)
                 sel = usi32_to_si32(sel)
-                types = self.objc_image.get_int_at(ea + 4, 4, vm=False)
+                types = self.objc_image.get_uint_at(ea + 4, 4, vm=False)
                 types = usi32_to_si32(types)
             else:
-                sel = self.objc_image.get_int_at(ea, 8, vm=False)
-                types = self.objc_image.get_int_at(ea + 8, 8, vm=False)
+                sel = self.objc_image.get_uint_at(ea, 8, vm=False)
+                types = self.objc_image.get_uint_at(ea + 8, 8, vm=False)
 
             try:
                 method = Method.from_image(self.objc_image, sel, types, self.meta, vm_ea, uses_relative_methods,
@@ -547,7 +547,7 @@ class Method(Constructable):
 
                 except Exception as ex:
                     try:
-                        imp = objc_image.get_int_at(vm_addr + 8, 4, vm=True)
+                        imp = objc_image.get_uint_at(vm_addr + 8, 4, vm=True)
                         imp = usi32_to_si32(imp) + vm_addr + 8
                         if imp in objc_image.image.symbols:
                             sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
@@ -558,14 +558,14 @@ class Method(Constructable):
                 type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True,
                                                      sectname="__objc_methtype")
             else:
-                selector_pointer = objc_image.get_int_at(sel_addr + vm_addr, 8, vm=True)
+                selector_pointer = objc_image.get_uint_at(sel_addr + vm_addr, 8, vm=True)
                 try:
                     if opts.USE_SYMTAB_INSTEAD_OF_SELECTORS:
                         raise AssertionError
                     sel = objc_image.get_cstr_at(selector_pointer, 0, vm=True, sectname="__objc_methname")
                 except Exception as ex:
                     try:
-                        imp = objc_image.get_int_at(vm_addr + 8, 4, vm=True)
+                        imp = objc_image.get_uint_at(vm_addr + 8, 4, vm=True)
                         # no idea if this is correct
                         imp = usi32_to_si32(imp) + vm_addr + 8
                         if imp in objc_image.image.symbols:
@@ -771,7 +771,7 @@ class Class(Constructable):
             protlist: objc2_prot_list = objc_image.load_struct(objc2_class_ro_item.base_prots, objc2_prot_list)
             ea = protlist.off
             for i in range(1, protlist.cnt + 1):
-                prot_loc = objc_image.get_int_at(ea + i * 8, 8, vm=False)
+                prot_loc = objc_image.get_uint_at(ea + i * 8, 8, vm=True)
                 if prot_loc in objc_image.prot_map:
                     prots.append(objc_image.prot_map[prot_loc])
                 else:
@@ -1012,7 +1012,7 @@ class Category(Constructable):
     @classmethod
     def from_image(cls, objc_image: ObjCImage, category_ptr):
         try:
-            loc = objc_image.get_int_at(category_ptr, 8, vm=True)
+            loc = objc_image.get_uint_at(category_ptr, 8, vm=True)
             struct: objc2_category = objc_image.load_struct(loc, objc2_category, vm=True)
             name = objc_image.get_cstr_at(struct.name, vm=True)
         except ValueError as ex:

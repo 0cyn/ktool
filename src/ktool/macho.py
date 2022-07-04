@@ -254,7 +254,7 @@ class Slice:
         self.size = sliced_backing_file.size
 
         # noinspection PyArgumentList
-        self.byte_order = "little" if self.get_int_at(0, 4, "little") in [MH_MAGIC, MH_MAGIC_64] else "big"
+        self.byte_order = "little" if self.get_uint_at(0, 4, "little") in [MH_MAGIC, MH_MAGIC_64] else "big"
 
         self._cstring_cache = {}
 
@@ -281,7 +281,7 @@ class Slice:
 
         return struct
 
-    def get_int_at(self, addr: int, count: int, endian="little"):
+    def get_uint_at(self, addr: int, count: int, endian="little"):
         return int.from_bytes(self.file.read_bytes(addr, count), endian)
 
     def get_bytes_at(self, addr: int, count: int):
@@ -328,7 +328,7 @@ class Slice:
 
         while True:
 
-            byte = self.get_int_at(readHead, 1)
+            byte = self.get_uint_at(readHead, 1)
 
             value |= (byte & 0x7f) << shift
 
@@ -392,8 +392,8 @@ class MachOImageHeader(Constructable):
         load_commands = []
 
         for i in range(1, header.loadcnt + 1):
-            cmd = macho_slice.get_int_at(offset, 4)
-            cmd_size = macho_slice.get_int_at(offset + 4, 4)
+            cmd = macho_slice.get_uint_at(offset, 4)
+            cmd_size = macho_slice.get_uint_at(offset + 4, 4)
 
             cmd_raw = macho_slice.get_bytes_at(offset, cmd_size)
             try:

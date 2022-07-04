@@ -188,7 +188,7 @@ class SliceTestCase(unittest.TestCase):
 
         size = macho_slice.size
 
-        loadsize = macho_slice.get_int_at(20, 4) + 32
+        loadsize = macho_slice.get_uint_at(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         needle = b'\xDE\xAD\xBE\xEF\xDE\xAD\xBE\xEF\xDE\xAD\xBE\xEF'
@@ -207,7 +207,7 @@ class SliceTestCase(unittest.TestCase):
         slice_base = macho_slice.offset
         size = macho_slice.size
 
-        loadsize = macho_slice.get_int_at(20, 4) + 32
+        loadsize = macho_slice.get_uint_at(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         self.fat.write(slice_base + random_location, needle)
@@ -226,7 +226,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
         size = macho_slice.size
-        loadsize = macho_slice.get_int_at(20, 4) + 32
+        loadsize = macho_slice.get_uint_at(20, 4) + 32
 
         random_location = random.randint(loadsize, size)
 
@@ -247,7 +247,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
         size = macho_slice.size
-        loadsize = macho_slice.get_int_at(20, 4) + 32
+        loadsize = macho_slice.get_uint_at(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         write = b'Decode a printable string.'
@@ -267,7 +267,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
         size = macho_slice.size
-        loadsize = macho_slice.get_int_at(20, 4) + 32
+        loadsize = macho_slice.get_uint_at(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         write = b'Decode a printable string.\x00'
@@ -289,7 +289,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
         size = macho_slice.size
-        loadsize = macho_slice.get_int_at(20, 4) + 32
+        loadsize = macho_slice.get_uint_at(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         self.thin.write(random_location, encoded)
@@ -712,8 +712,8 @@ class ImageTestCase(unittest.TestCase):
         self.assertTrue(image.vm_check(vm_base))
         self.assertEqual(image.vm.translate(vm_base), 0)
 
-        self.assertEqual(macho_slice.get_int_at(0, 4), image.get_int_at(0, 4))
-        self.assertEqual(macho_slice.get_int_at(0, 4), image.get_int_at(vm_base, 4, vm=True))
+        self.assertEqual(macho_slice.get_uint_at(0, 4), image.get_uint_at(0, 4))
+        self.assertEqual(macho_slice.get_uint_at(0, 4), image.get_uint_at(vm_base, 4, vm=True))
 
         self.assertEqual(macho_slice.get_bytes_at(0, 4), image.get_bytes_at(0, 4))
         self.assertEqual(macho_slice.get_bytes_at(0, 4), image.get_bytes_at(vm_base, 4, vm=True))

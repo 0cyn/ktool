@@ -94,7 +94,7 @@ class MachOImageLoader:
                 thread_state = []
                 for i in range(cmd.count):
                     off = cmd.off + 16 + (i * 4)
-                    val = image.get_int_at(off, 4)
+                    val = image.get_uint_at(off, 4)
                     thread_state.append(val)
 
                 image.thread_state = thread_state
@@ -163,11 +163,11 @@ class MachOImageLoader:
 
             elif load_command == LOAD_COMMAND.BUILD_VERSION:
                 image.platform = PlatformType(cmd.platform)
-                image.minos = os_version(x=image.get_int_at(cmd.off + 14, 2), y=image.get_int_at(cmd.off + 13, 1),
-                                         z=image.get_int_at(cmd.off + 12, 1))
-                image.sdk_version = os_version(x=image.get_int_at(cmd.off + 18, 2),
-                                               y=image.get_int_at(cmd.off + 17, 1),
-                                               z=image.get_int_at(cmd.off + 16, 1))
+                image.minos = os_version(x=image.get_uint_at(cmd.off + 14, 2), y=image.get_uint_at(cmd.off + 13, 1),
+                                         z=image.get_uint_at(cmd.off + 12, 1))
+                image.sdk_version = os_version(x=image.get_uint_at(cmd.off + 18, 2),
+                                               y=image.get_uint_at(cmd.off + 17, 1),
+                                               z=image.get_uint_at(cmd.off + 16, 1))
                 log.info(f'Loaded platform {image.platform.name} | '
                          f'Minimum OS {image.minos.x}.{image.minos.y}'
                          f'.{image.minos.z} | SDK Version {image.sdk_version.x}'
@@ -185,9 +185,9 @@ class MachOImageLoader:
                     elif load_command == LOAD_COMMAND.VERSION_MIN_WATCHOS:
                         image.platform = PlatformType.WATCHOS
 
-                    image.minos = os_version(x=image.get_int_at(cmd.off + 10, 2),
-                                             y=image.get_int_at(cmd.off + 9, 1),
-                                             z=image.get_int_at(cmd.off + 8, 1))
+                    image.minos = os_version(x=image.get_uint_at(cmd.off + 10, 2),
+                                             y=image.get_uint_at(cmd.off + 9, 1),
+                                             z=image.get_uint_at(cmd.off + 8, 1))
 
             elif load_command == LOAD_COMMAND.ID_DYLIB:
                 image.dylib = LinkedImage(image, cmd)
@@ -389,14 +389,14 @@ class ChainedFixups(Constructable):
         imports_format = dyld_chained_import_format(fixup_hdr.imports_format)
 
         segs_addr = fixup_hdr_addr + fixup_hdr.starts_offset
-        seg_count = image.get_int_at(segs_addr, 4, vm=False)
+        seg_count = image.get_uint_at(segs_addr, 4, vm=False)
         imports_addr = fixup_hdr_addr + fixup_hdr.imports_offset
 
         syms_addr = fixup_hdr_addr + fixup_hdr.symbols_offset
 
         segs = []
         for i in range(seg_count):
-            s = image.get_int_at((i * 4) + segs_addr + 4, 4)  # read
+            s = image.get_uint_at((i * 4) + segs_addr + 4, 4)  # read
             segs.append(s)
 
         for i in range(seg_count):
@@ -431,7 +431,7 @@ class ChainedFixups(Constructable):
 
                 j += 1
                 while True:
-                    content = image.get_int_at(chain_entry_addr, 8)
+                    content = image.get_uint_at(chain_entry_addr, 8)
                     item = image.load_struct(chain_entry_addr, PTR_STRUCT_TYPE_BASE, vm=False)
                     item = image.load_struct(chain_entry_addr, PTR_STRUCT_TYPE_FUNC(item), vm=False, force_reload=True)
 
@@ -439,7 +439,7 @@ class ChainedFixups(Constructable):
                     nxt = (content >> 50) & 2047
                     bind = (content >> 62) & 1
                     if bind == 1:
-                        import_entry = image.get_int_at(imports_addr + offset * 4, 4)
+                        import_entry = image.get_uint_at(imports_addr + offset * 4, 4)
                         ordinal = import_entry & 0xFF
                         sym_name_offset = import_entry >> 9
                         sym_name_addr = syms_addr + sym_name_offset
@@ -514,12 +514,12 @@ class ExportTrie(Constructable):
             macho_is_malformed()
 
         start = cursor
-        byte = image.get_int_at(cursor, 1)
+        byte = image.get_uint_at(cursor, 1)
         results = []
         log.debug_tm(f'@ {hex(start)} node: {hex(byte)} current_symbol: {string}')
         if byte == 0:
             cursor += 1
-            branches = image.get_int_at(cursor, 1)
+            branches = image.get_uint_at(cursor, 1)
             log.debug_tm(f'BRAN {branches}')
             for i in range(0, branches):
                 if i == 0:
@@ -532,7 +532,7 @@ class ExportTrie(Constructable):
         else:
             log.debug_tm(f'TERM: 0')
             size, cursor = image.decode_uleb128(cursor)
-            flags = image.get_int_at(cursor, 1)
+            flags = image.get_uint_at(cursor, 1)
             cursor += 1
             offset, cursor = image.decode_uleb128(cursor)
             results.append(export_node(string, offset, flags))
@@ -625,8 +625,8 @@ class BindingTable:
             while True:
                 # There are 0xc opcodes total
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
-                binding_opcode = self.image.get_int_at(read_address, 1) & 0xF0
-                value = self.image.get_int_at(read_address, 1) & 0x0F
+                binding_opcode = self.image.get_uint_at(read_address, 1) & 0xF0
+                value = self.image.get_uint_at(read_address, 1) & 0x0F
                 log.debug_tm(f'{BINDING_OPCODE(binding_opcode).name}: {hex(value)}')
                 cmd_start_addr = read_address
                 read_address += 1

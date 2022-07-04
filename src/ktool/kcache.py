@@ -173,13 +173,13 @@ class KernelCache:
         ptr_size = 8 if self.mach_kernel.macho_header.is64 else 4
 
         for i in range(kmod_start_sect.file_address, kmod_start_sect.file_address + kmod_start_sect.size, ptr_size):
-            kext_starts.append(self.mach_kernel.get_int_at(i, ptr_size, vm=False))
+            kext_starts.append(self.mach_kernel.get_uint_at(i, ptr_size, vm=False))
 
         kmod_info_locations = []
         kmod_info_sect = self.mach_kernel.segments['__PRELINK_INFO'].sections['__kmod_info']
 
         for i in range(kmod_info_sect.file_address, kmod_info_sect.file_address + kmod_info_sect.size, ptr_size):
-            kmod_info_locations.append(self.mach_kernel.get_int_at(i, ptr_size, vm=False))
+            kmod_info_locations.append(self.mach_kernel.get_uint_at(i, ptr_size, vm=False))
 
         # start processing kmod info
         for i, info_loc in enumerate(kmod_info_locations):
