@@ -40,6 +40,8 @@ class MachOImageLoader:
 
     """
 
+    SYMTAB_LOADER = None
+
     @classmethod
     def load(cls, macho_slice: Slice, load_symtab=True, load_imports=True, load_exports=True, force_misaligned_vm=False) -> Image:
         """
@@ -54,6 +56,9 @@ class MachOImageLoader:
         :return: Processed image object
         :rtype: Image
         """
+
+        MachOImageLoader.SYMTAB_LOADER = SymbolTable
+
         log.info("Loading image")
         image = Image(macho_slice, force_misaligned_vm)
 
@@ -142,7 +147,7 @@ class MachOImageLoader:
             elif load_command == LOAD_COMMAND.SYMTAB:
                 if load_symtab:
                     log.info("Loading Symbol Table")
-                    image.symbol_table = SymbolTable(image, cmd)
+                    image.symbol_table = MachOImageLoader.SYMTAB_LOADER(image, cmd)
 
             elif load_command == LOAD_COMMAND.DYSYMTAB:
                 pass
