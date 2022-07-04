@@ -374,7 +374,7 @@ class Image:
             offset = self.vm.translate(offset)
         return self.slice.get_uint_at(offset, length)
 
-    def get_bytes_at(self, offset: int, length: int, vm=False, section_name=None):
+    def get_bytes_at(self, offset: int, length: int, vm=False):
         """
         Get a sequence of bytes from a location
 
@@ -388,7 +388,7 @@ class Image:
             offset = self.vm.translate(offset)
         return self.slice.get_bytes_at(offset, length)
 
-    def load_struct(self, address: int, struct_type, vm=False, section_name=None, endian="little", force_reload=False):
+    def load_struct(self, address: int, struct_type, vm=False, endian="little", force_reload=False):
         """
         Load a struct (struct_type_t) from a location and return the processed object
 
@@ -408,7 +408,7 @@ class Image:
 
         return self.struct_cache[address]
 
-    def get_str_at(self, address: int, count: int, vm=False, section_name=None, force=False):
+    def get_str_at(self, address: int, count: int, vm=False, force=False):
         """
         Get string with set length from location (to be used essentially only for loading segment names)
 
@@ -422,7 +422,7 @@ class Image:
             address = self.vm.translate(address)
         return self.slice.get_str_at(address, count, force=force)
 
-    def get_cstr_at(self, address: int, limit: int = 0, vm=False, section_name=None):
+    def get_cstr_at(self, address: int, limit: int = 0, vm=False):
         """
         Load a C style string from a location, stopping once a null byte is encountered.
 

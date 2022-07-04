@@ -194,13 +194,13 @@ class ObjCImage(Constructable):
         return self.image.get_uint_at(offset, length, vm)
 
     def load_struct(self, addr: int, struct_type, vm=True, sectname=None, endian="little"):
-        return self.image.load_struct(addr, struct_type, vm, sectname, endian)
+        return self.image.load_struct(addr, struct_type, vm, endian)
 
     def get_str_at(self, addr: int, count: int, vm=True, sectname=None):
-        return self.image.get_str_at(addr, count, vm, sectname)
+        return self.image.get_str_at(addr, count, vm)
 
     def get_cstr_at(self, addr: int, limit: int = 0, vm=True, sectname=None):
-        return self.image.get_cstr_at(addr, limit, vm, sectname)
+        return self.image.get_cstr_at(addr, limit, vm)
 
 
 class Struct_Representation:
