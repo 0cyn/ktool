@@ -67,6 +67,7 @@ class VM:
 
         page_offset = address & self.page_size - 1
         page_location = address >> self.page_size_bits
+
         try:
             phys_page = self.page_table[page_location]
             physical_location = phys_page + page_offset
@@ -112,6 +113,8 @@ class MisalignedVM:
         self.detag_kern_64 = False
         self.detag_64 = False
 
+        self.fallback = None
+
         self.map = {}
         self.stats = {}
         self.vm_base_addr = 0
@@ -142,6 +145,9 @@ class MisalignedVM:
                 file_addr = o.fileaddr + vm_address - o.vmaddr
                 self.cache[vm_address] = file_addr
                 return file_addr
+
+        if self.fallback:
+            return self.fallback.translate(vm_address)
 
         raise VMAddressingError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
 
