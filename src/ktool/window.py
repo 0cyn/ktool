@@ -1605,9 +1605,18 @@ class KToolMachOLoader:
                 raise ex
         return items
 
+    @classmethod
+    def contents_for_image(cls, image, callback):
+        items = []
+
+        items.append(cls.slice_item(None, callback, image))
+
+        return items
+
     @staticmethod
-    def slice_item(macho_slice, callback):
-        loaded_image = MachOImageLoader.load(macho_slice)
+    def slice_item(macho_slice, callback, loaded_image=None):
+        if not loaded_image:
+            loaded_image = MachOImageLoader.load(macho_slice)
         if hasattr(macho_slice, 'type'):
             slice_nick = f'{macho_slice.type.name}:{macho_slice.subtype.name}' + " Slice"
         else:
@@ -2185,6 +2194,40 @@ class KToolScreen:
     def update_load_status(self, msg):
         self.loader_status.status_string = msg
         self.redraw_all()
+
+    def load_image(self, image, filename):
+        """
+         Load an Image into the GUI.
+
+         :param filename:
+         :return:
+         """
+        try:
+            # KToolMachOLoader.SUPPORTS_256 = self.supported_colors > 200
+
+            self.loader_status.draw = True
+            self.mainscreen.scroll_view_text_buffer.lines = [f'Loading {filename}...']
+            self.redraw_all()
+
+            self.mainscreen.set_tab_name(filename)
+
+            for item in KToolMachOLoader.contents_for_image(image, self.update_load_status):
+                self.sidebar.add_menu_item(item)
+
+            self.active_key_handler = self.sidebar
+            self.key_handlers = [self.sidebar, self.mainscreen, self.titlebar, self.file_browser]
+            self.mouse_handlers = [self.sidebar, self.titlebar, self.title_menu_overlay, self.debug_menu,
+                                   self.input_overlay, self.help_menu]
+            self.loader_status.draw = False
+            self.input_overlay.draw = False
+
+            self.redraw_all()
+
+            self.program_loop()
+
+        except Exception as ex:
+            self.teardown()
+            raise ex
 
     def load_file(self, filename, mmap=True):
         """
