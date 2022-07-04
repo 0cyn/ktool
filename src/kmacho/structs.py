@@ -247,7 +247,7 @@ class dylib(Struct):
 
 class dylib_command(Struct):
     _FIELDNAMES = ['cmd', 'cmdsize', 'dylib']
-    _SIZES = [uint32_t, uint32_t, type_bytes | 16]
+    _SIZES = [uint32_t, uint32_t, dylib]
     SIZE = 24
 
     def __init__(self, byte_order="little"):

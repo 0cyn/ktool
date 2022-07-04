@@ -441,7 +441,7 @@ class ImageHeaderTestCase(unittest.TestCase):
         old_commands = [*image_header.load_commands]
 
         dylib_item = Struct.create_with_values(dylib, [0x18, 0x1, 0x000000, 0x000000])
-        dylib_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB.value, 0, dylib_item.raw])
+        dylib_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB.value, 0, dylib_item])
         new_header = image.macho_header.replace_load_command(dylib_cmd, 4, suffix="/unit/test/iname")
 
         self.thin_lib.write(0, new_header.raw)
