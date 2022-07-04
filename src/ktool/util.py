@@ -20,7 +20,7 @@ from enum import Enum
 from typing import List, Union
 import re
 
-from kmacho import Struct
+from kmacho import Struct, FAT_CIGAM, FAT_MAGIC, MH_CIGAM, MH_CIGAM_64, MH_MAGIC, MH_MAGIC_64
 from ktool.exceptions import *
 
 import pkg_resources
@@ -224,6 +224,31 @@ def usi32_to_si32(val):
     if (val & (1 << (bits - 1))) != 0:  # if sign bit is set e.g., 8bit: 128-255
         val = val - (1 << bits)  # compute negative value
     return val  # return positive value as is
+
+
+class FileType(Enum):
+    MachOFileType = 0
+    FatMachOFileType = 1
+    KCacheFileType = 2
+    IMG4FileType = 64
+    SharedCacheFileType = 128
+    UnknownFileType = 512
+
+
+def detect_filetype(fp) -> FileType:
+    magic = fp.read(4)
+    if magic in [FAT_MAGIC, FAT_CIGAM]:
+        return FileType.FatMachOFileType
+    elif magic in [MH_MAGIC, MH_CIGAM, MH_MAGIC_64, MH_CIGAM_64]:
+        first1k = fp.read(0x1000)
+        fp.seek(0)
+        if b'__BOOTDATA\x00\x00\x00\x00\x00\x00' in first1k:
+            return FileType.KCacheFileType
+        else:
+            return FileType.MachOFileType
+
+    elif magic == b'dyld':
+        return FileType.SharedCacheFileType
 
 
 class TapiYAMLWriter:
