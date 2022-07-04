@@ -319,9 +319,11 @@ class Struct:
         self.byte_order = byte_order
 
         self._field_sizes = {}
+        self._field_offsets = {}
 
         for index, i in enumerate(fields):
             self._field_sizes[i] = sizes[index]
+
 
         self.off = 0
 
