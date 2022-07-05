@@ -18,6 +18,7 @@
 from typing import Dict, Union, BinaryIO, List
 from io import BytesIO
 
+from kdsc.loader import DyldSharedCacheLoader
 from ktool.loader import MachOImageLoader, Image
 from ktool.generator import TBDGenerator, FatMachOGenerator
 try:
@@ -29,7 +30,7 @@ except ModuleNotFoundError:
     HeaderGenerator = None
     pass
 from ktool.macho import Slice, MachOFile, SlicedBackingFile
-from ktool.objc import ObjCImage
+from ktool.objc import ObjCImage, MethodList
 from ktool.util import TapiYAMLWriter, ignore
 
 from katlib.log import log
@@ -100,6 +101,24 @@ def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO, SlicedBackingFile]
         macho_slice: Slice = macho_file.slices[slice_index]
 
     return MachOImageLoader.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports, load_exports=load_exports, force_misaligned_vm=force_misaligned_vm)
+
+
+def load_dsc(dsc_path):
+    return DyldSharedCacheLoader.load_dsc(dsc_path)
+
+
+def load_image_from_dsc(dsc, filename, slice_index=0, load_symtab=True, load_imports=True,
+               load_exports=True, use_mmaped_io=True, force_misaligned_vm=False):
+    lib_objc = DyldSharedCacheLoader.load_image_from_basename(dsc, "libobjc.A.dylib")
+    if "__objc_scoffs" in lib_objc.segments['__DATA_CONST'].sections:
+        scoffs = lib_objc.segments['__DATA_CONST'].sections['__objc_scoffs']
+        if scoffs.size == 0x20:
+            start = lib_objc.get_uint_at(scoffs.vm_address, 8, vm=True)
+        else:
+            start = lib_objc.get_uint_at(scoffs.vm_address+8, 8, vm=True)
+        MethodList.CUSTOM_RMS_BASE = start & 0xFFFFFFFFF
+    image = DyldSharedCacheLoader.load_image_from_basename(dsc, filename)
+    return image
 
 
 def macho_verify(fp: Union[BinaryIO, MachOFile, Slice, Image]) -> None:

@@ -21,6 +21,7 @@ from ktool.macho import *
 from ktool.util import *
 from ktool.image import *
 from katlib.log import log, LogLevel
+from kdsc.file import MemoryCappedBufferedFileReader
 
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))
@@ -139,6 +140,20 @@ class StructTestCase(unittest.TestCase):
         s3 = Struct.create_with_values(linkedit_data_command, [0x34 | LC_REQ_DYLD, 0x10, 0xc000, 0xe0], "little")
         assert s1 == s2
         assert s1 != s3
+
+
+class MCBFRTestCase(unittest.TestCase):
+    def test_mcbfr(self):
+        return
+        with open('testmcbfr','wb') as fp:
+            fp.write(b'\x41' * 1024 * 1024 * 1024)
+        try:
+            with open('testmcbfr', 'rb') as fp:
+                mcbfr = MemoryCappedBufferedFileReader(fp)
+            assert mcbfr.read(0x100, 0x1000001) == b'\x41' * 0x1000001
+        except AssertionError as ex:
+            os.remove('testmcbfr')
+            raise ex
 
 
 class BackingFileTestCase(unittest.TestCase):

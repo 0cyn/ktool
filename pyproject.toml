@@ -8,7 +8,8 @@ packages = [
     { include = "ktool", from="src" },
     { include = "kmacho", from="src" },
     { include = "kswift", from="src" },
-    { include = "katlib", from="src" }
+    { include = "katlib", from="src" },
+    { include = "kdsc", from="src" }
 ]
 
 authors = ["cynder <kat@cynder.me>"]

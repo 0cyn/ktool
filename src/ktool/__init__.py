@@ -1,5 +1,5 @@
 from ktool.ktool import load_image, load_objc_metadata, generate_headers, generate_text_based_stub, load_macho_file, \
-    macho_verify, reload_image, macho_combine
+    macho_verify, reload_image, macho_combine, load_image_from_dsc, load_dsc
 
 from ktool.objc import ObjCImage
 from ktool.loader import MachOImageLoader
@@ -14,6 +14,6 @@ except ModuleNotFoundError:
     Header = None
     HeaderGenerator = None
     pass
-from ktool.util import KTOOL_VERSION, ignore, Table
+from ktool.util import KTOOL_VERSION, ignore, Table, detect_filetype, FileType
 
 from katlib.log import LogLevel, log

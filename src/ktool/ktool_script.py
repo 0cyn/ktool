@@ -17,6 +17,7 @@
 import json
 import os
 import os.path
+import pprint
 import shutil
 import sys
 import threading
@@ -55,6 +56,8 @@ from ktool.util import opts, version_output, ktool_print
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
 from ktool.kcache import KernelCache, Kext, EmbeddedKext
+
+from kdsc.loader import *
 
 from kmacho.structs import *
 
@@ -190,10 +193,16 @@ def main():
     parser.add_argument('-f', dest='force_load', action='store_true')
     parser.add_argument('-V', dest='get_vers', action='store_true')
     parser.add_argument('--mmap', dest='mmap', action='store_true', help='Enable mmaped IO')
+    parser.add_argument('--dsc', dest='dsc', help='Load file from dsc')
     parser.set_defaults(func=help_prompt, bench=False, membench=False, force_load=False, mmap=False, logging_level=1,
-                        get_vers=False)
+                        get_vers=False, dsc=False)
 
     subparsers = parser.add_subparsers(help='sub-command help')
+
+    if '--dsc' in sys.argv:
+        commands = DSCFileCommands
+    else:
+        commands = MachOFileCommands
 
     # open command: opens the main GUI
     parser_open = subparsers.add_parser('open', help='open ktool GUI and browse file')
@@ -201,14 +210,14 @@ def main():
     parser_open.add_argument('filename', nargs='?', default='')
     parser_open.add_argument('--hard-fail', dest='hard_fail', action='store_true')
 
-    parser_open.set_defaults(func=_open, hard_fail=False)
+    parser_open.set_defaults(func=commands._open, hard_fail=False)
 
     parser_json = subparsers.add_parser('json', help='Dump Image metadata as json')
 
     parser_json.add_argument('--with-objc', dest='with_objc', action='store_true')
     parser_json.add_argument('filename', nargs='?', default='')
 
-    parser_json.set_defaults(func=serialize, with_objc=False)
+    parser_json.set_defaults(func=commands.serialize, with_objc=False)
 
     # insert command: optool replacement
     parser_insert = subparsers.add_parser('insert', help='Insert data into MachO Binary')
@@ -218,7 +227,7 @@ def main():
     parser_insert.add_argument('--payload', dest='payload', help="Payload (if required) for insertion")
     parser_insert.add_argument('--out', dest='out', help="Output file destination for patches")
 
-    parser_insert.set_defaults(func=insert, out=None, lc=None, payload=None)
+    parser_insert.set_defaults(func=commands.insert, out=None, lc=None, payload=None)
 
     # edit command: install-name-tool replacement
     parser_edit = subparsers.add_parser('edit', help='Edit attributes of the MachO')
@@ -229,7 +238,7 @@ def main():
                              help='Add MachO Header Padding (not yet implemented, ignore this flag please)')
     parser_edit.add_argument('--out', dest='out', help="Output file destination for patches")
 
-    parser_edit.set_defaults(func=edit, out=None, iname=None, apad=None)
+    parser_edit.set_defaults(func=commands.edit, out=None, iname=None, apad=None)
 
     # lipo command: you will never guess which macos cli tool the lipo command replaces
     parser_lipo = subparsers.add_parser('lipo', help='Extract/Combine slices')
@@ -240,7 +249,7 @@ def main():
                              help="Combine files to create a fat mach-o image")
     parser_lipo.add_argument('filename', nargs='*', default='')
 
-    parser_lipo.set_defaults(func=lipo, out="", combine=False)
+    parser_lipo.set_defaults(func=commands.lipo, out="", combine=False)
 
     # img4 command: because why not. wrote an img4 library for iBootLoader and it can definitely be useful elsewhere.
     parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
@@ -253,7 +262,7 @@ def main():
     parser_img4.add_argument('--key', dest='aes_key', type=str, help='Key for decryption')
     parser_img4.add_argument('--out', dest='out', help="Output file destination for decryption")
 
-    parser_img4.set_defaults(func=img4, get_kbag=False, do_decrypt=False, aes_iv=None, aes_key=None, out=None)
+    parser_img4.set_defaults(func=commands.img4, get_kbag=False, do_decrypt=False, aes_iv=None, aes_key=None, out=None)
 
     # file command: super basic info about a file (thin/fat, and if fat, what slices are contained)
     #               replaces the relevant usage of the `file` command on macos
@@ -261,7 +270,7 @@ def main():
 
     parser_file.add_argument('filename', nargs='?', default='')
 
-    parser_file.set_defaults(func=_file)
+    parser_file.set_defaults(func=commands._file)
 
     # info command: prints the VM map (this is honestly just for me when debugging shit)
     parser_info = subparsers.add_parser('info', help='Print Info about a MachO image')
@@ -271,7 +280,7 @@ def main():
     parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO image")
     parser_info.add_argument('filename', nargs='?', default='')
 
-    parser_info.set_defaults(func=info, get_vm=False, get_lcs=False, slice_index=0)
+    parser_info.set_defaults(func=commands.info, get_vm=False, get_lcs=False, slice_index=0)
 
     # dump command: for dumping headers/tbds from an image
     parser_dump = subparsers.add_parser('dump', help='Dump items (headers) from binary')
@@ -289,7 +298,7 @@ def main():
     parser_dump.add_argument('--force-misaligned-vm', dest='force_misaligned', action="store_true", help="Force misaligned VM")
     parser_dump.add_argument('filename', nargs='?', default='')
 
-    parser_dump.set_defaults(func=dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0,
+    parser_dump.set_defaults(func=commands.dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0,
                              hard_fail=False, get_class=None, forward_declare=False, force_misaligned=False)
 
     # list command: Lists lists of things contained in lists in the image.
@@ -305,7 +314,7 @@ def main():
     parser_list.add_argument('--funcs', dest='get_fstarts', action='store_true', help="Print Function Starts")
     parser_list.add_argument('filename', nargs='?', default='')
 
-    parser_list.set_defaults(func=_list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False,
+    parser_list.set_defaults(func=commands._list, get_lcs=False, get_classes=False, get_protos=False, get_linked=False,
                              slice_index=0, get_swift_types=False)
 
     # symbol command: prints various symbol tables
@@ -319,7 +328,7 @@ def main():
                                 help="Specify Index of Slice (in FAT MachO) to examine")
     parser_symbols.add_argument('filename', nargs='?', default='')
 
-    parser_symbols.set_defaults(func=symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False,
+    parser_symbols.set_defaults(func=commands.symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False,
                                 slice_index=0)
 
     parser_kcache = subparsers.add_parser('kcache', help='Kernel Cache Processing')
@@ -330,7 +339,7 @@ def main():
     parser_kcache.add_argument('--extract', dest='do_extract')
     parser_kcache.add_argument('filename', nargs='?', default='')
 
-    parser_kcache.set_defaults(func=kcache, get_kext=None, get_info=False, do_extract=None, get_kexts=False)
+    parser_kcache.set_defaults(func=commands.kcache, get_kext=None, get_info=False, do_extract=None, get_kexts=False)
 
     parser_ent = subparsers.add_parser('cs', help='Codesign processing')
 
@@ -339,7 +348,15 @@ def main():
                                 help="Specify Index of Slice (in FAT MachO) to examine")
     parser_ent.add_argument('filename', nargs='?', default='')
 
-    parser_ent.set_defaults(func=ent, get_ent=False, slice_index=0)
+    parser_ent.set_defaults(func=commands.ent, get_ent=False, slice_index=0)
+
+    parser_dsc = subparsers.add_parser('dsc', help='DSC Analysis Utils')
+
+    parser_dsc.add_argument('--list', dest='list_images', action='store_true')
+    parser_dsc.add_argument('--memory', dest='mem', action='store_true')
+    parser_dsc.add_argument('filename', nargs='?', default='')
+
+    parser_dsc.set_defaults(func=dsc, list_images=False, mem=False, filename=None)
 
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
@@ -413,7 +430,8 @@ def main():
             args.func(args)
         except UnsupportedFiletypeException:
             exit_with_error(KToolError.FiletypeError, f'{args.filename} is not a valid MachO Binary')
-        except FileNotFoundError:
+        except FileNotFoundError as ex:
+            raise ex
             exit_with_error(KToolError.ArgumentError, f'{args.filename} does not exist')
         except MalformedMachOException:
             exit_with_error(KToolError.MalformedMachOError,
@@ -428,7 +446,7 @@ def main():
 
 
 def help_prompt():
-    """Usage: ktool <global flags> [command] <flags> [filename]
+    """Usage: ktool <global flags> [--dsc=<path>] [command] <flags> [filename]
 
 Commands:
 
@@ -449,11 +467,16 @@ MachO Analysis ---
     symbols - Print various tables (Symbols, imports, exports)
     info - Print misc info about the target mach-o
 
+DSC Analysis ---
+    dsc - Commands to analyze dyld_shared_caches
+
 Misc Utilities ---
     file - Print very basic info about the MachO
     img4 - IMG4 Utilities
 
 Run `ktool [command]` for info/examples on using that command
+
+When dumping from a shared cache with the `--dsc=` arg, use the Framework base name as the filename (e.g. SpringBoard)
 
 Global Flags:
     -f - Force Load (ignores malformations in the MachO and tries to load whatever it can)
@@ -472,67 +495,77 @@ def process_patches(image) -> 'Image':
                                                     "https://github.com/kritantadev/ktool.")
 
 
-def _open(args):
-    """
-ktool open [filename]
-    """
-    # noinspection PyUnreachableCode
-    try:
-        log.LOG_LEVEL = LogLevel.DEBUG
-        screen = KToolScreen(args.hard_fail)
-        log.LOG_FUNC = screen.ktool_dbg_print_func
-        log.LOG_ERR = screen.ktool_dbg_print_err_func
-        screen.load_file(args.filename, MMAP_ENABLED)
-    except KeyboardInterrupt:
+def dsc(args):
+    require_args(args, one_of=['dsc', 'filename'])
+
+    dsc_path = args.dsc if args.dsc else args.filename
+    _dsc = ktool.load_dsc(dsc_path)
+
+    if args.list_images:
+        for image in _dsc.images:
+            print(image)
+
+    elif args.mem:
+        for entry in _dsc.vm.fallback.map.values():
+            print(f'{hex(entry.vmaddr)}-{hex(entry.vmaddr + entry.size)} ==> {hex(entry.fileaddr)}')
+
+
+class DSCFileCommands:
+    @staticmethod
+    def _open(args):
+        """
+    ktool open [filename]
+        """
+        # noinspection PyUnreachableCode
+        try:
+            log.LOG_LEVEL = LogLevel.DEBUG
+            screen = KToolScreen(args.hard_fail)
+            log.LOG_FUNC = screen.ktool_dbg_print_func
+            log.LOG_ERR = screen.ktool_dbg_print_err_func
+
+            dsc_path = args.dsc
+            dsc = ktool.load_dsc(dsc_path)
+            image = ktool.load_image_from_dsc(dsc, args.filename)
+
+            screen.load_image(image, args.filename)
+        except KeyboardInterrupt:
+            external_hard_fault_teardown()
+            print('Hard Faulted. This was likely due to a curses error causing a freeze while rendering.')
+            exit(64)
+        except Exception as ex:
+            external_hard_fault_teardown()
+            print('Hard fault in GUI due to uncaught exception:')
+            raise ex
+
+        # should probably just always do this, just in case.
         external_hard_fault_teardown()
-        print('Hard Faulted. This was likely due to a curses error causing a freeze while rendering.')
-        exit(64)
-    except Exception as ex:
-        external_hard_fault_teardown()
-        print('Hard fault in GUI due to uncaught exception:')
-        raise ex
 
-    # should probably just always do this, just in case.
-    external_hard_fault_teardown()
+    @staticmethod
+    def serialize(args):
+        """
+    ----------
+    Dump image metadata as json
 
+    > ktool --dsc=<path> json [filename]
 
-def serialize(args):
-    """
-----------
-Dump image metadata as json
+    Dump image metadata including objc metadata
 
-> ktool json [filename]
+    > ktool --dsc=<path> json --with-objc [filename]
+        """
+        require_args(args, one_of=['filename'])
 
-Dump image metadata including objc metadata
+        log.LOG_LEVEL = LogLevel(-1)
 
-> ktool json --with-objc [filename]
-    """
-    require_args(args, one_of=['filename'])
-
-    log.LOG_LEVEL = LogLevel(-1)
-
-    with open(args.filename, 'rb') as fp:
-
-        macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
-
-        out_dict = {
-            'filetype': macho_file.type.name
-        }
         slices = []
 
-        for macho_slice in macho_file.slices:
-            image = ktool.load_image(macho_slice)
-            image_dict = image.serialize()
-            slice_dict = {
-                'offset': macho_slice.offset,
-                'size': macho_slice.size,
-                'type': macho_slice.type.name,
-                'subtype': macho_slice.subtype.name,
-                'image': image_dict
-            }
-            slices.append(slice_dict)
+        dsc_path = args.dsc
 
-        out_dict['slices'] = slices
+        dsc = ktool.load_dsc(dsc_path)
+        image = ktool.load_image_from_dsc(dsc, args.filename)
+        image_dict = image.serialize()
+        out_dict = {
+            'image': image_dict
+        }
 
         if args.with_objc:
             objc_image = ktool.load_objc_metadata(image)
@@ -540,218 +573,178 @@ Dump image metadata including objc metadata
 
         print(json.dumps(out_dict, indent=4, sort_keys=True))
 
+    @staticmethod
+    def ent(args):
+        """
+    ----------
+    Interact with codesigning info
 
-def ent(args):
-    """
-----------
-Interact with codesigning info
+    Dump entitlements
+    > ktool cs --ent [filename]
+        """
 
-Dump entitlements
-> ktool cs --ent [filename]
-    """
-    require_args(args, one_of=['get_ent'])
+        exit_with_error(KToolError.ArgumentError, "Entitlement dumping not supported with --dsc arg")
 
-    if args.get_ent:
-        with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
-                                 use_mmaped_io=MMAP_ENABLED)
-            ents = image.codesign_info.entitlements
-            print(ents)
+        require_args(args, one_of=['get_ent'])
 
-
-def symbols(args):
-    """
-----------
-List symbol imports/exports
-
-Print the list of imported symbols
-> ktool symbols --imports [filename]
-
-Print the list of exported symbols
-> ktool symbols --exports [filename]
-
-Print the symbol table
-> ktool symbols --symtab [filename]
-    """
-
-    require_args(args, one_of=['get_imports', 'get_actions', 'get_exports', 'get_symtab'])
-
-    if args.get_exports:
-        with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
+        if args.get_ent:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
                                      use_mmaped_io=MMAP_ENABLED)
+                ents = image.codesign_info.entitlements
+                print(ents)
 
-            table = Table()
-            table.titles = ['Address', 'Symbol']
+    @staticmethod
+    def symbols(args):
+        """
+    ----------
+    List symbol imports/exports
 
-            for symbol in image.exports:
-                table.rows.append([hex(symbol.address), symbol.fullname])
+    Print the list of imported symbols
+    > ktool --dsc=<path> symbols --imports [filename]
 
-            print(table.fetch_all(get_terminal_size().columns))
+    Print the list of exported symbols
+    > ktool --dsc=<path> symbols --exports [filename]
 
-    if args.get_symtab:
-        with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_imports=False, load_exports=False,
-                                     use_mmaped_io=MMAP_ENABLED)
+    Print the symbol table
+    > ktool --dsc=<path> symbols --symtab [filename]
+        """
 
-            table = Table()
-            table.titles = ['Address', 'Name']
+        require_args(args, one_of=['get_imports', 'get_actions', 'get_exports', 'get_symtab'])
 
-            for sym in image.symbol_table.table:
-                table.rows.append([hex(sym.address), sym.fullname])
+        if args.get_exports:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
+                                         use_mmaped_io=MMAP_ENABLED)
 
-            print(table.fetch_all(get_terminal_size().columns - 1))
+                table = Table()
+                table.titles = ['Address', 'Symbol']
 
-    if args.get_imports:
-        with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False,
-                                     use_mmaped_io=MMAP_ENABLED)
+                for symbol in image.exports:
+                    table.rows.append([hex(symbol.address), symbol.fullname])
 
-            import_symbols = {}
-            symbol = namedtuple('symbol', ['addr', 'name', 'image', 'from_table'])
+                print(table.fetch_all(get_terminal_size().columns))
 
-            for addr, sym in image.import_table.items():
-                try:
-                    import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname,
-                                                          image.linked_images[int(sym.ordinal) - 1].install_name,
-                                                          sym.attr)
-                except IndexError:
-                    import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, "ordinal: " + str(int(sym.ordinal)),
-                                                          sym.attr)
+        if args.get_symtab:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, load_imports=False, load_exports=False,
+                                         use_mmaped_io=MMAP_ENABLED)
 
-            table = Table()
-            table.titles = ['Addr', 'Symbol', 'Image', 'Binding']
+                table = Table()
+                table.titles = ['Address', 'Name']
 
-            for _, sym in import_symbols.items():
-                table.rows.append([sym.addr, sym.name, sym.image, sym.from_table])
+                for sym in image.symbol_table.table:
+                    table.rows.append([hex(sym.address), sym.fullname])
 
-            print(table.fetch_all(get_terminal_size().columns))
+                print(table.fetch_all(get_terminal_size().columns - 1))
 
-    elif args.get_actions:
-        with open(args.filename, 'rb') as fd:
-            image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+        if args.get_imports:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False,
+                                         use_mmaped_io=MMAP_ENABLED)
 
-            print('\nBinding Info'.ljust(60, '-') + '\n')
-            for sym in image.binding_table.symbol_table:
-                try:
-                    print(
-                        f'{hex(sym.address).ljust(15, " ")} | '
-                        f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                        f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
-                except IndexError:
-                    pass
-            print('\nWeak Binding Info'.ljust(60, '-') + '\n')
-            for sym in image.weak_binding_table.symbol_table:
-                try:
-                    print(
-                        f'{hex(sym.address).ljust(15, " ")} | '
-                        f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                        f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
-                except IndexError:
-                    pass
-            print('\nLazy Binding Info'.ljust(60, '-') + '\n')
-            for sym in image.lazy_binding_table.symbol_table:
-                try:
-                    print(
-                        f'{hex(sym.address).ljust(15, " ")} | '
-                        f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                        f'{sym.name.ljust(20, " ")} | '
-                        f'{sym.dec_type}')
-                except IndexError:
-                    pass
+                import_symbols = {}
+                symbol = namedtuple('symbol', ['addr', 'name', 'image', 'from_table'])
 
+                for addr, sym in image.import_table.items():
+                    try:
+                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname,
+                                                              image.linked_images[int(sym.ordinal) - 1].install_name,
+                                                              sym.attr)
+                    except IndexError:
+                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, "ordinal: " + str(int(sym.ordinal)),
+                                                              sym.attr)
 
-def insert(args):
-    """
-----------
-Utils for inserting load commands into mach-o binaries
+                table = Table()
+                table.titles = ['Addr', 'Symbol', 'Image', 'Binding']
 
-insert a LOAD_DYLIB command
-> ktool insert --lc load --payload /Dylib/Install/Name/Here.dylib --out <output filename> [filename]
+                for _, sym in import_symbols.items():
+                    table.rows.append([sym.addr, sym.name, sym.image, sym.from_table])
 
-commands currently supported:
-    load: LOAD_DYLIB
-    load-weak: LOAD_WEAK_DYLIB
-    lazy-load: LAZY_LOAD_DYLIB
-    load-upward: LOAD_UPWARD_DYLIB
-    """
+                print(table.fetch_all(get_terminal_size().columns))
 
-    require_args(args, always=['lc'])
+        elif args.get_actions:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
 
-    lc = None
-    if args.lc == "load":
-        lc = LOAD_COMMAND.LOAD_DYLIB
-    elif args.lc == "load-weak" or args.lc == "load_weak":
-        lc = LOAD_COMMAND.LOAD_WEAK_DYLIB
-    elif args.lc in ["load_lazy", "load-lazy", "lazy-load", "lazy_load"]:
-        lc = LOAD_COMMAND.LAZY_LOAD_DYLIB
-    elif args.lc == "load-upward" or args.lc == "load_upward":
-        lc = LOAD_COMMAND.LOAD_UPWARD_DYLIB
+                print('\nBinding Info'.ljust(60, '-') + '\n')
+                for sym in image.binding_table.symbol_table:
+                    try:
+                        print(
+                            f'{hex(sym.address).ljust(15, " ")} | '
+                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                            f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
+                    except IndexError:
+                        pass
+                print('\nWeak Binding Info'.ljust(60, '-') + '\n')
+                for sym in image.weak_binding_table.symbol_table:
+                    try:
+                        print(
+                            f'{hex(sym.address).ljust(15, " ")} | '
+                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                            f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
+                    except IndexError:
+                        pass
+                print('\nLazy Binding Info'.ljust(60, '-') + '\n')
+                for sym in image.lazy_binding_table.symbol_table:
+                    try:
+                        print(
+                            f'{hex(sym.address).ljust(15, " ")} | '
+                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                            f'{sym.name.ljust(20, " ")} | '
+                            f'{sym.dec_type}')
+                    except IndexError:
+                        pass
 
-    patched_libraries = []
+    @staticmethod
+    def insert(args):
+        """
+    ----------
+    Utils for inserting load commands into mach-o binaries
 
-    with open(args.filename, 'rb') as fp:
-        macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
-        for macho_slice in macho_file.slices:
+    insert a LOAD_DYLIB command
+    > ktool insert --lc load --payload /Dylib/Install/Name/Here.dylib --out <output filename> [filename]
 
-            image = ktool.load_image(macho_slice)
+    commands currently supported:
+        load: LOAD_DYLIB
+        load-weak: LOAD_WEAK_DYLIB
+        lazy-load: LAZY_LOAD_DYLIB
+        load-upward: LOAD_UPWARD_DYLIB
+        """
 
-            last_dylib_command_index = -1
-            for i, cmd in enumerate(image.macho_header.load_commands):
-                if isinstance(cmd, dylib_command):
-                    last_dylib_command_index = i + 1
+        exit_with_error(KToolError.ArgumentError, "insert command not supported with --dsc")
 
-            dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
-            dylib_cmd = Struct.create_with_values(dylib_command, [lc.value, 0, dylib_item.raw])
-            new_header = image.macho_header.insert_load_command(dylib_cmd, last_dylib_command_index, suffix=args.payload)
-            image.slice.patch(0, new_header.raw)
-            log.info("Reloading MachO Slice to verify integrity")
-            image = process_patches(image)
-            patched_libraries.append(image)
+        require_args(args, always=['lc'])
 
-    with open(args.out, 'wb') as fd:
-        if len(patched_libraries) > 1:
-            slices = [image.slice for image in patched_libraries]
-            fat_generator = FatMachOGenerator(slices)
-            fd.write(fat_generator.fat_head)
-            for arch in fat_generator.fat_archs:
-                fd.seek(arch.offset)
-                fd.write(arch.slice.full_bytes_for_slice())
-        else:
-            fd.write(patched_libraries[0].slice.full_bytes_for_slice())
+        lc = None
+        if args.lc == "load":
+            lc = LOAD_COMMAND.LOAD_DYLIB
+        elif args.lc == "load-weak" or args.lc == "load_weak":
+            lc = LOAD_COMMAND.LOAD_WEAK_DYLIB
+        elif args.lc in ["load_lazy", "load-lazy", "lazy-load", "lazy_load"]:
+            lc = LOAD_COMMAND.LAZY_LOAD_DYLIB
+        elif args.lc == "load-upward" or args.lc == "load_upward":
+            lc = LOAD_COMMAND.LOAD_UPWARD_DYLIB
 
-
-def edit(args):
-    """
-----------
-Utils for editing MachO Binaries
-
-Modify the install name of a image
-> ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
-    """
-
-    require_args(args, one_of=['iname', 'apad'])
-
-    patched_libraries = []
-
-    if args.iname:
-
-        new_iname = args.iname
+        patched_libraries = []
 
         with open(args.filename, 'rb') as fp:
             macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
             for macho_slice in macho_file.slices:
-                image = ktool.load_image(macho_slice)
-                id_dylib_index = -1
 
+                image = ktool.load_image(macho_slice)
+
+                last_dylib_command_index = -1
                 for i, cmd in enumerate(image.macho_header.load_commands):
-                    if cmd.cmd == 0xD:
-                        id_dylib_index = i
-                        break
-                dylib_item = Struct.create_with_values(dylib, [0x18, 0x1, 0x000000, 0x000000])
-                new_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB, 0, dylib_item.raw])
-                new_header = image.macho_header.replace_load_command(new_cmd, id_dylib_index, new_iname)
+                    if isinstance(cmd, dylib_command):
+                        last_dylib_command_index = i + 1
+
+                dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
+                dylib_cmd = Struct.create_with_values(dylib_command, [lc.value, 0, dylib_item.raw])
+                new_header = image.macho_header.insert_load_command(dylib_cmd, last_dylib_command_index, suffix=args.payload)
                 image.slice.patch(0, new_header.raw)
+                log.info("Reloading MachO Slice to verify integrity")
+                image = process_patches(image)
                 patched_libraries.append(image)
 
         with open(args.out, 'wb') as fd:
@@ -765,181 +758,233 @@ Modify the install name of a image
             else:
                 fd.write(patched_libraries[0].slice.full_bytes_for_slice())
 
+    @staticmethod
+    def edit(args):
+        """
+    ----------
+    Utils for editing MachO Binaries
 
-def img4(args):
-    """
-----------
-IMG4 Utilities
+    Modify the install name of a image
+    > ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
+        """
 
-Getting keybags
-> ktool img4 --kbag <filename>
+        exit_with_error(KToolError.ArgumentError, "edit command not supported with --dsc arg")
 
-Decrypting an im4p
-> ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
-    """
+        require_args(args, one_of=['iname', 'apad'])
 
-    require_args(args, one_of=['get_kbag', 'do_decrypt'])
+        patched_libraries = []
 
-    if args.get_kbag:
-        with open(args.filename, 'rb') as fp:
-            im4p = IM4P(fp.read())
-            for bag in im4p.kbag.keybags:
-                print(f'{bag.iv.hex()}{bag.key.hex()}')
+        if args.iname:
 
-    if args.do_decrypt:
-        require_args(args, always=['aes_key', 'aes_iv'])
+            new_iname = args.iname
 
-        out = args.out
-        if not out:
-            out = args.filename + '.dec'
-        with open(args.filename, 'rb') as fp:
-            with open(out, 'wb') as out_fp:
+            with open(args.filename, 'rb') as fp:
+                macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
+                for macho_slice in macho_file.slices:
+                    image = ktool.load_image(macho_slice)
+                    id_dylib_index = -1
+
+                    for i, cmd in enumerate(image.macho_header.load_commands):
+                        if cmd.cmd == 0xD:
+                            id_dylib_index = i
+                            break
+                    dylib_item = Struct.create_with_values(dylib, [0x18, 0x1, 0x000000, 0x000000])
+                    new_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB, 0, dylib_item.raw])
+                    new_header = image.macho_header.replace_load_command(new_cmd, id_dylib_index, new_iname)
+                    image.slice.patch(0, new_header.raw)
+                    patched_libraries.append(image)
+
+            with open(args.out, 'wb') as fd:
+                if len(patched_libraries) > 1:
+                    slices = [image.slice for image in patched_libraries]
+                    fat_generator = FatMachOGenerator(slices)
+                    fd.write(fat_generator.fat_head)
+                    for arch in fat_generator.fat_archs:
+                        fd.seek(arch.offset)
+                        fd.write(arch.slice.full_bytes_for_slice())
+                else:
+                    fd.write(patched_libraries[0].slice.full_bytes_for_slice())
+
+    @staticmethod
+    def img4(args):
+        """
+    ----------
+    IMG4 Utilities
+
+    Getting keybags
+    > ktool img4 --kbag <filename>
+
+    Decrypting an im4p
+    > ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
+        """
+
+        exit_with_error(KToolError.ArgumentError, "img4 command not supported with dsc arg. What were you expecting to happen?")
+
+        require_args(args, one_of=['get_kbag', 'do_decrypt'])
+
+        if args.get_kbag:
+            with open(args.filename, 'rb') as fp:
                 im4p = IM4P(fp.read())
-                out_fp.write(im4p.decrypt_data(args.aes_iv, args.aes_key))
+                for bag in im4p.kbag.keybags:
+                    print(f'{bag.iv.hex()}{bag.key.hex()}')
 
-        print(f'Attempted decrypt of data with key/iv and saved to {out}')
+        if args.do_decrypt:
+            require_args(args, always=['aes_key', 'aes_iv'])
 
+            out = args.out
+            if not out:
+                out = args.filename + '.dec'
+            with open(args.filename, 'rb') as fp:
+                with open(out, 'wb') as out_fp:
+                    im4p = IM4P(fp.read())
+                    out_fp.write(im4p.decrypt_data(args.aes_iv, args.aes_key))
 
-def lipo(args):
-    """
-----------
-Utilities for combining/separating slices in fat MachO files.
+            print(f'Attempted decrypt of data with key/iv and saved to {out}')
 
-Extract a slice from a fat binary
-> ktool lipo --extract [slice_name] [filename]
+    @staticmethod
+    def lipo(args):
+        """
+    ----------
+    Utilities for combining/separating slices in fat MachO files.
 
-Create a fat Macho Binary from multiple thin binaries
-> ktool lipo --create [--out filename] [filenames]
-    """
+    Extract a slice from a fat binary
+    > ktool lipo --extract [slice_name] [filename]
 
-    require_args(args, one_of=['combine', 'extract'])
+    Create a fat Macho Binary from multiple thin binaries
+    > ktool lipo --create [--out filename] [filenames]
+        """
 
-    if args.combine:
-        output = args.out
-        if output == "":
-            output = args.filename[0] + '.fat'
-        slices = []
-        for filename in args.filename:
-            # Slice() might hold a ref preventing it from being closed? but i'm just going to let it close on exit()
-            fd = open(filename, 'rb')
-            macho_file = ktool.load_macho_file(fd, use_mmaped_io=MMAP_ENABLED)
-            if macho_file.type != MachOFileType.THIN:
-                exit_with_error(KToolError.ArgumentError, "Fat mach-o passed to --create")
-            slices.append(macho_file.slices[0])
+        exit_with_error(KToolError.ArgumentError, "lipo not supported with --dsc")
 
-        with open(output, 'wb') as fd:
-            fd.write(ktool.macho_combine(slices).read())
+        require_args(args, one_of=['combine', 'extract'])
 
-    elif args.extract != "":
-        with open(args.filename[0], 'rb') as fd:
-            macho_file = ktool.load_macho_file(fd, use_mmaped_io=MMAP_ENABLED)
+        if args.combine:
             output = args.out
             if output == "":
-                output = args.filename[0] + '.' + args.extract.lower()
+                output = args.filename[0] + '.fat'
+            slices = []
+            for filename in args.filename:
+                # Slice() might hold a ref preventing it from being closed? but i'm just going to let it close on exit()
+                fd = open(filename, 'rb')
+                macho_file = ktool.load_macho_file(fd, use_mmaped_io=MMAP_ENABLED)
+                if macho_file.type != MachOFileType.THIN:
+                    exit_with_error(KToolError.ArgumentError, "Fat mach-o passed to --create")
+                slices.append(macho_file.slices[0])
+
+            with open(output, 'wb') as fd:
+                fd.write(ktool.macho_combine(slices).read())
+
+        elif args.extract != "":
+            with open(args.filename[0], 'rb') as fd:
+                macho_file = ktool.load_macho_file(fd, use_mmaped_io=MMAP_ENABLED)
+                output = args.out
+                if output == "":
+                    output = args.filename[0] + '.' + args.extract.lower()
+                for macho_slice in macho_file.slices:
+                    if macho_slice.type.name.lower() == args.extract:
+                        with open(output, 'wb') as out:
+                            out.write(macho_slice.full_bytes_for_slice())
+                        return
+                macho_slices_list = [macho_slice.type.name.lower() for macho_slice in macho_file.slices]
+                exit_with_error(KToolError.ArgumentError,
+                                f'Architecture {args.extract} was not found (found: {macho_slices_list})')
+
+    @staticmethod
+    def _list(args):
+        """
+    ----------
+    Tools for printing various lists
+
+    To print the list of classes
+    > ktool list --classes [filename]
+
+    To print the list of protocols
+    > ktool list --protocols [filename]
+
+    To print a  list of linked libraries
+    > ktool list --linked [filename]
+
+    To print a list of Load Commands and their data
+    > ktool list --cmds [filename]
+
+    Print the list of function starts
+    > ktool list --funcs [filename]
+        """
+
+        require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types', 'get_fstarts'])
+
+        with open(args.filename, 'rb') as fd:
+
+            if not args.get_lcs and not args.get_linked:
+                image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+                objc_image = ktool.load_objc_metadata(image)
+            else:
+                image = ktool.load_image(fd, args.slice_index, False, False, False)
+
+            if args.get_lcs:
+                table = Table(dividers=True, avoid_wrapping_titles=True)
+                table.titles = ['Index', 'Load Command', 'Data']
+                table.size_pinned_columns = [0, 1]
+                for i, lc in enumerate(image.macho_header.load_commands):
+                    lc_dat = str(lc)
+                    if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB, LOAD_COMMAND.SUB_CLIENT]:
+                        lc_dat += '\n"' + image.get_cstr_at(lc.off + lc.SIZE, vm=False) + '"'
+                    table.rows.append([str(i), LOAD_COMMAND(lc.cmd).name.ljust(15, ' '), lc_dat])
+                print(table.fetch_all(get_terminal_size().columns-5))
+            elif args.get_classes:
+                for obj_class in objc_image.classlist:
+                    print(f'{obj_class.name}')
+            elif args.get_swift_types:
+                load_swift_types(image)
+            elif args.get_protos:
+                for objc_proto in objc_image.protolist:
+                    print(f'{objc_proto.name}')
+            elif args.get_linked:
+                for extlib in image.linked_images:
+                    print('(Weak) ' + extlib.install_name if extlib.weak else '' + extlib.install_name)
+            elif args.get_fstarts:
+                for addr in image.function_starts:
+                    print(f'{hex(addr)} -> {image.symbols[addr].fullname if addr in image.symbols else ""}')
+
+    @staticmethod
+    def _file(args):
+        """
+    ----------
+
+    Print basic information about a file (e.g 'Thin MachO Binary')
+    > ktool file [filename]
+        """
+        with open(args.filename, 'rb') as fp:
+            macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
+
+            table = Table()
+            table.titles = ['Address', 'CPU Type', 'CPU Subtype']
+
             for macho_slice in macho_file.slices:
-                if macho_slice.type.name.lower() == args.extract:
-                    with open(output, 'wb') as out:
-                        out.write(macho_slice.full_bytes_for_slice())
-                    return
-            macho_slices_list = [macho_slice.type.name.lower() for macho_slice in macho_file.slices]
-            exit_with_error(KToolError.ArgumentError,
-                            f'Architecture {args.extract} was not found (found: {macho_slices_list})')
+                table.rows.append([
+                        f'{hex(macho_slice.offset)}',
+                        f'{macho_slice.type.name}',
+                        f'{macho_slice.subtype.name}'])
 
+            print(table.fetch_all(get_terminal_size().columns))
 
-def _list(args):
-    """
-----------
-Tools for printing various lists
+    @staticmethod
+    def info(args):
+        """
+    ----------
+    Some misc info about the target mach-o
 
-To print the list of classes
-> ktool list --classes [filename]
+    Print generic info about a MachO file
+    > ktool info [--slice n] [filename]
 
-To print the list of protocols
-> ktool list --protocols [filename]
+    Print VM -> Slice -> Filename address mapping for a slice
+    of a MachO file
+    > ktool info [--slice n] --vm [filename]
+        """
+        dsc_path = args.dsc
 
-To print a  list of linked libraries
-> ktool list --linked [filename]
-
-To print a list of Load Commands and their data
-> ktool list --cmds [filename]
-
-Print the list of function starts
-> ktool list --funcs [filename]
-    """
-
-    require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types', 'get_fstarts'])
-
-    with open(args.filename, 'rb') as fd:
-
-        if not args.get_lcs and not args.get_linked:
-            image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
-            objc_image = ktool.load_objc_metadata(image)
-        else:
-            image = ktool.load_image(fd, args.slice_index, False, False, False)
-
-        if args.get_lcs:
-            table = Table(dividers=True, avoid_wrapping_titles=True)
-            table.titles = ['Index', 'Load Command', 'Data']
-            table.size_pinned_columns = [0, 1]
-            for i, lc in enumerate(image.macho_header.load_commands):
-                lc_dat = str(lc)
-                if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB, LOAD_COMMAND.SUB_CLIENT]:
-                    lc_dat += '\n"' + image.get_cstr_at(lc.off + lc.SIZE, vm=False) + '"'
-                table.rows.append([str(i), LOAD_COMMAND(lc.cmd).name.ljust(15, ' '), lc_dat])
-            print(table.fetch_all(get_terminal_size().columns-5))
-        elif args.get_classes:
-            for obj_class in objc_image.classlist:
-                print(f'{obj_class.name}')
-        elif args.get_swift_types:
-            load_swift_types(image)
-        elif args.get_protos:
-            for objc_proto in objc_image.protolist:
-                print(f'{objc_proto.name}')
-        elif args.get_linked:
-            for extlib in image.linked_images:
-                print('(Weak) ' + extlib.install_name if extlib.weak else '' + extlib.install_name)
-        elif args.get_fstarts:
-            for addr in image.function_starts:
-                print(f'{hex(addr)} -> {image.symbols[addr].fullname if addr in image.symbols else ""}')
-
-
-def _file(args):
-    """
-----------
-
-Print basic information about a file (e.g 'Thin MachO Binary')
-> ktool file [filename]
-    """
-    with open(args.filename, 'rb') as fp:
-        macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
-
-        table = Table()
-        table.titles = ['Address', 'CPU Type', 'CPU Subtype']
-
-        for macho_slice in macho_file.slices:
-            table.rows.append([
-                    f'{hex(macho_slice.offset)}',
-                    f'{macho_slice.type.name}',
-                    f'{macho_slice.subtype.name}'])
-
-        print(table.fetch_all(get_terminal_size().columns))
-
-
-def info(args):
-    """
-----------
-Some misc info about the target mach-o
-
-Print generic info about a MachO file
-> ktool info [--slice n] [filename]
-
-Print VM -> Slice -> Filename address mapping for a slice
-of a MachO file
-> ktool info [--slice n] --vm [filename]
-    """
-    with open(args.filename, 'rb') as fp:
-        image = ktool.load_image(fp, args.slice_index, load_symtab=False, load_imports=False, load_exports=False,
-                                 use_mmaped_io=MMAP_ENABLED)
+        dsc = ktool.load_dsc(dsc_path)
+        image = ktool.load_image_from_dsc(dsc, args.filename)
 
         if args.get_vm:
             print(image.vm)
@@ -956,32 +1001,33 @@ of a MachO file
 
             print(message)
 
+    @staticmethod
+    def dump(args):
+        """
+    ------
+    Tools to reconstruct certain files from compiled MachOs
 
-def dump(args):
-    """
-------
-Tools to reconstruct certain files from compiled MachOs
+    Dump header for a single class
+    > ktool --dsc=<path> dump --class <classname> [filename]
 
-Dump header for a single class
-> ktool dump --class <classname> [filename]
+    To dump a full set of headers for a bin/framework
+    > ktool --dsc=<path> dump --headers --fdec --out <directory> [filename]
 
-To dump a full set of headers for a bin/framework
-> ktool dump --headers --fdec --out <directory> [filename]
+    To dump .tbd files for a framework
+    > ktool --dsc=<path> dump --tbd [filename]
+        """
 
-To dump .tbd files for a framework
-> ktool dump --tbd [filename]
-    """
+        require_args(args, one_of=['do_headers', 'get_class', 'do_tbd'])
 
-    require_args(args, one_of=['do_headers', 'get_class', 'do_tbd'])
+        opts.OBJC_LOAD_ERRORS_SEND_TO_DEBUG = True
 
-    if args.get_class:
-        with open(args.filename, 'rb') as fp:
-            image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED, force_misaligned_vm=args.force_misaligned)
+        if args.get_class:
+            dsc_path = args.dsc
 
-            if image.name == "":
-                image.name = os.path.basename(args.filename)
-
+            dsc = ktool.load_dsc(dsc_path)
+            image = ktool.load_image_from_dsc(dsc, args.filename)
             objc_image = ktool.load_objc_metadata(image)
+
             objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
             found = False
             for header_name, header in objc_headers.items():
@@ -992,20 +1038,17 @@ To dump .tbd files for a framework
             if not found:
                 print(f'{args.get_class} not found', file=sys.stderr)
 
-    if args.do_headers:
+        if args.do_headers:
 
-        if args.hard_fail:
-            ignore.OBJC_ERRORS = False
+            if args.hard_fail:
+                ignore.OBJC_ERRORS = False
 
-        if args.usfs:
-            opts.USE_SYMTAB_INSTEAD_OF_SELECTORS = True
+            if args.usfs:
+                opts.USE_SYMTAB_INSTEAD_OF_SELECTORS = True
 
-        with open(args.filename, 'rb') as fp:
-            image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
-
-            if image.name == "":
-                image.name = os.path.basename(args.filename)
-
+            dsc_path = args.dsc
+            dsc = ktool.load_dsc(dsc_path)
+            image = ktool.load_image_from_dsc(dsc, args.filename)
             objc_image = ktool.load_objc_metadata(image)
 
             objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
@@ -1024,74 +1067,697 @@ To dump .tbd files for a framework
                     pass
                     # pprint(image.bench_stats)
 
-    elif args.do_tbd:
+        elif args.do_tbd:
+            with open(args.filename, 'rb') as fp:
+                image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+
+                with open(image.name + '.tbd', 'w') as out_fp:
+                    out_fp.write(ktool.generate_text_based_stub(image, compatibility=True))
+
+    @staticmethod
+    def kcache(args):
+        """
+    ------
+    KernelCache specific tools
+
+    List Kext IDS (And versions, and executable names if they were found)
+    > ktool kcache --kexts [filename]
+
+    Dump info for a specific kext
+    > ktool kcache --kext [Bundle ID or Executable Name] [filename]
+        """
+        require_args(args, one_of=['get_info', 'get_kexts', 'get_kext', 'do_extract'])
+
+        fp = open(args.filename, 'rb')
+        macho_file = ktool.load_macho_file(fp)
+        kernel_cache = KernelCache(macho_file)
+
+        if args.get_info:
+            print(kernel_cache.version_str)
+
+        elif args.get_kexts:
+            for kext in kernel_cache.kexts:
+                print(f'{kext.name} -> {kext.executable_name} ({kext.version})')
+
+        elif args.get_kext:
+            kext = None
+            for _kext in kernel_cache.kexts:
+                if args.get_kext == _kext.executable_name:
+                    kext = _kext
+                    break
+            if not kext:
+                for _kext in kernel_cache.kexts:
+                    if args.get_kext == _kext.id:
+                        kext = _kext
+                        break
+
+            if isinstance(kext, Kext):
+                bundle_text = f"Bundle ID: {kext.id}\nExecutable Name: {kext.executable_name}\n{kext.info_string}\n" \
+                              f"Version: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}"
+                print(bundle_text)
+            else:
+                print('Kext Not Found')
+
+        elif args.do_extract:
+            kext = None
+            for _kext in kernel_cache.kexts:
+                if args.do_extract == _kext.executable_name:
+                    kext = _kext
+                    break
+            if not kext:
+                for _kext in kernel_cache.kexts:
+                    if args.do_extract == _kext.id:
+                        kext = _kext
+                        break
+
+            if isinstance(kext, EmbeddedKext):
+                with open(kext.id.split('.')[-1], 'wb') as out:
+                    out.write(kext.image.slice.full_bytes_for_slice())
+            else:
+                print('Kext Not Found')
+
+class MachOFileCommands:
+    @staticmethod
+    def _open(args):
+        """
+    ktool open [filename]
+        """
+        # noinspection PyUnreachableCode
+        try:
+            log.LOG_LEVEL = LogLevel.DEBUG
+            screen = KToolScreen(args.hard_fail)
+            log.LOG_FUNC = screen.ktool_dbg_print_func
+            log.LOG_ERR = screen.ktool_dbg_print_err_func
+            screen.load_file(args.filename, MMAP_ENABLED)
+        except KeyboardInterrupt:
+            external_hard_fault_teardown()
+            print('Hard Faulted. This was likely due to a curses error causing a freeze while rendering.')
+            exit(64)
+        except Exception as ex:
+            external_hard_fault_teardown()
+            print('Hard fault in GUI due to uncaught exception:')
+            raise ex
+
+        # should probably just always do this, just in case.
+        external_hard_fault_teardown()
+
+    @staticmethod
+    def serialize(args):
+        """
+    ----------
+    Dump image metadata as json
+
+    > ktool json [filename]
+
+    Dump image metadata including objc metadata
+
+    > ktool json --with-objc [filename]
+        """
+        require_args(args, one_of=['filename'])
+
+        log.LOG_LEVEL = LogLevel(-1)
+
         with open(args.filename, 'rb') as fp:
-            image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
 
-            with open(image.name + '.tbd', 'w') as out_fp:
-                out_fp.write(ktool.generate_text_based_stub(image, compatibility=True))
+            macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
 
+            out_dict = {
+                'filetype': macho_file.type.name
+            }
+            slices = []
 
-def kcache(args):
-    """
-------
-KernelCache specific tools
+            for macho_slice in macho_file.slices:
+                image = ktool.load_image(macho_slice)
+                image_dict = image.serialize()
+                slice_dict = {
+                    'offset': macho_slice.offset,
+                    'size': macho_slice.size,
+                    'type': macho_slice.type.name,
+                    'subtype': macho_slice.subtype.name,
+                    'image': image_dict
+                }
+                slices.append(slice_dict)
 
-List Kext IDS (And versions, and executable names if they were found)
-> ktool kcache --kexts [filename]
+            out_dict['slices'] = slices
 
-Dump info for a specific kext
-> ktool kcache --kext [Bundle ID or Executable Name] [filename]
-    """
-    require_args(args, one_of=['get_info', 'get_kexts', 'get_kext', 'do_extract'])
+            if args.with_objc:
+                objc_image = ktool.load_objc_metadata(image)
+                out_dict['objc'] = objc_image.serialize()
 
-    fp = open(args.filename, 'rb')
-    macho_file = ktool.load_macho_file(fp)
-    kernel_cache = KernelCache(macho_file)
+            print(json.dumps(out_dict, indent=4, sort_keys=True))
 
-    if args.get_info:
-        print(kernel_cache.version_str)
+    @staticmethod
+    def ent(args):
+        """
+    ----------
+    Interact with codesigning info
 
-    elif args.get_kexts:
-        for kext in kernel_cache.kexts:
-            print(f'{kext.name} -> {kext.executable_name} ({kext.version})')
+    Dump entitlements
+    > ktool cs --ent [filename]
+        """
+        require_args(args, one_of=['get_ent'])
 
-    elif args.get_kext:
-        kext = None
-        for _kext in kernel_cache.kexts:
-            if args.get_kext == _kext.executable_name:
-                kext = _kext
-                break
-        if not kext:
+        if args.get_ent:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
+                                     use_mmaped_io=MMAP_ENABLED)
+                ents = image.codesign_info.entitlements
+                print(ents)
+
+    @staticmethod
+    def symbols(args):
+        """
+    ----------
+    List symbol imports/exports
+
+    Print the list of imported symbols
+    > ktool symbols --imports [filename]
+
+    Print the list of exported symbols
+    > ktool symbols --exports [filename]
+
+    Print the symbol table
+    > ktool symbols --symtab [filename]
+        """
+
+        require_args(args, one_of=['get_imports', 'get_actions', 'get_exports', 'get_symtab'])
+
+        if args.get_exports:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
+                                         use_mmaped_io=MMAP_ENABLED)
+
+                table = Table()
+                table.titles = ['Address', 'Symbol']
+
+                for symbol in image.exports:
+                    table.rows.append([hex(symbol.address), symbol.fullname])
+
+                print(table.fetch_all(get_terminal_size().columns))
+
+        if args.get_symtab:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, load_imports=False, load_exports=False,
+                                         use_mmaped_io=MMAP_ENABLED)
+
+                table = Table()
+                table.titles = ['Address', 'Name']
+
+                for sym in image.symbol_table.table:
+                    table.rows.append([hex(sym.address), sym.fullname])
+
+                print(table.fetch_all(get_terminal_size().columns - 1))
+
+        if args.get_imports:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, load_exports=False, load_symtab=False,
+                                         use_mmaped_io=MMAP_ENABLED)
+
+                import_symbols = {}
+                symbol = namedtuple('symbol', ['addr', 'name', 'image', 'from_table'])
+
+                for addr, sym in image.import_table.items():
+                    try:
+                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname,
+                                                              image.linked_images[int(sym.ordinal) - 1].install_name,
+                                                              sym.attr)
+                    except IndexError:
+                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, "ordinal: " + str(int(sym.ordinal)),
+                                                              sym.attr)
+
+                table = Table()
+                table.titles = ['Addr', 'Symbol', 'Image', 'Binding']
+
+                for _, sym in import_symbols.items():
+                    table.rows.append([sym.addr, sym.name, sym.image, sym.from_table])
+
+                print(table.fetch_all(get_terminal_size().columns))
+
+        elif args.get_actions:
+            with open(args.filename, 'rb') as fd:
+                image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+
+                print('\nBinding Info'.ljust(60, '-') + '\n')
+                for sym in image.binding_table.symbol_table:
+                    try:
+                        print(
+                            f'{hex(sym.address).ljust(15, " ")} | '
+                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                            f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
+                    except IndexError:
+                        pass
+                print('\nWeak Binding Info'.ljust(60, '-') + '\n')
+                for sym in image.weak_binding_table.symbol_table:
+                    try:
+                        print(
+                            f'{hex(sym.address).ljust(15, " ")} | '
+                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                            f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
+                    except IndexError:
+                        pass
+                print('\nLazy Binding Info'.ljust(60, '-') + '\n')
+                for sym in image.lazy_binding_table.symbol_table:
+                    try:
+                        print(
+                            f'{hex(sym.address).ljust(15, " ")} | '
+                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                            f'{sym.name.ljust(20, " ")} | '
+                            f'{sym.dec_type}')
+                    except IndexError:
+                        pass
+
+    @staticmethod
+    def insert(args):
+        """
+    ----------
+    Utils for inserting load commands into mach-o binaries
+
+    insert a LOAD_DYLIB command
+    > ktool insert --lc load --payload /Dylib/Install/Name/Here.dylib --out <output filename> [filename]
+
+    commands currently supported:
+        load: LOAD_DYLIB
+        load-weak: LOAD_WEAK_DYLIB
+        lazy-load: LAZY_LOAD_DYLIB
+        load-upward: LOAD_UPWARD_DYLIB
+        """
+
+        require_args(args, always=['lc'])
+
+        lc = None
+        if args.lc == "load":
+            lc = LOAD_COMMAND.LOAD_DYLIB
+        elif args.lc == "load-weak" or args.lc == "load_weak":
+            lc = LOAD_COMMAND.LOAD_WEAK_DYLIB
+        elif args.lc in ["load_lazy", "load-lazy", "lazy-load", "lazy_load"]:
+            lc = LOAD_COMMAND.LAZY_LOAD_DYLIB
+        elif args.lc == "load-upward" or args.lc == "load_upward":
+            lc = LOAD_COMMAND.LOAD_UPWARD_DYLIB
+
+        patched_libraries = []
+
+        with open(args.filename, 'rb') as fp:
+            macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
+            for macho_slice in macho_file.slices:
+
+                image = ktool.load_image(macho_slice)
+
+                last_dylib_command_index = -1
+                for i, cmd in enumerate(image.macho_header.load_commands):
+                    if isinstance(cmd, dylib_command):
+                        last_dylib_command_index = i + 1
+
+                dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
+                dylib_cmd = Struct.create_with_values(dylib_command, [lc.value, 0, dylib_item.raw])
+                new_header = image.macho_header.insert_load_command(dylib_cmd, last_dylib_command_index, suffix=args.payload)
+                image.slice.patch(0, new_header.raw)
+                log.info("Reloading MachO Slice to verify integrity")
+                image = process_patches(image)
+                patched_libraries.append(image)
+
+        with open(args.out, 'wb') as fd:
+            if len(patched_libraries) > 1:
+                slices = [image.slice for image in patched_libraries]
+                fat_generator = FatMachOGenerator(slices)
+                fd.write(fat_generator.fat_head)
+                for arch in fat_generator.fat_archs:
+                    fd.seek(arch.offset)
+                    fd.write(arch.slice.full_bytes_for_slice())
+            else:
+                fd.write(patched_libraries[0].slice.full_bytes_for_slice())
+
+    @staticmethod
+    def edit(args):
+        """
+    ----------
+    Utils for editing MachO Binaries
+
+    Modify the install name of a image
+    > ktool edit --iname [Desired Install Name] --out <Output Filename> [filename]
+        """
+
+        require_args(args, one_of=['iname', 'apad'])
+
+        patched_libraries = []
+
+        if args.iname:
+
+            new_iname = args.iname
+
+            with open(args.filename, 'rb') as fp:
+                macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
+                for macho_slice in macho_file.slices:
+                    image = ktool.load_image(macho_slice)
+                    id_dylib_index = -1
+
+                    for i, cmd in enumerate(image.macho_header.load_commands):
+                        if cmd.cmd == 0xD:
+                            id_dylib_index = i
+                            break
+                    dylib_item = Struct.create_with_values(dylib, [0x18, 0x1, 0x000000, 0x000000])
+                    new_cmd = Struct.create_with_values(dylib_command, [LOAD_COMMAND.ID_DYLIB, 0, dylib_item.raw])
+                    new_header = image.macho_header.replace_load_command(new_cmd, id_dylib_index, new_iname)
+                    image.slice.patch(0, new_header.raw)
+                    patched_libraries.append(image)
+
+            with open(args.out, 'wb') as fd:
+                if len(patched_libraries) > 1:
+                    slices = [image.slice for image in patched_libraries]
+                    fat_generator = FatMachOGenerator(slices)
+                    fd.write(fat_generator.fat_head)
+                    for arch in fat_generator.fat_archs:
+                        fd.seek(arch.offset)
+                        fd.write(arch.slice.full_bytes_for_slice())
+                else:
+                    fd.write(patched_libraries[0].slice.full_bytes_for_slice())
+
+    @staticmethod
+    def img4(args):
+        """
+    ----------
+    IMG4 Utilities
+
+    Getting keybags
+    > ktool img4 --kbag <filename>
+
+    Decrypting an im4p
+    > ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
+        """
+
+        require_args(args, one_of=['get_kbag', 'do_decrypt'])
+
+        if args.get_kbag:
+            with open(args.filename, 'rb') as fp:
+                im4p = IM4P(fp.read())
+                for bag in im4p.kbag.keybags:
+                    print(f'{bag.iv.hex()}{bag.key.hex()}')
+
+        if args.do_decrypt:
+            require_args(args, always=['aes_key', 'aes_iv'])
+
+            out = args.out
+            if not out:
+                out = args.filename + '.dec'
+            with open(args.filename, 'rb') as fp:
+                with open(out, 'wb') as out_fp:
+                    im4p = IM4P(fp.read())
+                    out_fp.write(im4p.decrypt_data(args.aes_iv, args.aes_key))
+
+            print(f'Attempted decrypt of data with key/iv and saved to {out}')
+
+    @staticmethod
+    def lipo(args):
+        """
+    ----------
+    Utilities for combining/separating slices in fat MachO files.
+
+    Extract a slice from a fat binary
+    > ktool lipo --extract [slice_name] [filename]
+
+    Create a fat Macho Binary from multiple thin binaries
+    > ktool lipo --create [--out filename] [filenames]
+        """
+
+        require_args(args, one_of=['combine', 'extract'])
+
+        if args.combine:
+            output = args.out
+            if output == "":
+                output = args.filename[0] + '.fat'
+            slices = []
+            for filename in args.filename:
+                # Slice() might hold a ref preventing it from being closed? but i'm just going to let it close on exit()
+                fd = open(filename, 'rb')
+                macho_file = ktool.load_macho_file(fd, use_mmaped_io=MMAP_ENABLED)
+                if macho_file.type != MachOFileType.THIN:
+                    exit_with_error(KToolError.ArgumentError, "Fat mach-o passed to --create")
+                slices.append(macho_file.slices[0])
+
+            with open(output, 'wb') as fd:
+                fd.write(ktool.macho_combine(slices).read())
+
+        elif args.extract != "":
+            with open(args.filename[0], 'rb') as fd:
+                macho_file = ktool.load_macho_file(fd, use_mmaped_io=MMAP_ENABLED)
+                output = args.out
+                if output == "":
+                    output = args.filename[0] + '.' + args.extract.lower()
+                for macho_slice in macho_file.slices:
+                    if macho_slice.type.name.lower() == args.extract:
+                        with open(output, 'wb') as out:
+                            out.write(macho_slice.full_bytes_for_slice())
+                        return
+                macho_slices_list = [macho_slice.type.name.lower() for macho_slice in macho_file.slices]
+                exit_with_error(KToolError.ArgumentError,
+                                f'Architecture {args.extract} was not found (found: {macho_slices_list})')
+
+    @staticmethod
+    def _list(args):
+        """
+    ----------
+    Tools for printing various lists
+
+    To print the list of classes
+    > ktool list --classes [filename]
+
+    To print the list of protocols
+    > ktool list --protocols [filename]
+
+    To print a  list of linked libraries
+    > ktool list --linked [filename]
+
+    To print a list of Load Commands and their data
+    > ktool list --cmds [filename]
+
+    Print the list of function starts
+    > ktool list --funcs [filename]
+        """
+
+        require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types', 'get_fstarts'])
+
+        with open(args.filename, 'rb') as fd:
+
+            if not args.get_lcs and not args.get_linked:
+                image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+                objc_image = ktool.load_objc_metadata(image)
+            else:
+                image = ktool.load_image(fd, args.slice_index, False, False, False)
+
+            if args.get_lcs:
+                table = Table(dividers=True, avoid_wrapping_titles=True)
+                table.titles = ['Index', 'Load Command', 'Data']
+                table.size_pinned_columns = [0, 1]
+                for i, lc in enumerate(image.macho_header.load_commands):
+                    lc_dat = str(lc)
+                    if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB, LOAD_COMMAND.SUB_CLIENT]:
+                        lc_dat += '\n"' + image.get_cstr_at(lc.off + lc.SIZE, vm=False) + '"'
+                    table.rows.append([str(i), LOAD_COMMAND(lc.cmd).name.ljust(15, ' '), lc_dat])
+                print(table.fetch_all(get_terminal_size().columns-5))
+            elif args.get_classes:
+                for obj_class in objc_image.classlist:
+                    print(f'{obj_class.name}')
+            elif args.get_swift_types:
+                load_swift_types(image)
+            elif args.get_protos:
+                for objc_proto in objc_image.protolist:
+                    print(f'{objc_proto.name}')
+            elif args.get_linked:
+                for extlib in image.linked_images:
+                    print('(Weak) ' + extlib.install_name if extlib.weak else '' + extlib.install_name)
+            elif args.get_fstarts:
+                for addr in image.function_starts:
+                    print(f'{hex(addr)} -> {image.symbols[addr].fullname if addr in image.symbols else ""}')
+
+    @staticmethod
+    def _file(args):
+        """
+    ----------
+
+    Print basic information about a file (e.g 'Thin MachO Binary')
+    > ktool file [filename]
+        """
+        with open(args.filename, 'rb') as fp:
+            macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
+
+            table = Table()
+            table.titles = ['Address', 'CPU Type', 'CPU Subtype']
+
+            for macho_slice in macho_file.slices:
+                table.rows.append([
+                        f'{hex(macho_slice.offset)}',
+                        f'{macho_slice.type.name}',
+                        f'{macho_slice.subtype.name}'])
+
+            print(table.fetch_all(get_terminal_size().columns))
+
+    @staticmethod
+    def info(args):
+        """
+    ----------
+    Some misc info about the target mach-o
+
+    Print generic info about a MachO file
+    > ktool info [--slice n] [filename]
+
+    Print VM -> Slice -> Filename address mapping for a slice
+    of a MachO file
+    > ktool info [--slice n] --vm [filename]
+        """
+        with open(args.filename, 'rb') as fp:
+            image = ktool.load_image(fp, args.slice_index, load_symtab=False, load_imports=False, load_exports=False,
+                                     use_mmaped_io=MMAP_ENABLED)
+
+            if args.get_vm:
+                print(image.vm)
+
+            else:
+                message = (f'\033[32m{image.base_name} \33[37m--- \n'
+                           f'\033[34mInstall Name: \33[37m{image.install_name}\n'
+                           f'\033[34mFiletype: \33[37m{image.macho_header.filetype.name}\n' 
+                           f'\033[34mFlags: \33[37m{", ".join([i.name for i in image.macho_header.flags])}\n'
+                           f'\033[34mUUID: \33[37m{image.uuid.hex().upper()}\n'
+                           f'\033[34mPlatform: \33[37m{image.platform.name}\n'
+                           f'\033[34mMinimum OS: \33[37m{image.minos.x}.{image.minos.y}.{image.minos.z}\n'
+                           f'\033[34mSDK Version: \33[37m{image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}')
+
+                print(message)
+
+    @staticmethod
+    def dump(args):
+        """
+    ------
+    Tools to reconstruct certain files from compiled MachOs
+
+    Dump header for a single class
+    > ktool dump --class <classname> [filename]
+
+    To dump a full set of headers for a bin/framework
+    > ktool dump --headers --fdec --out <directory> [filename]
+
+    To dump .tbd files for a framework
+    > ktool dump --tbd [filename]
+        """
+
+        require_args(args, one_of=['do_headers', 'get_class', 'do_tbd'])
+
+        if args.get_class:
+            with open(args.filename, 'rb') as fp:
+                image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED, force_misaligned_vm=args.force_misaligned)
+
+                if image.name == "":
+                    image.name = os.path.basename(args.filename)
+
+                objc_image = ktool.load_objc_metadata(image)
+                objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
+                found = False
+                for header_name, header in objc_headers.items():
+                    if args.get_class.lower() == header_name[:-2].lower():
+                        print(header.generate_highlighted_text())
+                        found = True
+                        break
+                if not found:
+                    print(f'{args.get_class} not found', file=sys.stderr)
+
+        if args.do_headers:
+
+            if args.hard_fail:
+                ignore.OBJC_ERRORS = False
+
+            if args.usfs:
+                opts.USE_SYMTAB_INSTEAD_OF_SELECTORS = True
+
+            with open(args.filename, 'rb') as fp:
+                image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+
+                if image.name == "":
+                    image.name = os.path.basename(args.filename)
+
+                objc_image = ktool.load_objc_metadata(image)
+
+                objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
+
+                for header_name, header in objc_headers.items():
+                    if not args.outdir:
+                        print(f'\n\n{header_name}\n{header}')
+                    elif args.outdir == 'ndbg':
+                        pass
+                    else:
+                        os.makedirs(args.outdir, exist_ok=True)
+                        with open(args.outdir + '/' + header_name, 'w') as out:
+                            out.write(str(header))
+
+                    if args.bench:
+                        pass
+                        # pprint(image.bench_stats)
+
+        elif args.do_tbd:
+            with open(args.filename, 'rb') as fp:
+                image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+
+                with open(image.name + '.tbd', 'w') as out_fp:
+                    out_fp.write(ktool.generate_text_based_stub(image, compatibility=True))
+
+    @staticmethod
+    def kcache(args):
+        """
+    ------
+    KernelCache specific tools
+
+    List Kext IDS (And versions, and executable names if they were found)
+    > ktool kcache --kexts [filename]
+
+    Dump info for a specific kext
+    > ktool kcache --kext [Bundle ID or Executable Name] [filename]
+        """
+        require_args(args, one_of=['get_info', 'get_kexts', 'get_kext', 'do_extract'])
+
+        fp = open(args.filename, 'rb')
+        macho_file = ktool.load_macho_file(fp)
+        kernel_cache = KernelCache(macho_file)
+
+        if args.get_info:
+            print(kernel_cache.version_str)
+
+        elif args.get_kexts:
+            for kext in kernel_cache.kexts:
+                print(f'{kext.name} -> {kext.executable_name} ({kext.version})')
+
+        elif args.get_kext:
+            kext = None
             for _kext in kernel_cache.kexts:
-                if args.get_kext == _kext.id:
+                if args.get_kext == _kext.executable_name:
                     kext = _kext
                     break
+            if not kext:
+                for _kext in kernel_cache.kexts:
+                    if args.get_kext == _kext.id:
+                        kext = _kext
+                        break
 
-        if isinstance(kext, Kext):
-            bundle_text = f"Bundle ID: {kext.id}\nExecutable Name: {kext.executable_name}\n{kext.info_string}\n" \
-                          f"Version: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}"
-            print(bundle_text)
-        else:
-            print('Kext Not Found')
+            if isinstance(kext, Kext):
+                bundle_text = f"Bundle ID: {kext.id}\nExecutable Name: {kext.executable_name}\n{kext.info_string}\n" \
+                              f"Version: {kext.version_str}\nStart Address: {hex(kext.start_addr | 0xffff000000000000)}"
+                print(bundle_text)
+            else:
+                print('Kext Not Found')
 
-    elif args.do_extract:
-        kext = None
-        for _kext in kernel_cache.kexts:
-            if args.do_extract == _kext.executable_name:
-                kext = _kext
-                break
-        if not kext:
+        elif args.do_extract:
+            kext = None
             for _kext in kernel_cache.kexts:
-                if args.do_extract == _kext.id:
+                if args.do_extract == _kext.executable_name:
                     kext = _kext
                     break
+            if not kext:
+                for _kext in kernel_cache.kexts:
+                    if args.do_extract == _kext.id:
+                        kext = _kext
+                        break
 
-        if isinstance(kext, EmbeddedKext):
-            with open(kext.id.split('.')[-1], 'wb') as out:
-                out.write(kext.image.slice.full_bytes_for_slice())
-        else:
-            print('Kext Not Found')
+            if isinstance(kext, EmbeddedKext):
+                with open(kext.id.split('.')[-1], 'wb') as out:
+                    out.write(kext.image.slice.full_bytes_for_slice())
+            else:
+                print('Kext Not Found')
 
 
 if __name__ == "__main__":
