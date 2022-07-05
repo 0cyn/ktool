@@ -477,6 +477,7 @@ class MethodList:
     CUSTOM_RMS_BASE = None
 
     def __init__(self, image: ObjCImage, methlist_head, base_meths, class_meta, class_name):
+        base_meths = base_meths & 0xFFFFFFFFF
         log.info(f'Opening method list ({str(methlist_head)}) at {hex(base_meths)}')
         self.objc_image = image
         self.methlist_head = methlist_head
@@ -673,6 +674,7 @@ class Class(Constructable):
 
         load_errors = []
         struct_list = []
+        class_ptr = class_ptr & 0xFFFFFFFFF
 
         if not meta:
             log.debug_more(f'Loading Class From {hex(class_ptr)}')
@@ -740,11 +742,11 @@ class Class(Constructable):
 
         if objc2_class_ro_item.base_props != 0:
             proplist_head = objc_image.load_struct(objc2_class_ro_item.base_props, objc2_prop_list)
-            ea = proplist_head.off
+            ea = objc2_class_ro_item.base_props
             ea += objc2_prop_list.SIZE
 
             for i in range(1, proplist_head.count + 1):
-                prop = objc_image.load_struct(ea, objc2_prop, vm=False)
+                prop = objc_image.load_struct(ea, objc2_prop, vm=True)
 
                 try:
                     property = Property.from_image(objc_image, prop)
@@ -781,7 +783,7 @@ class Class(Constructable):
         prots = []
         if objc2_class_ro_item.base_prots != 0:
             protlist: objc2_prot_list = objc_image.load_struct(objc2_class_ro_item.base_prots, objc2_prot_list)
-            ea = protlist.off
+            ea = objc2_class_ro_item.base_prots
             for i in range(1, protlist.cnt + 1):
                 prot_loc = objc_image.get_uint_at(ea + i * 8, 8, vm=True)
                 if prot_loc in objc_image.prot_map:
@@ -801,10 +803,10 @@ class Class(Constructable):
         ivars = []
         if objc2_class_ro_item.ivars != 0:
             ivarlist: objc2_ivar_list = objc_image.load_struct(objc2_class_ro_item.ivars, objc2_ivar_list)
-            ea = ivarlist.off + 8
+            ea = objc2_class_ro_item.ivars + 8
             for i in range(1, ivarlist.cnt + 1):
                 ivar_loc = ea + objc2_ivar.SIZE * (i - 1)
-                ivar = objc_image.load_struct(ivar_loc, objc2_ivar, vm=False)
+                ivar = objc_image.load_struct(ivar_loc, objc2_ivar, vm=True)
                 try:
                     ivar_object = Ivar.from_image(objc_image, ivar)
                     ivars.append(ivar_object)
@@ -1069,11 +1071,11 @@ class Category(Constructable):
             try:
                 proplist_head = objc_image.load_struct(struct.props, objc2_prop_list)
 
-                ea = proplist_head.off
+                ea = struct.props
                 ea += 8
 
                 for i in range(1, proplist_head.count + 1):
-                    prop = objc_image.load_struct(ea, objc2_prop, vm=False)
+                    prop = objc_image.load_struct(ea, objc2_prop, vm=True)
                     try:
                         properties.append(Property.from_image(objc_image, prop))
                     except Exception as ex:
@@ -1157,11 +1159,11 @@ class Protocol(Constructable):
         if protocol.inst_props != 0:
             proplist_head = objc_image.load_struct(protocol.inst_props, objc2_prop_list)
 
-            ea = proplist_head.off
+            ea = protocol.inst_props
             ea += 8
 
             for i in range(1, proplist_head.count + 1):
-                prop = objc_image.load_struct(ea, objc2_prop, vm=False)
+                prop = objc_image.load_struct(ea, objc2_prop, vm=True)
                 try:
                     properties.append(Property.from_image(objc_image, prop))
                 except Exception as ex:
