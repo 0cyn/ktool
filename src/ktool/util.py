@@ -161,6 +161,7 @@ class ignore:
 
 class opts:
     USE_SYMTAB_INSTEAD_OF_SELECTORS = False
+    OBJC_LOAD_ERRORS_SEND_TO_DEBUG = False
 
 
 class QueueItem:

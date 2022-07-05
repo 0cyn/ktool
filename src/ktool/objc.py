@@ -520,12 +520,18 @@ class MethodList:
                         if method_type.type == EncodedType.STRUCT:
                             self.struct_list.append(method_type.value)
             except VMAddressingError as ex:
-                log.warning(f'Failed to load a method at {sel} with {ex.__class__.__name__}: {str(ex)}')
+                if opts.OBJC_LOAD_ERRORS_SEND_TO_DEBUG:
+                    log.debug(f'Failed to load a method at {sel} with {ex.__class__.__name__}: {str(ex)}')
+                else:
+                    log.warning(f'Failed to load a method at {sel} with {ex.__class__.__name__}: {str(ex)}')
                 self.load_errors.append(f'Failed to load a method with {ex.__class__.__name__}: {str(ex)}')
             except Exception as ex:
                 if not ignore.OBJC_ERRORS:
                     raise ex
-                log.warning(f'Failed to load method in {self.name} with {str(ex)}')
+                if opts.OBJC_LOAD_ERRORS_SEND_TO_DEBUG:
+                    log.debug(f'Failed to load method in {self.name} with {str(ex)}')
+                else:
+                    log.warning(f'Failed to load method in {self.name} with {str(ex)}')
                 self.load_errors.append(f'Failed to load a method with {str(ex)}')
 
             if uses_relative_methods:
@@ -689,7 +695,12 @@ class Class(Constructable):
             objc2_class_location = class_ptr
 
         if objc2_class_location == 0 or not objc_image.vm_check(objc2_class_location):
-            log.error("Loading a class failed")
+
+            if opts.OBJC_LOAD_ERRORS_SEND_TO_DEBUG:
+                log.debug(f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '-'} failed")
+            else:
+                log.error(f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '-'} failed")
+            objc_image.class_map[class_ptr] = None
             return None
 
         objc2_class_item: objc2_class = objc_image.load_struct(objc2_class_location, objc2_class, vm=True)
@@ -755,7 +766,10 @@ class Class(Constructable):
                         if property.attr.type.type == EncodedType.STRUCT:
                             struct_list.append(property.attr.type.value)
                 except VMAddressingError as ex:
-                    log.warning(f'Failed to load a property in {name} with {ex.__class__.__name__}: {str(ex)}')
+                    if opts.OBJC_LOAD_ERRORS_SEND_TO_DEBUG:
+                        log.debug(f'Failed to load a property in {name} with {ex.__class__.__name__}: {str(ex)}')
+                    else:
+                        log.warning(f'Failed to load a property in {name} with {ex.__class__.__name__}: {str(ex)}')
                     load_errors.append(f'Failed to load a property with {ex.__class__.__name__}: {str(ex)}')
                 except Exception as ex:
                     if not ignore.OBJC_ERRORS:
@@ -797,7 +811,10 @@ class Class(Constructable):
                     except Exception as ex:
                         if not ignore.OBJC_ERRORS:
                             raise ex
-                        log.warning(f'Failed to load protocol with {str(ex)}')
+                        if opts.OBJC_LOAD_ERRORS_SEND_TO_DEBUG:
+                            log.debug(f'Failed to load protocol with {str(ex)}')
+                        else:
+                            log.warning(f'Failed to load protocol with {str(ex)}')
                         load_errors.append(f'Failed to load a protocol with {str(ex)}')
 
         ivars = []
@@ -1127,7 +1144,11 @@ class Protocol(Constructable):
         if loc in objc_image.prot_map:
             return objc_image.prot_map[loc]
 
-        name = objc_image.get_cstr_at(protocol.name, 0, vm=True)
+        try:
+            name = objc_image.get_cstr_at(protocol.name, 0, vm=True)
+        except ValueError as ex:
+            log.error("Couldn't load basic info about a Category: " + str(ex))
+            return None
         load_errors = []
         struct_list = []
 
