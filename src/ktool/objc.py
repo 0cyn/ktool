@@ -473,6 +473,9 @@ class Ivar(Constructable):
 
 
 class MethodList:
+
+    CUSTOM_RMS_BASE = None
+
     def __init__(self, image: ObjCImage, methlist_head, base_meths, class_meta, class_name):
         log.info(f'Opening method list ({str(methlist_head)}) at {hex(base_meths)}')
         self.objc_image = image
@@ -494,7 +497,6 @@ class MethodList:
 
         uses_relative_methods = self.methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
         rms_are_direct = self.methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
-
         ea += objc2_meth_list.SIZE
         vm_ea += objc2_meth_list.SIZE
 
@@ -510,7 +512,7 @@ class MethodList:
 
             try:
                 method = Method.from_image(self.objc_image, sel, types, self.meta, vm_ea, uses_relative_methods,
-                                           rms_are_direct)
+                                           rms_are_direct, MethodList.CUSTOM_RMS_BASE)
                 methods.append(method)
                 if method.types:
                     for method_type in method.types:
@@ -537,13 +539,15 @@ class MethodList:
 
 class Method(Constructable):
     @classmethod
-    def from_image(cls, objc_image: ObjCImage, sel_addr, types_addr, is_meta, vm_addr, rms, rms_are_direct):
+    def from_image(cls, objc_image: ObjCImage, sel_addr, types_addr, is_meta, vm_addr, rms, rms_are_direct, rms_base=None):
         if rms:
             if rms_are_direct:
                 try:
                     if opts.USE_SYMTAB_INSTEAD_OF_SELECTORS:
                         raise AssertionError
-                    sel = objc_image.get_cstr_at(sel_addr + vm_addr, 0, vm=True, sectname="__objc_methname")
+                    if not rms_base:
+                        rms_base = vm_addr
+                    sel = objc_image.get_cstr_at(sel_addr + rms_base, 0, vm=True, sectname="__objc_methname")
 
                 except Exception as ex:
                     try:
