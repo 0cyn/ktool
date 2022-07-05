@@ -667,17 +667,24 @@ class Class(Constructable):
     """
 
     @classmethod
-    def from_image(cls, objc_image: ObjCImage, class_ptr: int, meta=False) -> Optional['Class']:
+    def from_image(cls, objc_image: ObjCImage, class_ptr: int, meta=False, class_ptr_is_direct=False) -> Optional['Class']:
         if class_ptr in objc_image.class_map:
             return objc_image.class_map[class_ptr]
 
         load_errors = []
         struct_list = []
 
-        if not objc_image.vm_check(class_ptr):
-            objc2_class_location = objc_image.get_int_at(class_ptr, 8, vm=False)
+        if not meta:
+            log.debug_more(f'Loading Class From {hex(class_ptr)}')
         else:
-            objc2_class_location = objc_image.get_int_at(class_ptr, 8, vm=True)
+            log.debug_more(f'Loading metaclass From {hex(class_ptr)}')
+        if not class_ptr_is_direct:
+            if not objc_image.vm_check(class_ptr):
+                objc2_class_location = objc_image.get_uint_at(class_ptr, 8, vm=False)
+            else:
+                objc2_class_location = objc_image.get_uint_at(class_ptr, 8, vm=True)
+        else:
+            objc2_class_location = class_ptr
 
         if objc2_class_location == 0 or not objc_image.vm_check(objc2_class_location):
             log.error("Loading a class failed")
@@ -765,8 +772,9 @@ class Class(Constructable):
             struct_list += methlist.struct_list
             methods += methlist.methods
 
-        if objc2_class_item.isa != 0 and objc2_class_item.isa <= 0xFFFFFFFFFF and not meta:
-            metaclass = Class.from_image(objc_image, objc2_class_item.off, meta=True)
+        log.debug_more(f'metaclass for {name} at {hex(objc2_class_item.isa)}')
+        if objc2_class_item.isa != 0 and not meta:
+            metaclass = Class.from_image(objc_image, objc2_class_item.isa, meta=True, class_ptr_is_direct=True)
             if metaclass:
                 methods += metaclass.methods
 
