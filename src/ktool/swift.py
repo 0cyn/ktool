@@ -12,7 +12,6 @@
 #  Copyright (c) kat 2021.
 #
 
-import ktool
 from kmacho.base import Constructable
 from kswift.structs import *
 from kswift.demangle import demangle
@@ -143,7 +142,7 @@ class SwiftType(Constructable):
 
 def load_swift_types(image: Image):
 
-    objc_image = ktool.load_objc_metadata(image)
+    objc_image = ObjCImage.from_image(image)
 
     swift_type_seg_start_sect: Section = image.segments['__TEXT'].sections['__swift5_types']
     sect_start = swift_type_seg_start_sect.vm_address
