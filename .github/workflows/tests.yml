@@ -18,44 +18,65 @@ on:
 
 jobs:
   unit-tests:
+    name: Unit Tests
+    strategy:
+      matrix:
+        python-version:
+          - '3.6'
+          - '3.7'
+          - '3.8'
+          - '3.9'
+          - '3.10'
+          - '3.11'
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ secrets.PYTHON_VERSION }}
-    - name: Install dependencies
-      run: |
-        brew install ninja
-        python -m pip install --upgrade pip
-        pip install flake8 pytest .
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Build test images
-      run: |
-        cd tests && ninja
-    - name: Test with pytest
-      run: |
-        PYTHONPATH="./src" pytest -s tests/unit.py
-  bin-tests:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
-          python-version: ${{ secrets.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
           brew install ninja
           python -m pip install --upgrade pip
-          pip install flake8 pytest poetry
+          pip install pytest poetry
           poetry build
-          python3 -m pip install $(ls dist/*.tar.gz | xargs)
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install $(ls dist/*.tar.gz | xargs)
       - name: Build test images
+        run: ninja -C tests
+      - name: Test with pytest
         run: |
-          cd tests && ninja
+          pytest -s tests/unit.py
+
+  bin-tests:
+    name: Bin Tests
+    strategy:
+      matrix:
+        python-version:
+          - '3.6'
+          - '3.7'
+          - '3.8'
+          - '3.9'
+          - '3.10'
+          - '3.11'
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          brew install ninja
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry build
+          pip install $(ls dist/*.tar.gz | xargs)
+      - name: Build test images
+        run: ninja -C tests
       - name: Test insert
         run: |
           ktool insert --lc load --payload /your/mother.dylib --out tests/bins/testbin1.insert.test tests/bins/testbin1
@@ -71,12 +92,12 @@ jobs:
           ktool lipo --extract x86_64 tests/bins/testbin1.fat
           ktool lipo --create --out tests/bins/testbin1.fat.lipo.test tests/bins/testbin1.fat.arm64 tests/bins/testbin1.fat.x86_64
           ktool file tests/bins/testbin1.fat.lipo.test | grep "0x11000"
-      - name: test dump
+      - name: Test dump
         run: |
           ktool dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
-      - name: test dump with mmaped-IO enabled
+      - name: Test dump with mmaped-IO enabled
         run: |
           ktool --mmap dump --headers tests/bins/testbin1 | grep "char testPropertyTwo; // ivar: _testPropertyTwo"
-      - name: test symbols
+      - name: Test symbols
         run: |
           ktool symbols --imports tests/bins/testbin1 | grep _OBJC_CLASS_$_NSObject
