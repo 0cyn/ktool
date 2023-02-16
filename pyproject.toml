@@ -2,17 +2,17 @@
 name = "k2l"
 version = "1.4.0"
 description = "Static MachO/ObjC Reverse Engineering Toolkit"
-readme = "README.md"
-
-packages = [
-    { include = "ktool", from="src" },
-    { include = "kmacho", from="src" },
-    { include = "kswift", from="src" },
-    { include = "katlib", from="src" },
-    { include = "kdsc", from="src" }
-]
-
 authors = ["cynder <kat@cynder.me>"]
+license = "MIT"
+repository = "https://github.com/cxnder/ktool"
+readme = "README.md"
+packages = [
+   { include = "ktool", from="src" },
+   { include = "kmacho", from="src" },
+   { include = "kswift", from="src" },
+   { include = "katlib", from="src" },
+   { include = "kdsc", from="src" }
+]
 
 [tool.isort]
 profile = "black"
