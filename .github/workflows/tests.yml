@@ -47,7 +47,7 @@ jobs:
         run: ninja -C tests
       - name: Test with pytest
         run: |
-          pytest -s tests/unit.py
+          PYTHONPATH="./src" pytest -s tests/unit.py
 
   bin-tests:
     name: Bin Tests
