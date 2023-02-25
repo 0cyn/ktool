@@ -25,6 +25,7 @@ python = "^3.6.2"
 pyaes = "^1.6.1"
 kimg4 = "^0.1.1"
 Pygments = "^2.11.2"
+windows-curses = {version = "^2.3.1", platform = "win32"}
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
