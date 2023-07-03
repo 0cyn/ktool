@@ -6,8 +6,8 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name = 'k2l',
-    version = "1.3.0",
-    description = 'Static MacO/ObjC Reverse Engineering Toolkit',
+    version = "1.4.0",
+    description = 'Static MachO/ObjC Reverse Engineering Toolkit',
     long_description = long_description,
     long_description_content_type = 'text/markdown',
     python_requires = '>=3.6',
@@ -22,6 +22,8 @@ setup(
     packages = ['kmacho', 'ktool', 'kswift'],
     package_dir = {
         'kmacho': 'src/kmacho',
+        'kdsc': 'src/kdsc',
+        'katlib': 'src/kmacho',
         'ktool': 'src/ktool',
         'kswift': 'src/kswift'
     },
