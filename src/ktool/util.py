@@ -25,6 +25,8 @@ from ktool.exceptions import *
 
 import pkg_resources
 
+import katlib.log as log
+
 try:
     KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
 except pkg_resources.DistributionNotFound:
@@ -177,7 +179,13 @@ class Queue:
         self.multithread = False
 
     def process_item(self, item: QueueItem):
-        return item.func(*item.args)
+        try:
+            return item.func(*item.args)
+        except Exception as ex:
+            if not ignore.OBJC_ERRORS:
+                raise ex
+            log.log.error("Queueitem failed to process for some unhandled reason.")
+            return None
 
     def go(self):
         if self.multithread:
