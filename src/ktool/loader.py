@@ -519,28 +519,28 @@ class ExportTrie(Constructable):
             macho_is_malformed()
 
         start = cursor
-        byte = image.get_uint_at(cursor, 1)
+        terminal_size, cursor = image.decode_uleb128(cursor)
         results = []
-        log.debug_tm(f'@ {hex(start)} node: {hex(byte)} current_symbol: {string}')
-        if byte == 0:
-            cursor += 1
-            branches = image.get_uint_at(cursor, 1)
-            log.debug_tm(f'BRAN {branches}')
-            for i in range(0, branches):
-                if i == 0:
-                    cursor += 1
-                proc_str = image.get_cstr_at(cursor)
-                cursor += len(proc_str) + 1
-                offset, cursor = image.decode_uleb128(cursor)
-                log.debug_tm(f'({i}) string: {string + proc_str} next_node: {hex(trie_start + offset)}')
-                results += ExportTrie.read_node(image, trie_start, string + proc_str, trie_start + offset, endpoint)
-        else:
+        log.debug_tm(f'@ {hex(start)} node: {hex(terminal_size)} current_symbol: {string}')
+        child_start = cursor + terminal_size
+        if terminal_size != 0:
             log.debug_tm(f'TERM: 0')
             size, cursor = image.decode_uleb128(cursor)
             flags = image.get_uint_at(cursor, 1)
             cursor += 1
             offset, cursor = image.decode_uleb128(cursor)
             results.append(export_node(string, offset, flags))
+        cursor = child_start
+        branches = image.get_uint_at(cursor, 1)
+        log.debug_tm(f'BRAN {branches}')
+        for i in range(0, branches):
+            if i == 0:
+                cursor += 1
+            proc_str = image.get_cstr_at(cursor)
+            cursor += len(proc_str) + 1
+            offset, cursor = image.decode_uleb128(cursor)
+            log.debug_tm(f'({i}) string: {string + proc_str} next_node: {hex(trie_start + offset)}')
+            results += ExportTrie.read_node(image, trie_start, string + proc_str, trie_start + offset, endpoint)
 
         return results
 

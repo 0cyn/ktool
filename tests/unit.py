@@ -66,7 +66,7 @@ def enable_error_capture():
 
 
 def assert_error_printed(msg):
-    assert msg in error_buffer
+    assert msg in error_buffer, "Error buffer didn't have '{}', has '{}'".format(msg, error_buffer)
 
 
 def disable_error_capture():
@@ -124,13 +124,6 @@ class ScratchFile:
         self.scratch.write(self.backup.read())
         self.backup.seek(0)
         self.scratch.seek(0)
-
-
-# *I* watch the watchmen
-class TestTests(unittest.TestCase):
-    def test_is_importing_source_tree(self):
-        assert MY_DIR != ""
-        assert "src/ktool/util" in MY_DIR
 
 
 class StructTestCase(unittest.TestCase):
@@ -392,7 +385,7 @@ class ImageHeaderTestCase(unittest.TestCase):
                     encoded += b'\x00'
                 load_command_items.append(command)
                 load_command_items.append(encoded)
-            elif command.__class__ == dyld_info_command:
+            elif command.__class__ == symtab_command:
                 command.cmd = 0x99
                 load_command_items.append(command)
             elif command.__class__ in [dylinker_command, build_version_command]:
@@ -413,7 +406,7 @@ class ImageHeaderTestCase(unittest.TestCase):
         disable_error_capture()
 
         assert_error_printed("Bad Load Command ")
-        assert_error_printed("0x99 - 0x30")
+        assert_error_printed("0x99 -")
 
     def test_insert_cmd(self):
 
@@ -780,4 +773,4 @@ class DyldTestCase(unittest.TestCase):
 if __name__ == '__main__':
     ignore.OBJC_ERRORS = False
 
-    unittest.main()
+

@@ -8,3 +8,9 @@ CHANGELOG.md
 *.egg-info
 /htmlcov/
 /.coverage
+poetry.lock
+*.DS_Store
+*.ninja_log
+tests/bins/testbin1
+tests/bins/testbin1.fat
+tests/bins/testlib1.dylib
