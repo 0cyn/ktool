@@ -4,7 +4,10 @@ venv/
 *.i64
 build/
 dist/
+tests/bins/
+.ninja_log
 CHANGELOG.md
+*.lock
 *.egg-info
 /htmlcov/
 /.coverage
