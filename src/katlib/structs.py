@@ -12,6 +12,7 @@
 #
 #  Copyright (c) kat 2022.
 #
+from typing import List
 
 type_mask = 0xffff0000
 size_mask = 0xffff
@@ -37,22 +38,66 @@ bytes_t = [type_bytes | i for i in range(65)]
 
 
 class Bitfield:
+    """ Horrible class for decoding bitfields. This basically just exists for chained fixups do not write anything
+        that uses this because I hardly understand what i've even wrote.
+
+        Initialize with dict of field name to size in bits.
+        Load fields with ``myBitfieldInstance.decode_bitfield(myProperlySizedBytearray)``
+        Access by myBitfieldInstance.field_name
+    """
     def __init__(self, fields: dict):
         self.fields = fields
         self.size = sum(self.fields.values()) // 8
+        self.size_bits = sum(self.fields.values())
         self.decoded_fields = {}
 
     def decode_bitfield(self, value):
-        loc = 0
-        assert self.size == len(value)
-        for field_name, field_size in self.fields.items():
-            field_size = field_size & size_mask
-            byte = loc // 8
-            bit = loc % 8
-            mask = (1 << field_size) - 1
-            field_value = (value[byte] & mask << bit) >> bit
-            self.decoded_fields[field_name] = field_value
-            loc += field_size
+        # welcom to my night mare
+        int_value = int.from_bytes(value, 'little')
+        # print(bin(int_value))
+        bit_pos = 0
+        for field_name, bit_size in self.fields.items():
+            mask = (1 << bit_size) - 1
+            # print(f'{field_name} - {bin((int_value >> bit_pos) & mask)} {bin(mask)}')
+            self.decoded_fields[field_name] = (int_value >> bit_pos) & mask
+            setattr(self, field_name, self.decoded_fields[field_name])
+            bit_pos += bit_size
+
+
+class StructUnion:
+    """ This class is a horrible one;
+        This struct code was not written with Unions in mind, or much in mind in general;
+
+        This implementation of unions has a couple of rules:
+        * It can only contain structs or other unions
+        * It will implicitly assume all types are the same size and probably die horribly if that isn't true.
+
+        Create one like:
+            class MySubClass(StructUnion):
+            def __init__(): #    |size   | list of Struct types like `mach_header`, etc
+                super().__init__(8,      [my_struct_1, my_structtype_2])
+
+        Use like:
+            unionInst = MySubClass()
+            unionInst.load_from_bytes(my_epic_bytearray_that_is_properly_sized)
+            valueIWant = unionInst.my_struct_1.someFieldInIt
+
+    """
+    SIZE = 0
+    def __init__(self, size: int, types: List[object]):
+        self.size = size
+        self.types = types
+
+    def load_from_bytes(self, data):
+        for t in self.types:
+            if issubclass(t, Struct):
+                setattr(self, t.__name__, Struct.create_with_bytes(t, data, "little"))
+            elif issubclass(t, StructUnion):
+                setattr(self, t.__name__, t())
+                getattr(self, t.__name__).load_from_bytes(data)
+
+    def __int__(self):
+        return self.__class__.SIZE
 
 
 def _bytes_to_hex(data) -> str:
@@ -139,6 +184,12 @@ class Struct:
                 for f, fv in value.decoded_fields.items():
                     setattr(instance, f, fv)
                 field_value = None
+
+            elif issubclass(value, StructUnion):
+                data = raw[current_off:current_off+value.SIZE]
+                size = value.SIZE
+                field_value = value()
+                field_value.load_from_bytes(data)
 
             elif issubclass(value, Struct):
                 size = value.SIZE
@@ -300,7 +351,6 @@ class Struct:
         return struct_dict
 
     def __init__(self, fields=None, sizes=None, byte_order="little"):
-
         if sizes is None:
             raise AssertionError(
                 "Do not use the bare Struct class; it must be implemented in an actual type; Missing Sizes")

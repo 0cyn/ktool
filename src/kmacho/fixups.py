@@ -39,7 +39,7 @@ class dyld_chained_starts_in_image(Struct):
 class dyld_chained_starts_in_segment(Struct):
     _FIELDNAMES = ['size', 'page_size', 'pointer_format', 'segment_offset', 'max_valid_pointer', 'page_count',
                    'page_starts']
-    _SIZES = [4, 1, 1, 4, 2, 1, 1]
+    _SIZES = [4, 2, 2, 8, 4, 2, 2]
     SIZE = sum(_SIZES)
 
     def __init__(self, byte_order="little"):
@@ -48,7 +48,7 @@ class dyld_chained_starts_in_segment(Struct):
 
 DYLD_CHAINED_PTR_START_NONE = 0xFFFF
 DYLD_CHAINED_PTR_START_MULTI = 0x8000
-DYLD_CHAINED_PTR_START_LAST = DYLD_CHAINED_PTR_START_MULTI
+DYLD_CHAINED_PTR_START_LAST = 0x8000
 
 
 class dyld_chained_start_offsets(Struct):
@@ -92,13 +92,60 @@ class dyld_chained_ptr_format(Enum):
     DYLD_CHAINED_PTR_ARM64E_USERLAND = 9
     DYLD_CHAINED_PTR_ARM64E_FIRMWARE = 10
     DYLD_CHAINED_PTR_x86_64_KERNEL_CACHE = 11
-    DYLD_CHAINED_PTR_NOIDEA = 12
+    DYLD_CHAINED_PTR_ARM64E_USERLAND24 = 12
 
 
 class dyld_chained_import_format(Enum):
     DYLD_CHAINED_IMPORT = 1
     DYLD_CHAINED_IMPORT_ADDEND = 2
     DYLD_CHAINED_IMPORT_ADDEND64 = 3
+
+
+class ChainedFixupPointerGeneric(Enum):
+    GenericArm64eFixupFormat = 0
+    Generic64FixupFormat = 1
+    Generic32FixupFormat = 2
+    Firmware32FixupFormat = 3
+    Error = 4
+
+
+class dyld_chained_import(Struct):
+    _FIELDS = {"value": Bitfield(
+        {'lib_ordinal': 8,
+         'weak_import': 1,
+         'name_offset': 23}
+    )}
+    SIZE = uint32_t
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
+
+
+class dyld_chained_import_addend(Struct):
+    _FIELDS = {"value": Bitfield(
+        {'lib_ordinal': 8,
+         'weak_import': 1,
+         'name_offset': 23}
+    ),
+    "addend": int32_t}
+    SIZE = 8
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
+
+
+class dyld_chained_import_addend64(Struct):
+    _FIELDS = {"value": Bitfield(
+        {'lib_ordinal': 16,
+         'weak_import': 1,
+         'reserved': 15,
+         'name_offset': 32}
+    ),
+    "addend": uint64_t}
+    SIZE = 8
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class dyld_chained_ptr(Struct):
@@ -110,41 +157,8 @@ class dyld_chained_ptr(Struct):
         super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
 
 
-def ptr_arm64e_type(ptr: 'dyld_chained_ptr_arm64e'):
-    if ptr.auth:
-        if ptr.bind:
-            return dyld_chained_ptr_arm64e_auth_bind
-        else:
-            return dyld_chained_ptr_arm64e_auth_rebase
-    else:
-        if ptr.bind:
-            return dyld_chained_ptr_arm64e_bind
-        else:
-            return dyld_chained_ptr_arm64e_rebase
-
-
-def ptr_arm64_type(ptr: 'dyld_chained_ptr'):
-    if ptr.bind:
-        return dyld_chained_ptr_64_bind
-    return dyld_chained_ptr_64_rebase
-
-
-DYLD_CHAINED_PTR_FMATS = {
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E: ptr_arm64e_type,
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_64: ptr_arm64_type,
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET: ptr_arm64_type,
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_NOIDEA: ptr_arm64e_type
-}
-
-
 class dyld_chained_ptr_arm64e(Struct):
-    _FIELDS = {
-        "reserved": Bitfield({
-            'reserved': 62,
-            'bind': 1,
-            'auth': 1
-        })
-    }
+    _FIELDS = {"reserved": Bitfield({'reserved': 62, 'bind': 1, 'auth': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
@@ -154,15 +168,7 @@ class dyld_chained_ptr_arm64e(Struct):
 
 
 class dyld_chained_ptr_arm64e_rebase(Struct):
-    _FIELDS = {
-        'target': Bitfield({
-            'target': 43,
-            'high8': 8,
-            'next': 11,
-            'bind': 1,
-            'auth': 1
-        })
-    }
+    _FIELDS = {'target': Bitfield({'target': 43, 'high8': 8, 'next': 11, 'bind': 1, 'auth': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
@@ -170,16 +176,7 @@ class dyld_chained_ptr_arm64e_rebase(Struct):
 
 
 class dyld_chained_ptr_arm64e_bind(Struct):
-    _FIELDS = {
-        'ordinal': Bitfield({
-            'ordinal': 16,
-            'zero': 16,
-            'addend': 19,
-            'next': 11,
-            'bind': 1,
-            'auth': 1
-        })
-    }
+    _FIELDS = {'ordinal': Bitfield({'ordinal': 16, 'zero': 16, 'addend': 19, 'next': 11, 'bind': 1, 'auth': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
@@ -188,16 +185,7 @@ class dyld_chained_ptr_arm64e_bind(Struct):
 
 class dyld_chained_ptr_arm64e_auth_rebase(Struct):
     _FIELDS = {
-        'target': Bitfield({
-            'target': 32,
-            'diversity': 16,
-            'addrDiv': 1,
-            'key': 2,
-            'next': 11,
-            'bind': 1,
-            'auth': 1
-        })
-    }
+        'target': Bitfield({'target': 32, 'diversity': 16, 'addrDiv': 1, 'key': 2, 'next': 11, 'bind': 1, 'auth': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
@@ -205,18 +193,8 @@ class dyld_chained_ptr_arm64e_auth_rebase(Struct):
 
 
 class dyld_chained_ptr_arm64e_auth_bind(Struct):
-    _FIELDS = {
-        'value': Bitfield({
-            'ordinal': 16,
-            'zero': 16,
-            'diversity': 16,
-            'addrDiv': 1,
-            'key': 2,
-            'next': 11,
-            'bind': 1,
-            'auth': 1
-        })
-    }
+    _FIELDS = {'value': Bitfield(
+        {'ordinal': 16, 'zero': 16, 'diversity': 16, 'addrDiv': 1, 'key': 2, 'next': 11, 'bind': 1, 'auth': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
@@ -224,12 +202,7 @@ class dyld_chained_ptr_arm64e_auth_bind(Struct):
 
 
 class dyld_chained_ptr_64(Struct):
-    _FIELDS = {
-        'value': Bitfield({
-            'reserved': 63,
-            'bind': 1
-        })
-    }
+    _FIELDS = {'value': Bitfield({'reserved': 63, 'bind': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
@@ -237,15 +210,7 @@ class dyld_chained_ptr_64(Struct):
 
 
 class dyld_chained_ptr_64_rebase(Struct):
-    _FIELDS = {
-        'value': Bitfield({
-            'target': 36,
-            'high8': 8,
-            'reserved': 7,
-            'next': 12,
-            'bind': 1
-        })
-    }
+    _FIELDS = {'value': Bitfield({'target': 36, 'high8': 8, 'reserved': 7, 'next': 12, 'bind': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
@@ -253,52 +218,104 @@ class dyld_chained_ptr_64_rebase(Struct):
 
 
 class dyld_chained_ptr_64_bind(Struct):
-    _FIELDS = {
-        'value': Bitfield({
-            'ordinal': 24,
-            'addend': 8,
-            'reserved': 19,
-            'next': 12,
-            'bind': 1
-        })
-    }
+    _FIELDS = {'value': Bitfield({'ordinal': 24, 'addend': 8, 'reserved': 19, 'next': 12, 'bind': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
         super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
-class dyld_chained_import(Struct):
-    _FIELDNAMES = ['_import']
-    _SIZES = [4]
-    SIZE = 4
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
-
-
-class dyld_chained_import_addend(Struct):
-    _FIELDNAMES = ['import', 'addend']
-    _SIZES = [4, 4]
+class dyld_chained_ptr_arm64e_bind24(Struct):
+    _FIELDS = {'value': Bitfield({'ordinal': 24, 'zero': 8, 'addend': 19, 'next': 11, 'bind': 1, 'auth': 1, })}
     SIZE = 8
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
-class dyld_chained_import_addend64(Struct):
-    _FIELDNAMES = ['import', 'addend']
-    _SIZES = [8, 8]
-    SIZE = 16
+class dyld_chained_ptr_arm64e_auth_bind24(Struct):
+    _FIELDS = {'value': Bitfield(
+        {'ordinal': 24, 'zero': 8, 'diversity': 16, 'addrDiv': 1, 'key': 2, 'next': 11, 'bind': 1, 'auth': 1, })}
+    SIZE = 8
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
-DYLD_CHAINED_PTR_BASE = {
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E: dyld_chained_ptr_arm64e,
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_NOIDEA: dyld_chained_ptr_arm64e,
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_64: dyld_chained_ptr_64,
-    dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET: dyld_chained_ptr_64
-}
+class dyld_chained_ptr_32_rebase(Struct):
+    _FIELDS = {'value': Bitfield({'target': 26, 'next': 5, 'bind': 1})}
+    SIZE = 4
 
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
+
+
+class dyld_chained_ptr_32_bind(Struct):
+    _FIELDS = {'value': Bitfield({'ordinal': 20, 'addend': 6, 'next': 5, 'bind': 1})}
+    SIZE = 4
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
+
+
+class dyld_chained_ptr_32_cache_rebase(Struct):
+    _FIELDS = {'value': Bitfield({'target': 30, 'next': 2})}
+    SIZE = 4
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
+
+
+class dyld_chained_ptr_32_firmware_rebase(Struct):
+    _FIELDS = {'value': Bitfield({'target': 26, 'next': 6})}
+    SIZE = 4
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
+
+
+class ChainedPointerArm64E(StructUnion):
+    SIZE = 8
+
+    def __init__(self):
+        super().__init__(uint64_t, [dyld_chained_ptr_arm64e_auth_rebase, dyld_chained_ptr_arm64e_auth_bind,
+            dyld_chained_ptr_arm64e_rebase, dyld_chained_ptr_arm64e_bind, dyld_chained_ptr_arm64e_bind24,
+            dyld_chained_ptr_arm64e_auth_bind24, ])
+
+
+class ChainedPointerGeneric64(StructUnion):
+    SIZE = 8
+
+    def __init__(self):
+        super().__init__(uint64_t, [dyld_chained_ptr_64_rebase, dyld_chained_ptr_64_bind, ])
+
+
+class ChainedPointerGeneric32(StructUnion):
+    SIZE = 8
+
+    def __init__(self):
+        super().__init__(uint64_t, [dyld_chained_ptr_32_rebase, dyld_chained_ptr_32_bind,
+                                    dyld_chained_ptr_32_firmware_rebase])
+
+
+class ChainedFixupPointer64Union(StructUnion):
+    SIZE = 8
+
+    def __init__(self):
+        super().__init__(uint64_t, [ChainedPointerArm64E, ChainedPointerGeneric64])
+
+
+class ChainedFixupPointer32(Struct):
+    _FIELDS = {'generic32': ChainedPointerGeneric32}
+    SIZE = 4
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
+
+
+class ChainedFixupPointer64(Struct):
+    _FIELDS = {'generic64': ChainedFixupPointer64Union}
+    SIZE = 8
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)

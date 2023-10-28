@@ -384,87 +384,187 @@ class ChainedFixups(Constructable):
     @classmethod
     def from_image(cls, image: Image, chained_fixup_cmd: linkedit_data_command):
 
-        symbols = []
+        syms = []
 
-        import struct
+        fixup_header = image.load_struct(chained_fixup_cmd.dataoff, dyld_chained_fixups_header)
+        log.debug_tm(f'{fixup_header.render_indented()}')
 
-        fixup_hdr_addr = chained_fixup_cmd.dataoff
-        fixup_hdr = image.load_struct(fixup_hdr_addr, dyld_chained_fixups_header, vm=False)
+        if fixup_header.fixups_version > 0:
+            log.error("Unknown Fixup Format")
+            return cls([])
 
-        imports_format = dyld_chained_import_format(fixup_hdr.imports_format)
+        import_table_size = fixup_header.imports_count * dyld_chained_import.SIZE
+        if import_table_size > chained_fixup_cmd.datasize:
+            log.error("Chained fixup import table is larger than chained fixup linkedit region")
+            return cls([])
 
-        segs_addr = fixup_hdr_addr + fixup_hdr.starts_offset
-        seg_count = image.get_uint_at(segs_addr, 4, vm=False)
-        imports_addr = fixup_hdr_addr + fixup_hdr.imports_offset
+        if fixup_header.imports_format != dyld_chained_import_format.DYLD_CHAINED_IMPORT.value:
+            log.error("Unknown or unhandled import format")
 
-        syms_addr = fixup_hdr_addr + fixup_hdr.symbols_offset
+        imports_address = fixup_header.off + fixup_header.imports_offset
+        symbols_address = fixup_header.off + fixup_header.symbols_offset
+        import_entry_t = namedtuple("import_entry_t", ["ord", "weak", "name"])
+        import_table = []
+        for i in range(0, fixup_header.imports_count):
+            i_addr = (i * 4) + imports_address
+            i_entry = image.load_struct(i_addr, dyld_chained_import)
+            lib_ord = i_entry.lib_ordinal
+            is_weak = i_entry.weak_import
+            name_addr = symbols_address + i_entry.name_offset
+            sym_name = image.get_cstr_at(name_addr)
+            entry = import_entry_t(lib_ord, is_weak, sym_name)
+            import_table.append(entry)
+            log.debug_tm(f'ChFx:ImportTable: {sym_name} @ ord {lib_ord}')
 
-        segs = []
-        for i in range(seg_count):
-            s = image.get_uint_at((i * 4) + segs_addr + 4, 4)  # read
-            segs.append(s)
+        fixup_starts_address = chained_fixup_cmd.dataoff + fixup_header.starts_offset
+        segment_count = image.get_uint_at(fixup_starts_address, 4)
+        seg_info_offsets = []
+        cursor = fixup_starts_address + 4
+        for i in range(0, segment_count):
+            seg_info_offsets.append(image.get_uint_at(cursor, 4))
+            cursor += 4
 
-        for i in range(seg_count):
-            if segs[i] == 0:
+        for off in seg_info_offsets:
+            if off == 0:
                 continue
-            starts_addr = (
-                    segs_addr + segs[i]
-            )
+            segstarts_addr = fixup_starts_address + off
+            starts = image.load_struct(segstarts_addr, dyld_chained_starts_in_segment, endian="little")
 
-            starts_in_segment_data = image.get_bytes_at(starts_addr, 24)
+            stride_size: int = 0
+            ptr_format: ChainedFixupPointerGeneric = ChainedFixupPointerGeneric.Error
 
-            starts_in_segment = struct.unpack("<IHHQIHH", starts_in_segment_data)
+            if starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E.value,
+                                         dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND.value,
+                                         dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24.value]:
+                stride_size = 8
+                ptr_format = ChainedFixupPointerGeneric.GenericArm64eFixupFormat
+            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_KERNEL.value:
+                stride_size = 4
+                ptr_format = ChainedFixupPointerGeneric.GenericArm64eFixupFormat
+            elif starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_64.value,
+                                           dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET.value,
+                                           dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_KERNEL_CACHE.value]:
+                stride_size = 4
+                ptr_format = ChainedFixupPointerGeneric.Generic64FixupFormat
+            elif starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_32.value,
+                                           dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_CACHE.value]:
+                stride_size = 4
+                ptr_format = ChainedFixupPointerGeneric.Generic32FixupFormat
+            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_FIRMWARE.value:
+                stride_size = 4
+                ptr_format = ChainedFixupPointerGeneric.Generic64FixupFormat
+            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_x86_64_KERNEL_CACHE.value:
+                stride_size = 1
+                ptr_format = ChainedFixupPointerGeneric.Generic64FixupFormat
+            else:
+                log.error(f"Unsupported Pointer Format {starts.pointer_format}")
+                log.error(f'{hex(fixup_header.off)} @ {fixup_header.render_indented()}')
+                log.error(f"{starts.render_indented()}")
+                return cls([])
 
-            page_count = starts_in_segment[5]
-            page_size = starts_in_segment[1]
-            segment_offset = starts_in_segment[3]
-            pointer_type = starts_in_segment[2]
+            page_start_offsets: List[List[int]] = []
+            for i in range(0, starts.page_count):
+                page_start_table_start_address = segstarts_addr + 22
+                i_addr = page_start_table_start_address + (2 * i)
+                start = image.get_uint_at(i_addr, 2)
+                if (start & DYLD_CHAINED_PTR_START_MULTI) and (start != DYLD_CHAINED_PTR_START_NONE):
+                    overflow_index = start & ~DYLD_CHAINED_PTR_START_MULTI
+                    page_start_sub_starts: List[int] = []
+                    cursor = page_start_table_start_address + (overflow_index * 2)
+                    done = False
+                    while not done:
+                        sub_page_start = image.get_uint_at(cursor, 2)
+                        cursor += 2
+                        if sub_page_start & DYLD_CHAINED_PTR_START_LAST:
+                            page_start_sub_starts.append(sub_page_start & ~DYLD_CHAINED_PTR_START_LAST)
+                            done = True
+                        else:
+                            page_start_sub_starts.append(sub_page_start)
+                    page_start_offsets.append(page_start_sub_starts)
+                else:
+                    page_start_offsets.append([start])
 
-            PTR_STRUCT_TYPE_BASE = DYLD_CHAINED_PTR_BASE[dyld_chained_ptr_format(pointer_type)]
-            PTR_STRUCT_TYPE_FUNC = DYLD_CHAINED_PTR_FMATS[dyld_chained_ptr_format(pointer_type)]
+            i = -1
+            for page_starts in page_start_offsets:
+                i += 1
+                page_addr = starts.segment_offset + (i * starts.page_size)
+                for start in page_starts:
+                    if start == DYLD_CHAINED_PTR_START_NONE:
+                        continue
+                    chain_entry_address = page_addr + start
+                    fixups_done = False
+                    while not fixups_done:
+                        cursor = chain_entry_address
+                        mapped_cursor = image.vm.detranslate(cursor)
+                        pointer32: ChainedFixupPointer32 = None
+                        pointer64: ChainedFixupPointer64 = None
 
-            page_starts_data = image.get_bytes_at(starts_addr + 22, page_count * 2)
-            page_starts = struct.unpack("<" + ("H" * page_count), page_starts_data)
+                        if ptr_format in [ChainedFixupPointerGeneric.Generic32FixupFormat,
+                                          ChainedFixupPointerGeneric.Firmware32FixupFormat]:
+                            pointer32 = image.load_struct(cursor, ChainedFixupPointer32)
+                        else:
+                            pointer64 = image.load_struct(cursor, ChainedFixupPointer64)
 
-            for (j, start) in enumerate(page_starts):
-                if start == DYLD_CHAINED_PTR_START_NONE:
-                    continue
+                        bind: bool = False
+                        next_entry_stride_count = 0
+                        if ptr_format == ChainedFixupPointerGeneric.Generic32FixupFormat:
+                            bind = pointer32.generic32.dyld_chained_ptr_32_bind.bind != 0
+                            next_entry_stride_count = pointer32.generic32.dyld_chained_ptr_32_rebase.next
+                        elif ptr_format == ChainedFixupPointerGeneric.Generic64FixupFormat:
+                            bind = pointer64.generic64.ChainedPointerGeneric64.dyld_chained_ptr_64_bind.bind != 0
+                            next_entry_stride_count = pointer64.generic64.ChainedPointerGeneric64.dyld_chained_ptr_64_rebase.next
+                        elif ptr_format == ChainedFixupPointerGeneric.GenericArm64eFixupFormat:
+                            bind = pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_bind.bind != 0
+                            next_entry_stride_count = pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_bind.next
+                        elif ptr_format == ChainedFixupPointerGeneric.Firmware32FixupFormat:
+                            bind = False
+                            next_entry_stride_count = pointer32.generic32.dyld_chained_ptr_32_firmware_rebase
+                        else:
+                            log.error("unreachable")
+                            return cls([])
 
-                chain_entry_addr = (
-                        segment_offset + (j * page_size) + start
-                )
+                        if bind:
+                            ordinal = 0
+                            if starts.pointer_format in [
+                                dyld_chained_ptr_format.DYLD_CHAINED_PTR_64.value,
+                                dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET.value]:
+                                ordinal = pointer64.generic64.ChainedPointerGeneric64.dyld_chained_ptr_64_bind.ordinal
+                            elif starts.pointer_format in [ # i swear this looks better in c++
+                                dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E.value,
+                                dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND.value,
+                                dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_KERNEL.value
+                                ]:
+                                if (pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_bind.auth != 0):
+                                    ordinal = pointer64.generic64.ChainedPointerArm64E\
+                                        .dyld_chained_ptr_arm64e_auth_bind24.ordinal if \
+                                    starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24 \
+                                        else pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_bind.ordinal
+                                else:
+                                    ordinal = pointer64.generic64.ChainedPointerArm64E\
+                                        .dyld_chained_ptr_arm64e_bind24.ordinal if \
+                                    starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24 \
+                                        else pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_bind.ordinal
+                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32.value:
+                                ordinal = pointer32.generic32.dyld_chained_ptr_32_bind.ordinal
 
-                j += 1
-                while True:
-                    content = image.get_uint_at(chain_entry_addr, 8)
-                    item = image.load_struct(chain_entry_addr, PTR_STRUCT_TYPE_BASE, vm=False)
-                    item = image.load_struct(chain_entry_addr, PTR_STRUCT_TYPE_FUNC(item), vm=False, force_reload=True)
+                            else:
+                                log.error("Unknown bind pointer format")
+                                return cls([])
 
-                    offset = content & 0xFFFFFFFF
-                    nxt = (content >> 50) & 2047
-                    bind = (content >> 62) & 1
-                    if bind == 1:
-                        import_entry = image.get_uint_at(imports_addr + offset * 4, 4)
-                        ordinal = import_entry & 0xFF
-                        sym_name_offset = import_entry >> 9
-                        sym_name_addr = syms_addr + sym_name_offset
+                            if ordinal < len(import_table):
+                                entry = import_table[ordinal]
+                                target_addr = mapped_cursor
+                                sym = Symbol.from_values(entry.name, target_addr, external=True, ordinal=entry.ord)
+                                syms.append(sym)
 
-                        sym_name = image.get_cstr_at(
-                            sym_name_addr)
-                        sym = Symbol.from_values(sym_name, sym_name_addr, True, ordinal)
-                        symbols.append(sym)
+                        chain_entry_address += next_entry_stride_count * stride_size
+                        if (chain_entry_address > page_addr + starts.page_size):
+                            log.error("Pointer left page, bailing fixup processing, binary is malformed")
+                            fixups_done = True
+                        if next_entry_stride_count == 0:
+                            fixups_done = True
 
-                    else:
-                        pass
-
-                    # next tells us how many u32 until the next chain entry
-                    skip = nxt * 4
-                    chain_entry_addr += skip
-                    # if skip == 0, chain is done
-                    if skip == 0:
-                        break
-
-        return cls(symbols)
+        return cls(syms)
 
     @classmethod
     def from_values(cls, *args, **kwargs):

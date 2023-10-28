@@ -17,6 +17,7 @@ import json
 import random
 
 import ktool
+from kmacho.fixups import ChainedPointerArm64E
 from ktool.macho import *
 from ktool.util import *
 from ktool.image import *
@@ -126,6 +127,17 @@ class ScratchFile:
         self.scratch.seek(0)
 
 
+
+
+class sunion_test(Struct):
+    _FIELDNAMES = ['field']
+    _SIZES = [ChainedPointerArm64E]
+    SIZE = uint64_t
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+
+
 class StructTestCase(unittest.TestCase):
     def test_equality_check(self):
         s1 = Struct.create_with_values(linkedit_data_command, [0x34 | LC_REQ_DYLD, 0x10, 0xc000, 0xd0], "little")
@@ -133,6 +145,15 @@ class StructTestCase(unittest.TestCase):
         s3 = Struct.create_with_values(linkedit_data_command, [0x34 | LC_REQ_DYLD, 0x10, 0xc000, 0xe0], "little")
         assert s1 == s2
         assert s1 != s3
+
+    def test_union(self):
+        #                       |16     |24     |32                             |64
+        tval = 0b0101101010101010111111110010010000000000000000000000000000000011
+        tval = int('{:08b}'.format(tval)[::-1], 2)
+        tval_raw = tval.to_bytes(8, "little")
+        stc = Struct.create_with_bytes(sunion_test, tval_raw)
+        # print(bin(stc.field.dyld_chained_ptr_arm64e_auth_rebase.target))
+        assert stc.field.dyld_chained_ptr_arm64e_auth_rebase.target == int('{:08b}'.format(0b01011010101010101111111100100100)[::-1], 2)
 
 
 class MCBFRTestCase(unittest.TestCase):

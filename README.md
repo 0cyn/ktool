@@ -80,10 +80,6 @@ Tested on:
 * Android (Termux)
 * WebAssembly
 * Brython
-    
-#### Credits
-    
-Chained fixup processing is currently entirely based on https://github.com/xpcmdshell/bn-chained-fixups
 
 #### Special thanks to
 
