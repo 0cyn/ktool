@@ -1,5 +1,5 @@
 <p align="center">
-<img src=".github/svg/logo.png" alt="Logo" width=450px> 
+<img src=".github/svg/ktool2.png" alt="Logo" width=450px> 
 </p>
 <h4 align="center">
 MachO/ObjC Analysis + Editing toolkit.
