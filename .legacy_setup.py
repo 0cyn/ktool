@@ -22,7 +22,6 @@ setup(
     packages = ['ktool_macho', 'ktool', 'ktool_swift'],
     package_dir = {
         'ktool_macho': 'src/ktool_macho',
-        'ktool_dsc': 'src/ktool_dsc',
         'lib0cyn': 'src/ktool_macho',
         'ktool': 'src/ktool',
         'ktool_swift': 'src/ktool_swift'

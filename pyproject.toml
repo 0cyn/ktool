@@ -10,8 +10,7 @@ packages = [
    { include = "ktool", from="src" },
    { include = "ktool_macho", from="src" },
    { include = "ktool_swift", from="src" },
-   { include = "lib0cyn", from="src" },
-   { include = "ktool_dsc", from="src" }
+   { include = "lib0cyn", from="src" }
 ]
 
 [tool.isort]

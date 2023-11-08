@@ -22,7 +22,6 @@ from ktool.macho import *
 from ktool.util import *
 from ktool.image import *
 from lib0cyn.log import log, LogLevel
-from ktool_dsc.file import MemoryCappedBufferedFileReader
 
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))
@@ -154,20 +153,6 @@ class StructTestCase(unittest.TestCase):
         stc = Struct.create_with_bytes(sunion_test, tval_raw)
         # print(bin(stc.field.dyld_chained_ptr_arm64e_auth_rebase.target))
         assert stc.field.dyld_chained_ptr_arm64e_auth_rebase.target == int('{:08b}'.format(0b01011010101010101111111100100100)[::-1], 2)
-
-
-class MCBFRTestCase(unittest.TestCase):
-    def test_mcbfr(self):
-        return
-        with open('testmcbfr','wb') as fp:
-            fp.write(b'\x41' * 1024 * 1024 * 1024)
-        try:
-            with open('testmcbfr', 'rb') as fp:
-                mcbfr = MemoryCappedBufferedFileReader(fp)
-            assert mcbfr.read(0x100, 0x1000001) == b'\x41' * 0x1000001
-        except AssertionError as ex:
-            os.remove('testmcbfr')
-            raise ex
 
 
 class BackingFileTestCase(unittest.TestCase):
