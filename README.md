@@ -1,5 +1,7 @@
 <p align="center">
-<img src=".github/svg/ktool2.png" alt="Logo" width=450px> 
+<a href="https://github.com/0cyn/ktool/tree/master/EXTERNAL_LICENSES#image-notes">
+  <img src=".github/svg/ktool2.png" alt="Logo" width=450px> 
+</a>
 </p>
 <h4 align="center">
 MachO/ObjC Analysis + Editing toolkit.
@@ -88,3 +90,5 @@ JLevin and *OS Internals for existing
 arandomdev for guidance + code
 
 Blacktop for their amazing ipsw project: https://github.com/blacktop/ipsw  
+
+Artists behind the images used in this project's logo: https://github.com/0cyn/ktool/tree/master/EXTERNAL_LICENSES#image-notes
