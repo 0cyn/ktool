@@ -1,5 +1,5 @@
 #
-#  ktool | katlib
+#  ktool | lib0cyn
 #  log.py
 #
 #
@@ -9,7 +9,7 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 
 from enum import Enum
@@ -17,7 +17,7 @@ import sys
 import inspect
 import os
 
-from katlib.structs import Struct
+from lib0cyn.structs import Struct
 
 
 class LogLevel(Enum):

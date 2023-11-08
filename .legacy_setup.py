@@ -19,13 +19,13 @@ setup(
         'kimg4',
         'Pygments'
     ],
-    packages = ['kmacho', 'ktool', 'kswift'],
+    packages = ['ktool_macho', 'ktool', 'ktool_swift'],
     package_dir = {
-        'kmacho': 'src/kmacho',
-        'kdsc': 'src/kdsc',
-        'katlib': 'src/kmacho',
+        'ktool_macho': 'src/ktool_macho',
+        'ktool_dsc': 'src/ktool_dsc',
+        'lib0cyn': 'src/ktool_macho',
         'ktool': 'src/ktool',
-        'kswift': 'src/kswift'
+        'ktool_swift': 'src/ktool_swift'
     },
     classifiers = [
         'Programming Language :: Python :: 3',

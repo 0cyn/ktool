@@ -9,7 +9,7 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 import unittest
 
@@ -17,12 +17,12 @@ import json
 import random
 
 import ktool
-from kmacho.fixups import ChainedPointerArm64E
+from ktool_macho.fixups import ChainedPointerArm64E
 from ktool.macho import *
 from ktool.util import *
 from ktool.image import *
-from katlib.log import log, LogLevel
-from kdsc.file import MemoryCappedBufferedFileReader
+from lib0cyn.log import log, LogLevel
+from ktool_dsc.file import MemoryCappedBufferedFileReader
 
 # We need to be in the right directory so we can find the bins
 scriptdir = os.path.dirname(os.path.realpath(__file__))
@@ -217,7 +217,7 @@ class SliceTestCase(unittest.TestCase):
 
         size = macho_slice.size
 
-        loadsize = macho_slice.get_uint_at(20, 4) + 32
+        loadsize = macho_slice.read_uint(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         needle = b'\xDE\xAD\xBE\xEF\xDE\xAD\xBE\xEF\xDE\xAD\xBE\xEF'
@@ -236,7 +236,7 @@ class SliceTestCase(unittest.TestCase):
         slice_base = macho_slice.offset
         size = macho_slice.size
 
-        loadsize = macho_slice.get_uint_at(20, 4) + 32
+        loadsize = macho_slice.read_uint(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         self.fat.write(slice_base + random_location, needle)
@@ -255,7 +255,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
         size = macho_slice.size
-        loadsize = macho_slice.get_uint_at(20, 4) + 32
+        loadsize = macho_slice.read_uint(20, 4) + 32
 
         random_location = random.randint(loadsize, size)
 
@@ -266,7 +266,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
 
-        readout = macho_slice.get_bytes_at(random_location, 4)
+        readout = macho_slice.read_bytearray(random_location, 4)
         self.assertEqual(write, readout)
 
     def test_get_str(self):
@@ -276,7 +276,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
         size = macho_slice.size
-        loadsize = macho_slice.get_uint_at(20, 4) + 32
+        loadsize = macho_slice.read_uint(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         write = b'Decode a printable string.'
@@ -286,7 +286,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
 
-        readout = macho_slice.get_str_at(random_location, len(write))
+        readout = macho_slice.read_fixed_len_str(random_location, len(write))
         self.assertEqual(write.decode('utf-8'), readout)
 
     def test_get_cstr(self):
@@ -296,7 +296,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
         size = macho_slice.size
-        loadsize = macho_slice.get_uint_at(20, 4) + 32
+        loadsize = macho_slice.read_uint(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         write = b'Decode a printable string.\x00'
@@ -306,7 +306,7 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
 
-        readout = macho_slice.get_cstr_at(random_location)
+        readout = macho_slice.read_cstr(random_location)
         self.assertEqual(write[:-1].decode('utf-8'), readout)
 
     def test_decode_uleb128(self):
@@ -318,14 +318,14 @@ class SliceTestCase(unittest.TestCase):
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
         size = macho_slice.size
-        loadsize = macho_slice.get_uint_at(20, 4) + 32
+        loadsize = macho_slice.read_uint(20, 4) + 32
         random_location = random.randint(loadsize, size)
 
         self.thin.write(random_location, encoded)
 
         macho = ktool.load_macho_file(self.thin.get())
         macho_slice = macho.slices[0]
-        decoded_value, _ = macho_slice.decode_uleb128(random_location)
+        decoded_value, _ = macho_slice.read_uleb128(random_location)
 
         self.assertEqual(value, decoded_value)
 
@@ -358,7 +358,7 @@ class ImageHeaderTestCase(unittest.TestCase):
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 load_command_items.append(Segment(image, command))
             elif isinstance(command, dylib_command):
-                suffix = image.get_cstr_at(command.off + command.__class__.SIZE)
+                suffix = image.read_cstr(command.off + command.__class__.SIZE)
                 encoded = suffix.encode('utf-8') + b'\x00'
                 while (len(encoded) + command.__class__.SIZE) % 8 != 0:
                     encoded += b'\x00'
@@ -367,7 +367,7 @@ class ImageHeaderTestCase(unittest.TestCase):
             elif command.__class__ in [dylinker_command, build_version_command]:
                 load_command_items.append(command)
                 actual_size = command.cmdsize
-                dat = image.get_bytes_at(command.off + command.SIZE, actual_size - command.SIZE)
+                dat = image.read_bytearray(command.off + command.SIZE, actual_size - command.SIZE)
                 load_command_items.append(dat)
             else:
                 load_command_items.append(command)
@@ -400,7 +400,7 @@ class ImageHeaderTestCase(unittest.TestCase):
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 load_command_items.append(Segment(image, command))
             elif isinstance(command, dylib_command):
-                suffix = image.get_cstr_at(command.off + command.__class__.SIZE)
+                suffix = image.read_cstr(command.off + command.__class__.SIZE)
                 encoded = suffix.encode('utf-8') + b'\x00'
                 while (len(encoded) + command.__class__.SIZE) % 8 != 0:
                     encoded += b'\x00'
@@ -412,7 +412,7 @@ class ImageHeaderTestCase(unittest.TestCase):
             elif command.__class__ in [dylinker_command, build_version_command]:
                 load_command_items.append(command)
                 actual_size = command.cmdsize
-                dat = image.get_bytes_at(command.off + command.SIZE, actual_size - command.SIZE)
+                dat = image.read_bytearray(command.off + command.SIZE, actual_size - command.SIZE)
                 load_command_items.append(dat)
             else:
                 load_command_items.append(command)
@@ -555,7 +555,7 @@ class SegmentLCTestCase(unittest.TestCase):
         image_header = image.macho_header
 
         old_command: segment_command_64 = image_header.load_commands[1]
-        old_dat = image.get_bytes_at(old_command.off, old_command.cmdsize)
+        old_dat = image.read_bytearray(old_command.off, old_command.cmdsize)
 
         text = image.segments['__TEXT']
         cmd: segment_command = text.cmd
@@ -588,7 +588,7 @@ class VMTestCase(unittest.TestCase):
             correct_address = address - diff
             translated_address = vm.translate(address)
             self.assertEqual(correct_address, translated_address)
-            self.assertEqual(vm.detranslate(translated_address), address)
+            self.assertEqual(vm.de_translate(translated_address), address)
 
         vm.detag_64 = True
         translated_address = vm.translate(vm_base + 0x1234000000000)
@@ -604,7 +604,7 @@ class VMTestCase(unittest.TestCase):
         self.assertTrue(vm.vm_check(vm_base))
 
         with self.assertRaises(VMAddressingError):
-            vm.detranslate(-4)
+            vm.de_translate(-4)
 
     def test_fallback_vm(self):
 
@@ -624,7 +624,7 @@ class VMTestCase(unittest.TestCase):
             correct_address = address - diff
             translated_address = vm.translate(address)
             self.assertEqual(correct_address, translated_address)
-            self.assertEqual(vm.detranslate(translated_address), address)
+            self.assertEqual(vm.de_translate(translated_address), address)
 
         vm.detag_64 = True
         translated_address = vm.translate(vm_base + 0x1234000000000)
@@ -736,29 +736,29 @@ class ImageTestCase(unittest.TestCase):
         # we already know the slice to be functional by this point
         macho_slice = image.slice
 
-        vm_base = image.vm.detranslate(0)
+        vm_base = image.vm.de_translate(0)
 
         self.assertTrue(image.vm_check(vm_base))
         self.assertEqual(image.vm.translate(vm_base), 0)
 
-        self.assertEqual(macho_slice.get_uint_at(0, 4), image.get_uint_at(0, 4))
-        self.assertEqual(macho_slice.get_uint_at(0, 4), image.get_uint_at(vm_base, 4, vm=True))
+        self.assertEqual(macho_slice.read_uint(0, 4), image.read_uint(0, 4))
+        self.assertEqual(macho_slice.read_uint(0, 4), image.read_uint(vm_base, 4, vm=True))
 
-        self.assertEqual(macho_slice.get_bytes_at(0, 4), image.get_bytes_at(0, 4))
-        self.assertEqual(macho_slice.get_bytes_at(0, 4), image.get_bytes_at(vm_base, 4, vm=True))
+        self.assertEqual(macho_slice.read_bytearray(0, 4), image.read_bytearray(0, 4))
+        self.assertEqual(macho_slice.read_bytearray(0, 4), image.read_bytearray(vm_base, 4, vm=True))
 
-        self.assertEqual(macho_slice.load_struct(0, mach_header_64, "little"),
-                         image.load_struct(0, mach_header_64, endian="little", vm=False, force_reload=True))
-        self.assertEqual(macho_slice.load_struct(0, mach_header_64, "little"),
-                         image.load_struct(vm_base, mach_header_64, vm=True, endian="little", force_reload=True))
+        self.assertEqual(macho_slice.read_struct(0, mach_header_64, "little"),
+                         image.read_struct(0, mach_header_64, endian="little", vm=False, force_reload=True))
+        self.assertEqual(macho_slice.read_struct(0, mach_header_64, "little"),
+                         image.read_struct(vm_base, mach_header_64, vm=True, endian="little", force_reload=True))
 
-        self.assertEqual(str_and_cstr_test_string, image.get_str_at(str_test_location, str_size))
+        self.assertEqual(str_and_cstr_test_string, image.read_fixed_len_str(str_test_location, str_size))
         self.assertEqual(str_and_cstr_test_string,
-                         image.get_str_at(image.vm.detranslate(str_test_location), str_size, vm=True))
+                         image.read_fixed_len_str(image.vm.de_translate(str_test_location), str_size, vm=True))
 
-        self.assertEqual(str_and_cstr_test_string, image.get_cstr_at(cstr_test_location))
+        self.assertEqual(str_and_cstr_test_string, image.read_cstr(cstr_test_location))
         self.assertEqual(str_and_cstr_test_string,
-                         image.get_cstr_at(image.vm.detranslate(cstr_test_location), vm=True))
+                         image.read_cstr(image.vm.de_translate(cstr_test_location), vm=True))
 
 
 class DyldTestCase(unittest.TestCase):

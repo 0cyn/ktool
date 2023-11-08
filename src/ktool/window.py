@@ -11,7 +11,7 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 
 # # # # #
@@ -39,7 +39,7 @@ from pygments.formatters.terminal import TerminalFormatter
 from pygments.formatters.terminal256 import Terminal256Formatter
 from pygments.lexers.objective import ObjectiveCLexer
 
-from kmacho import LOAD_COMMAND
+from ktool_macho import LOAD_COMMAND
 
 from ktool.macho import MachOFile
 from ktool.loader import MachOImageLoader
@@ -53,7 +53,13 @@ from ktool.kcache import KernelCache, Kext
 VERT_LINE = '│'
 WINDOW_NAME = 'ktool'
 
-BOX_CHARS = ['┦', '─', '━', '│', '┃', '┄', '┅', '┆', '┇', '┈', '┉', '┊', '┋', '┌', '┍', '┎', '┏', '┐', '┑', '┒', '┓', '└', '┕', '┖', '┗', '┘', '┙', '┚', '┛', '├', '┝', '┞', '┟', '┠', '┡', '┢', '┣', '┤', '┥', '┦', '┧', '┨', '┩', '┪', '┫', '┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷', '┸', '┹', '┺', '┻', '┼', '┽', '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅', '╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒', '╓', '╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡', '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩', '╪', '╫', '╬', '╭', '╮', '╯', '╰', '╱', '╲', '╳', '╴', '╵', '╶', '╷', '╸', '╹', '╺', '╻', '╼', '╽', '╾', '╿']
+BOX_CHARS = ['┦', '─', '━', '│', '┃', '┄', '┅', '┆', '┇', '┈', '┉', '┊', '┋', '┌', '┍', '┎', '┏', '┐', '┑', '┒', '┓',
+             '└', '┕', '┖', '┗', '┘', '┙', '┚', '┛', '├', '┝', '┞', '┟', '┠', '┡', '┢', '┣', '┤', '┥', '┦', '┧', '┨',
+             '┩', '┪', '┫', '┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷', '┸', '┹', '┺', '┻', '┼', '┽',
+             '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅', '╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒',
+             '╓', '╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡', '╢', '╣', '╤', '╥', '╦', '╧',
+             '╨', '╩', '╪', '╫', '╬', '╭', '╮', '╯', '╰', '╱', '╲', '╳', '╴', '╵', '╶', '╷', '╸', '╹', '╺', '╻', '╼',
+             '╽', '╾', '╿']
 
 SIDEBAR_WIDTH = 40
 
@@ -273,7 +279,7 @@ class HexDumpTable(Table):
         stack_div = ""
         decode_stack_div = ""
 
-        for i, byte in enumerate(self.hex[row_start*8:row_start*8+row_count*8]):
+        for i, byte in enumerate(self.hex[row_start * 8:row_start * 8 + row_count * 8]):
             stack_div += hex(byte)[2:].rjust(2, '0')
             decode_stack_div += byte.to_bytes(1, 'big').decode('ascii') + ' ' if byte in range(32, 127) else '. '
             if len(stack_div) >= 8:
@@ -1349,7 +1355,7 @@ class HelpMenu(ScrollView):
 
         if x < 0 or x > self.box.width or y < 0 or y > self.box.height:
             self.draw = False
-            handle=True
+            handle = True
 
         if y == 0:
             handle = True
@@ -1676,7 +1682,7 @@ class KToolMachOLoader:
             for secname, sect in segm.sections.items():
                 segtable.rows.append([secname, hex(sect.vm_address), hex(sect.size), hex(sect.file_address)])
                 hextab = HexDumpTable()
-                hextab.hex = lib.slice.get_bytes_at(sect.file_address, sect.size)
+                hextab.hex = lib.slice.read_bytearray(sect.file_address, sect.size)
                 itm = MainMenuContentItem()
                 itm.lines.append(hextab)
                 item.children.append(SidebarMenuItem(secname, itm, item))
@@ -1684,7 +1690,7 @@ class KToolMachOLoader:
             if len(segm.sections.items()) == 0:
                 if 'PAGEZERO' not in segname:
                     hextab = HexDumpTable()
-                    hextab.hex = lib.slice.get_bytes_at(segm.file_address, segm.size)
+                    hextab.hex = lib.slice.read_bytearray(segm.file_address, segm.size)
                     mmci.lines.append(hextab)
             else:
                 mmci.lines.append(segtable)
@@ -1788,7 +1794,7 @@ class KToolMachOLoader:
             mmci = MainMenuContentItem()
             mmci.lines = cmd.render_indented().split('\n')
             mmci.lines.append('')
-            raw: bytes = lib.slice.get_bytes_at(cmd.off, cmd.cmdsize)
+            raw: bytes = lib.slice.read_bytearray(cmd.off, cmd.cmdsize)
             hexdump = HexDumpTable()
             hexdump.hex = bytearray(raw)
 
@@ -2052,7 +2058,8 @@ class KToolKernelCacheLoader(KToolMachOLoader):
             mmci.lines.append(f'Embedded Version: {kext.version}')
 
             if kext.prelink_info:
-                bundle_text = f"Executable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | (0xffff000000000000 if kcache.mach_kernel.vm.detag_kern_64 else 0))}".split('\n')
+                bundle_text = f"Executable Name: {kext.executable_name}\n{kext.info_string}\nVersion: {kext.version_str}\nStart Address: {hex(kext.start_addr | (0xffff000000000000 if kcache.mach_kernel.vm.detag_kern_64 else 0))}".split(
+                    '\n')
                 bundle_text += ['', '']
 
                 bundle_text += pprint.pformat(kext.prelink_info).split('\n')
@@ -2326,7 +2333,7 @@ class KToolScreen:
         self.help_menu.scroll_view = Box(self.root, 7, 6, curses.COLS - 12, curses.LINES - 12)
 
         self.help_menu.scroll_view_text_buffer = ScrollingDisplayBuffer(self.help_menu.scroll_view, 0, 0,
-                                                                         curses.COLS - 22, curses.LINES - 12)
+                                                                        curses.COLS - 22, curses.LINES - 12)
         self.help_menu.scroll_view_text_buffer.lines = MAIN_TEXT.split('\n')
 
         self.file_browser.box = Box(self.root, 0, 0, curses.COLS, curses.LINES)

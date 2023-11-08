@@ -9,13 +9,13 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 from typing import Union
 
-from kmacho import segment_command, segment_command_64, section_64, section, SectionType, S_FLAGS_MASKS, Struct, \
+from ktool_macho import segment_command, segment_command_64, section_64, section, SectionType, S_FLAGS_MASKS, Struct, \
     symtab_command, LOAD_COMMAND
-from kmacho.base import Constructable
+from ktool_macho.base import Constructable
 
 
 class LoadCommand(Constructable):
@@ -71,7 +71,7 @@ class SegmentLoadCommand(LoadCommand):
         ea = command.off + command.SIZE
 
         for sect in range(command.nsects):
-            sect = image.load_struct(ea, section_64 if lc.is64 else section)
+            sect = image.read_struct(ea, section_64 if lc.is64 else section)
             _section = Section(sect)
             lc.sections[sect.name] = _section
             ea += section_64.SIZE if lc.is64 else section.SIZE
@@ -91,7 +91,9 @@ class SegmentLoadCommand(LoadCommand):
         cmdsize = command_type.SIZE
         cmdsize += (len(sections) * section_type.SIZE)
 
-        command = Struct.create_with_values(command_type, [cmd, cmdsize, name, vm_addr, vm_size, file_addr, file_size, maxprot, initprot, len(sections), flags])
+        command = Struct.create_with_values(command_type,
+                                            [cmd, cmdsize, name, vm_addr, vm_size, file_addr, file_size, maxprot,
+                                             initprot, len(sections), flags])
 
         lc.cmd = command
 
@@ -107,7 +109,7 @@ class SegmentLoadCommand(LoadCommand):
         return lc
 
     def raw_bytes(self):
-        
+
         data = bytearray()
         data += bytearray(self.cmd.raw)
         for _section in self.sections.values():

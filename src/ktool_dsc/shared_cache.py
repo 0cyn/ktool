@@ -1,5 +1,5 @@
 #
-#  ktool | kdsc
+#  ktool | ktool_dsc
 #  shared_cache.py
 #
 #
@@ -9,14 +9,14 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 from typing import List, Dict, Tuple
 
-from katlib.log import log
-from kdsc.file import *
-from kdsc.structs import *
-from kmacho import symtab_command, symtab_entry, symtab_entry_32
+from lib0cyn.log import log
+from ktool_dsc.file import *
+from ktool_dsc.structs import *
+from ktool_macho import symtab_command, symtab_entry, symtab_entry_32
 from ktool.exceptions import VMAddressingError, MachOAlignmentError
 from ktool.image import VM, Image, _fakeseg, vm_obj
 from ktool.loader import Symbol, SymbolType
@@ -85,7 +85,7 @@ class DSCVM(VM):
         for seg in self.fallback.map.values():
             seg: vm_obj = seg
             addr, file = self.translate_and_get_file(seg.vmaddr)
-            v += f'{hex(seg.vmaddr)}-{hex(seg.vmaddr+seg.size)} -> {hex(seg.fileaddr)}-{hex(seg.fileaddr+seg.size)} - {file.filename}\n'
+            v += f'{hex(seg.vmaddr)}-{hex(seg.vmaddr + seg.size)} -> {hex(seg.fileaddr)}-{hex(seg.fileaddr + seg.size)} - {file.filename}\n'
         return v
 
     def vm_check(self, address):
@@ -99,7 +99,7 @@ class DSCVM(VM):
         l_addr = address
 
         if self.detag_kern_64:
-            address = address | (0xFFFF << 12*4)
+            address = address | (0xFFFF << 12 * 4)
 
         if self.detag_64:
             address = address & 0xFFFFFFFFF
@@ -119,16 +119,17 @@ class DSCVM(VM):
             return physical_location, self.page_file_mapping[page_location]
         except KeyError:
             log.info(f'Address {hex(address)} not mapped, attempting fallback')
-            raise VMAddressingError(f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
+            raise VMAddressingError(
+                f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
 
-    def detranslate(self, file_address):
+    def de_translate(self, file_address):
         """
         This method is slow, and should only be used for introspection, and not things that need to be fast.
 
         :param file_address:
         :return:
         """
-        return self.fallback.detranslate(file_address)
+        return self.fallback.de_translate(file_address)
 
     def map_pages(self, physical_addr, virtual_addr, size, file=None):
         log.debug_more(f'Mapping {hex(virtual_addr)}+{hex(size)} to {hex(physical_addr)}+{hex(size)}')
@@ -138,7 +139,7 @@ class DSCVM(VM):
         self.fallback.add_segment(seg)
         for i in range(size // self.page_size):
             self.page_table[virtual_addr + (i * self.page_size) >> self.page_size_bits] = physical_addr + (
-                        i * self.page_size)
+                    i * self.page_size)
             self.page_file_mapping[virtual_addr + (i * self.page_size) >> self.page_size_bits] = file
 
 
@@ -192,12 +193,7 @@ class DSCSymbol(Symbol):
         pass
 
     def serialize(self):
-        return {
-            'name': self.fullname,
-            'address': self.address,
-            'external': self.external,
-            'ordinal': self.ordinal
-        }
+        return {'name': self.fullname, 'address': self.address, 'external': self.external, 'ordinal': self.ordinal}
 
     def __init__(self, fullname=None, name=None, dec_type=None, external=False, value=0, ordinal=0):
         super().__init__(fullname, name, dec_type, external, value, ordinal)
@@ -334,9 +330,7 @@ class DyldSharedCache:
         return struct
 
     def _get_uint_at(self, file: MemoryCappedBufferedFileReader, addr: int, count: int, endian="little"):
-        return int.from_bytes(file.fp[addr:addr+count], endian)
+        return int.from_bytes(file.fp[addr:addr + count], endian)
 
     def _get_bytes_at(self, file: MemoryCappedBufferedFileReader, addr: int, count: int):
-        return bytes(file.fp[addr:addr+count])
-
-
+        return bytes(file.fp[addr:addr + count])

@@ -16,4 +16,4 @@ except ModuleNotFoundError:
     pass
 from ktool.util import KTOOL_VERSION, ignore, Table, detect_filetype, FileType
 
-from katlib.log import LogLevel, log
+from lib0cyn.log import LogLevel, log

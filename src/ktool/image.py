@@ -2,14 +2,13 @@ from collections import namedtuple
 from enum import Enum
 from typing import List, Dict, Union
 
-from kmacho import LOAD_COMMAND, dylib_command, dyld_info_command, Struct, CPUSubTypeARM64, CPUType, segment_command_64
-from kmacho.base import Constructable
+from ktool_macho import LOAD_COMMAND, dylib_command, dyld_info_command, Struct, CPUSubTypeARM64, CPUType, segment_command_64
+from ktool_macho.base import Constructable
 from ktool.codesign import CodesignInfo
 from ktool.exceptions import VMAddressingError, MachOAlignmentError
 from ktool.util import bytes_to_hex
-from katlib.log import log
+from lib0cyn.log import log
 from ktool.macho import Slice, SlicedBackingFile, MachOImageHeader, Segment, PlatformType, ToolType
-
 
 os_version = namedtuple("os_version", ["x", "y", "z"])
 _fakeseg = namedtuple("_fakeseg", ["vm_address", "file_address", "size"])
@@ -55,7 +54,7 @@ class VM:
         l_addr = address
 
         if self.detag_kern_64:
-            address = address | (0xFFFF << 12*4)
+            address = address | (0xFFFF << 12 * 4)
 
         if self.detag_64:
             address = address & 0xFFFFFFFFF
@@ -79,23 +78,24 @@ class VM:
             try:
                 return self.fallback.translate(address)
             except VMAddressingError:
-                raise VMAddressingError(f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
+                raise VMAddressingError(
+                    f'Address {hex(address)} ({hex(l_addr)}) not in VA Table or fallback map. (page: {hex(page_location)})')
 
-    def detranslate(self, file_address):
+    def de_translate(self, file_address):
         """
         This method is slow, and should only be used for introspection, and not things that need to be fast.
 
         :param file_address:
         :return:
         """
-        return self.fallback.detranslate(file_address)
+        return self.fallback.de_translate(file_address)
 
     def map_pages(self, physical_addr, virtual_addr, size):
         if physical_addr % self.page_size != 0 or virtual_addr % self.page_size != 0 or size % self.page_size != 0:
             raise MachOAlignmentError(f'Tried to map {hex(virtual_addr)}+{hex(size)} to {hex(physical_addr)}')
         for i in range(size // self.page_size):
             self.page_table[virtual_addr + (i * self.page_size) >> self.page_size_bits] = physical_addr + (
-                        i * self.page_size)
+                    i * self.page_size)
 
         seg = _fakeseg(vm_address=virtual_addr, file_address=physical_addr, size=size)
         self.fallback.add_segment(seg)
@@ -131,7 +131,7 @@ class MisalignedVM:
     def translate(self, vm_address: int) -> int:
 
         if self.detag_kern_64:
-            vm_address = vm_address | (0xFFFF << 12*4)
+            vm_address = vm_address | (0xFFFF << 12 * 4)
 
         if self.detag_64:
             vm_address = vm_address & 0xFFFFFFFFF
@@ -151,7 +151,7 @@ class MisalignedVM:
 
         raise VMAddressingError(f'Address {hex(vm_address)} couldn\'t be found in vm address set')
 
-    def detranslate(self, file_address):
+    def de_translate(self, file_address):
         """
         This method is slow, and should only be used for introspection, and not things that need to be fast.
 
@@ -163,7 +163,7 @@ class MisalignedVM:
             file_end = o.fileaddr + o.size
             if file_start <= file_address <= file_end:
                 return o.vmaddr + (file_address - file_start)
-        raise VMAddressingError("Could not detranslate address")
+        raise VMAddressingError("Could not de_translate address")
 
     def add_segment(self, segment: Union[Segment, _fakeseg]):
         if segment.file_address == 0 and segment.size != 0:
@@ -184,24 +184,50 @@ class LinkedImage:
         self.local = cmd.cmd == LOAD_COMMAND.ID_DYLIB.value
 
     def serialize(self):
-        return {
-            'install_name': self.install_name,
-            'load_command': LOAD_COMMAND(self.cmd.cmd).name
-        }
+        return {'install_name': self.install_name, 'load_command': LOAD_COMMAND(self.cmd.cmd).name}
 
     def _get_name(self, cmd) -> str:
         read_address = cmd.off + dylib_command.SIZE
-        return self.source_image.get_cstr_at(read_address)
+        return self.source_image.read_cstr(read_address)
 
 
 class Image:
     """
     This class represents the Mach-O Binary as a whole.
 
-    It's the root object in the massive tree of information we're going to build up about the binary
+    It's the root object in the massive tree of information we're going to build up about the binary.
 
     This class on its own does not handle populating its fields.
-    The Dyld class set is responsible for loading in and processing the raw values to it.
+    The Dyld class set is fittingly responsible for loading in and processing the raw values to it.
+
+    :ivar Slice slice: Mach-O underlying Slice. This sits inbetween the Image and the underlying file.
+    :ivar Union[VM, MisalignedVM] vm: VM mapping information describing how this file is loaded into memory.
+        If this can't be aligned to 16kb or 4kb segments, it will contain a 'MisalignedVM', which uses
+        slightly slower map lookups.
+    :ivar MachOImageHeader macho_header: Mach-O Header representation for this image.
+    :ivar str install_name: "Install name" of the image. Only shared libraries will have this.
+    :ivar str base_name: Basename of the image, if it has one. This'll be the "filename" part of the installname
+        (e.g. /usr/lib/libSystem.dylib -> libSystem.dylib)
+    :ivar List[LinkedImage] linked_images: List of linked images
+    :ivar Dict[str, Segment] segments: map of segment names to their respective segments
+    :ivar Union[dyld_info_command, None] info: Raw content of the dyld_info_command if this image contains one
+    :ivar Union[LinkedImage, None] dylib: "Identity" info of this image. This contains the info that would be used to link it within another image.
+    :ivar bytearray uuid: UUID of this image.
+    :ivar Union[CodesignInfo, None] codesign_info: Codesigning information for this binary.
+    :ivar PlatformType platform: Platform type for the image.
+    :ivar List[str] allowed_clients: List of the allowed clients for this image.
+        Allowed clients are a list of executables dyld will allow to load this image.
+    :ivar str rpath: rpath of the library.
+    :ivar os_version minos: x.y.z Minimum OS for the library
+    :ivar os_version sdk_version: x.y.z SDK version this library was linked against
+    :ivar List[Symbol] imports: List of imported symbols
+    :ivar List[Symbol] exports: List of exported symbols
+    :ivar Dict[int, 'Symbol'] symbols: Table mapping locations to symbols in the library
+    :ivar Dict[int, 'Symbol'] import_table: Table mapping locations to linked symbols in the library
+    :ivar Dict[int, 'Symbol'] export_table: Table mapping locations to exported symbols in the library
+    :ivar int entry_point: Extrapolated entry point for the image, pulled from either thread starts or an entry point cmd
+    :ivar List[int] function_starts: List of function starts for this image
+    :ivar List[int] thread_state: Initial values for registers when launching this binary.
     """
 
     def __init__(self, macho_slice: Slice, force_misaligned_vm=False):
@@ -272,9 +298,7 @@ class Image:
         self.struct_cache: Dict[int, Struct] = {}
 
     def serialize(self):
-        image_dict = {
-            'macho_header': self.macho_header.serialize()
-        }
+        image_dict = {'macho_header': self.macho_header.serialize()}
 
         if self.install_name != "":
             image_dict['install_name'] = self.install_name
@@ -360,7 +384,7 @@ class Image:
     def vm_check(self, address):
         return self.vm.vm_check(address)
 
-    def get_uint_at(self, offset: int, length: int, vm=False):
+    def read_uint(self, offset: int, length: int, vm=False):
         """
         Get a sequence of bytes (as an int) from a location
 
@@ -372,9 +396,9 @@ class Image:
         """
         if vm:
             offset = self.vm.translate(offset)
-        return self.slice.get_uint_at(offset, length)
+        return self.slice.read_uint(offset, length)
 
-    def get_bytes_at(self, offset: int, length: int, vm=False):
+    def read_bytearray(self, offset: int, length: int, vm=False) -> bytearray:
         """
         Get a sequence of bytes from a location
 
@@ -386,62 +410,62 @@ class Image:
         """
         if vm:
             offset = self.vm.translate(offset)
-        return self.slice.get_bytes_at(offset, length)
+        return self.slice.read_bytearray(offset, length)
 
-    def load_struct(self, address: int, struct_type, vm=False, endian="little", force_reload=False):
+    def read_struct(self, address: int, struct_type, vm=False, endian="little", force_reload=False):
         """
         Load a struct (struct_type_t) from a location and return the processed object
 
         :param address: Address to load struct from
         :param struct_type: type of struct (e.g. dyld_header)
         :param vm:  Is `address` a VM address?
-        :param section_name: if `vm==True`, the section name (slightly improves translation speed)
         :param endian: Endianness of bytes to read.
+        :param force_reload: We cache structs to avoid struct unpacking repeatedly. If you for some reason need to force
+            a reload, set this to true
         :return: Loaded struct
         """
         if address not in self.struct_cache or force_reload:
             if vm:
                 address = self.vm.translate(address)
-            struct = self.slice.load_struct(address, struct_type, endian)
+            struct = self.slice.read_struct(address, struct_type, endian)
             self.struct_cache[address] = struct
             return struct
 
         return self.struct_cache[address]
 
-    def get_str_at(self, address: int, count: int, vm=False, force=False):
+    def read_fixed_len_str(self, address: int, count: int, vm=False, force=False):
         """
         Get string with set length from location (to be used essentially only for loading segment names)
 
         :param address: Address of string start
         :param count: Length of string
         :param vm: Is `address` a VM address?
-        :param section_name: if `vm==True`, the section name (unused here, really)
+        :param force: Force reading non-ascii data into the str. Failed decodes will be rendered as `?`.
+            This is slightly slower than ascii reads due to python jank.
         :return: The loaded string.
         """
         if vm:
             address = self.vm.translate(address)
-        return self.slice.get_str_at(address, count, force=force)
+        return self.slice.read_fixed_len_str(address, count, force=force)
 
-    def get_cstr_at(self, address: int, limit: int = 0, vm=False):
+    def read_cstr(self, address: int, limit: int = 0, vm=False):
         """
         Load a C style string from a location, stopping once a null byte is encountered.
 
         :param address: Address to load string from
         :param limit: Limit of the length of bytes, 0 = unlimited
         :param vm: Is `address` a VM address?
-        :param section_name: if `vm==True`, the section name (vastly improves VM lookup time)
         :return: The loaded C string
         """
         if vm:
             address = self.vm.translate(address)
-        return self.slice.get_cstr_at(address, limit)
+        return self.slice.read_cstr(address, limit)
 
-    def decode_uleb128(self, readHead: int):
+    def read_uleb128(self, read_head: int):
         """
         Decode a uleb128 integer from a location
 
-        :param readHead: Start location
+        :param read_head: Start location
         :return: (end location, value)
         """
-        return self.slice.decode_uleb128(readHead)
-
+        return self.slice.read_uleb128(read_head)

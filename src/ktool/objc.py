@@ -9,43 +9,23 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 from collections import namedtuple
 from enum import Enum
 from typing import List, Dict, Optional
 
-from kmacho.base import Constructable
+from ktool_macho.base import Constructable
 from ktool.loader import Image
 from ktool.exceptions import VMAddressingError
 from ktool.structs import *
 from ktool.util import ignore, usi32_to_si32, opts, Queue, QueueItem
-from katlib.log import log
+from lib0cyn.log import log
 
-type_encodings = {
-    "c": "char",
-    "i": "int",
-    "s": "short",
-    "l": "long",
-    "q": "NSInteger",
-    "C": "unsigned char",
-    "I": "unsigned int",
-    "S": "unsigned short",
-    "L": "unsigned long",
-    "A": "uint8_t",
-    "Q": "NSUInteger",
-    "f": "float",
-    "d": "CGFloat",
-    "b": "BOOL",
-    "@": "id",
-    "B": "BOOL",
-    "v": "void",
-    "*": "char *",
-    "#": "Class",
-    ":": "SEL",
-    "?": "unk",
-    "T": "unk"
-}
+type_encodings = {"c": "char", "i": "int", "s": "short", "l": "long", "q": "NSInteger", "C": "unsigned char",
+    "I": "unsigned int", "S": "unsigned short", "L": "unsigned long", "A": "uint8_t", "Q": "NSUInteger", "f": "float",
+    "d": "CGFloat", "b": "BOOL", "@": "id", "B": "BOOL", "v": "void", "*": "char *", "#": "Class", ":": "SEL",
+    "?": "unk", "T": "unk"}
 
 # https://github.com/arandomdev/DyldExtractor/blob/master/DyldExtractor/objc/objc_structs.py#L79
 RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG = 0x40000000
@@ -116,9 +96,9 @@ class ObjCImage(Constructable):
             for i in range(0, cnt):
                 ptr = sect.vm_address + i * 0x8
                 if objc_image.vm_check(ptr):
-                    loc = image.get_uint_at(ptr, 0x8, vm=True)
+                    loc = image.read_uint(ptr, 0x8, vm=True)
                     try:
-                        proto = image.load_struct(loc, objc2_prot, vm=True)
+                        proto = image.read_struct(loc, objc2_prot, vm=True)
                         item = QueueItem()
                         item.func = Protocol.from_image
                         item.args = [objc_image, proto, loc]
@@ -181,26 +161,24 @@ class ObjCImage(Constructable):
         self.prot_map: Dict[int, 'Protocol'] = {}
 
     def serialize(self):
-        return {
-            'classes': [cls.serialize() for cls in self.classlist],
+        return {'classes': [cls.serialize() for cls in self.classlist],
             'categories': [cat.serialize() for cat in self.catlist],
-            'protocols': [prot.serialize() for prot in self.protolist]
-        }
+            'protocols': [prot.serialize() for prot in self.protolist]}
 
     def vm_check(self, address):
         return self.image.vm.vm_check(address)
 
     def get_uint_at(self, offset: int, length: int, vm=False, sectname=None):
-        return self.image.get_uint_at(offset, length, vm)
+        return self.image.read_uint(offset, length, vm)
 
     def load_struct(self, addr: int, struct_type, vm=True, sectname=None, endian="little"):
-        return self.image.load_struct(addr, struct_type, vm, endian)
+        return self.image.read_struct(addr, struct_type, vm, endian)
 
     def get_str_at(self, addr: int, count: int, vm=True, sectname=None):
-        return self.image.get_str_at(addr, count, vm)
+        return self.image.read_fixed_len_str(addr, count, vm)
 
     def get_cstr_at(self, addr: int, limit: int = 0, vm=True, sectname=None):
-        return self.image.get_cstr_at(addr, limit, vm)
+        return self.image.read_cstr(addr, limit, vm)
 
 
 class Struct_Representation:
@@ -442,13 +420,8 @@ class Ivar(Constructable):
             self.type: str = '?'
 
     def serialize(self):
-        return {
-            'name': self.name,
-            'type': self.type,
-            'type_is_id': self.type,
-            'typestring': self.typestr,
-            'rendered': str(self)
-        }
+        return {'name': self.name, 'type': self.type, 'type_is_id': self.type, 'typestring': self.typestr,
+            'rendered': str(self)}
 
     def __str__(self):
         ret = ""
@@ -473,7 +446,6 @@ class Ivar(Constructable):
 
 
 class MethodList:
-
     CUSTOM_RMS_BASE = None
 
     def __init__(self, image: ObjCImage, methlist_head, base_meths, class_meta, class_name):
@@ -546,7 +518,8 @@ class MethodList:
 
 class Method(Constructable):
     @classmethod
-    def from_image(cls, objc_image: ObjCImage, sel_addr, types_addr, is_meta, vm_addr, rms, rms_are_direct, rms_base=None):
+    def from_image(cls, objc_image: ObjCImage, sel_addr, types_addr, is_meta, vm_addr, rms, rms_are_direct,
+                   rms_base=None):
         if rms:
             if rms_are_direct:
                 try:
@@ -566,8 +539,7 @@ class Method(Constructable):
                             raise ex
                     except Exception:
                         raise ex
-                type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True,
-                                                     sectname="__objc_methtype")
+                type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True, sectname="__objc_methtype")
             else:
                 selector_pointer = objc_image.get_uint_at(sel_addr + vm_addr, 8, vm=True)
                 try:
@@ -585,8 +557,7 @@ class Method(Constructable):
                             raise ex
                     except Exception:
                         raise ex
-                type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True,
-                                                     sectname="__objc_methtype")
+                type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True, sectname="__objc_methtype")
         else:
             sel = objc_image.get_cstr_at(sel_addr, 0, vm=True, sectname="__objc_methname")
             type_string = objc_image.get_cstr_at(types_addr, 0, vm=True, sectname="__objc_methtype")
@@ -619,13 +590,8 @@ class Method(Constructable):
         self.signature = self._build_method_signature()
 
     def serialize(self):
-        return {
-            'selector': self.sel,
-            'arguments': self.arguments,
-            'return_type': self.return_string,
-            'signature': self.signature,
-            'typestring': self.type_string
-        }
+        return {'selector': self.sel, 'arguments': self.arguments, 'return_type': self.return_string,
+            'signature': self.signature, 'typestring': self.type_string}
 
     def __str__(self):
         ret = ""
@@ -674,7 +640,8 @@ class Class(Constructable):
     """
 
     @classmethod
-    def from_image(cls, objc_image: ObjCImage, class_ptr: int, meta=False, class_ptr_is_direct=False) -> Optional['Class']:
+    def from_image(cls, objc_image: ObjCImage, class_ptr: int, meta=False, class_ptr_is_direct=False) -> Optional[
+        'Class']:
         if class_ptr in objc_image.class_map:
             return objc_image.class_map[class_ptr]
 
@@ -697,9 +664,11 @@ class Class(Constructable):
         if objc2_class_location == 0 or not objc_image.vm_check(objc2_class_location):
 
             if opts.OBJC_LOAD_ERRORS_SEND_TO_DEBUG:
-                log.debug(f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '-'} failed")
+                log.debug(
+                    f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '-'} failed")
             else:
-                log.error(f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '-'} failed")
+                log.error(
+                    f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '-'} failed")
             objc_image.class_map[class_ptr] = None
             return None
 
@@ -838,8 +807,7 @@ class Class(Constructable):
 
     @classmethod
     def from_values(cls, name, superclass_name, methods: List[Method], properties: List['Property'],
-                    ivars: List['Ivar'],
-                    protocols: List['Protocol'], load_errors=None, structs=None):
+                    ivars: List['Ivar'], protocols: List['Protocol'], load_errors=None, structs=None):
         return cls(name, False, superclass_name, methods, properties, ivars, protocols, load_errors, structs)
 
     def raw_bytes(self):
@@ -870,14 +838,10 @@ class Class(Constructable):
         self.ivars = ivars
 
     def serialize(self):
-        return {
-            'name': self.name,
-            'superclass': self.superclass,
+        return {'name': self.name, 'superclass': self.superclass,
             'methods': [meth.serialize() for meth in self.methods],
             'properties': [prop.serialize() for prop in self.properties],
-            'protocols': [prot.name for prot in self.protocols],
-            'ivars': [ivar.serialize() for ivar in self.ivars]
-        }
+            'protocols': [prot.name for prot in self.protocols], 'ivars': [ivar.serialize() for ivar in self.ivars]}
 
     def __str__(self):
         ret = ""
@@ -888,16 +852,10 @@ class Class(Constructable):
         pass
 
 
-attr_encodings = {
-    "&": "retain",
-    "N": "nonatomic",
-    "W": "weak",
-    "R": "readonly",
-    "C": "copy"
-}
+attr_encodings = {"&": "retain", "N": "nonatomic", "W": "weak", "R": "readonly", "C": "copy"}
 
-property_attr = namedtuple("property_attr", ["type", "attributes", "ivar", "is_id", "typestr", "getter", "setter",
-                                             "is_dynamic"])
+property_attr = namedtuple("property_attr",
+                           ["type", "attributes", "ivar", "is_id", "typestr", "getter", "setter", "is_dynamic"])
 
 
 class Property(Constructable):
@@ -936,8 +894,7 @@ class Property(Constructable):
             else:
                 self.setter = "set" + self.name[0].upper() + self.name[1:]
         except IndexError:
-            log.warn(
-                f'issue with property {self.name} attr {attr_string}')
+            log.warn(f'issue with property {self.name} attr {attr_string}')
             self.type = '?'
             self.attr_string = ""
             self.is_id = False
@@ -947,8 +904,7 @@ class Property(Constructable):
             self.setter = ""
             self.attr = None
         except TypeError:
-            log.warn(
-                f'issue with property {self.name} attr {attr_string}')
+            log.warn(f'issue with property {self.name} attr {attr_string}')
             self.type = '?'
             self.attr_string = ""
             self.is_id = False
@@ -959,17 +915,9 @@ class Property(Constructable):
             self.attr = None
 
     def serialize(self):
-        return {
-            'name': self.name,
-            'type': self.type,
-            'is_id': self.is_id,
-            'ivar_name': self.ivarname,
-            'attributes': self.attributes,
-            'attr_string': self.attr_string,
-            'getter': self.getter,
-            'setter': self.setter,
-            'rendered': str(self)
-        }
+        return {'name': self.name, 'type': self.type, 'is_id': self.is_id, 'ivar_name': self.ivarname,
+            'attributes': self.attributes, 'attr_string': self.attr_string, 'getter': self.getter,
+            'setter': self.setter, 'rendered': str(self)}
 
     def __str__(self):
         if not hasattr(self, 'attributes'):
@@ -1128,13 +1076,10 @@ class Category(Constructable):
         self.protocols = []
 
     def serialize(self):
-        return {
-            'name': self.name,
-            'classname': self.classname,
+        return {'name': self.name, 'classname': self.classname,
             'methods': [method.serialize() for method in self.methods],
             'properties': [prop.serialize() for prop in self.properties],
-            'protocols': [prot.name for prot in self.protocols]
-        }
+            'protocols': [prot.name for prot in self.protocols]}
 
 
 class Protocol(Constructable):
@@ -1197,7 +1142,7 @@ class Protocol(Constructable):
     def load_methods(cls, objc_image, name, loc, meta=False):
         vm_ea = loc
         if loc != 0:
-            methlist_head = objc_image.load_struct(loc, objc2_meth_list)
+            methlist_head = objc_image.read_struct(loc, objc2_meth_list)
         else:
             methlist_head = None
 
@@ -1231,12 +1176,9 @@ class Protocol(Constructable):
         self.properties = properties
 
     def serialize(self):
-        return {
-            'name': self.name,
-            'methods': [meth.serialize() for meth in self.methods],
+        return {'name': self.name, 'methods': [meth.serialize() for meth in self.methods],
             'optional-methods': [meth.serialize() for meth in self.opt_methods],
-            'properties': [prop.serialize() for prop in self.properties]
-        }
+            'properties': [prop.serialize() for prop in self.properties]}
 
     def __str__(self):
         return self.name

@@ -9,7 +9,7 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 
 from typing import List, Dict

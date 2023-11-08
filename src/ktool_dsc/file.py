@@ -1,5 +1,5 @@
 #
-#  ktool | kdsc
+#  ktool | ktool_dsc
 #  file.py
 #
 #
@@ -9,15 +9,17 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 from typing import BinaryIO
 import mmap
+
 
 class MemoryCappedBufferedFileReader:
     """
     File reader that is optimistically capped at a 50mb cache
     """
+
     def __init__(self, fp: BinaryIO, mbs=50):
         fp.close()
         fp = open(fp.name, 'rb')
@@ -41,7 +43,7 @@ class MemoryCappedBufferedFileReader:
         return val
 
     def read(self, address, length):
-        return self.fp[address:address+length]
+        return self.fp[address:address + length]
         return d
         page_offset = address & self.chunk_size - 1
         orig_length = length
@@ -79,8 +81,6 @@ class MemoryCappedBufferedFileReader:
             self.chunk_cache[page_location] = data
             self.chunks.append(page_location)
 
-        out = data[page_offset:page_offset+length]
+        out = data[page_offset:page_offset + length]
         assert len(out) == length
         return out
-
-

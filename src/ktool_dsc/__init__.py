@@ -1,5 +1,5 @@
 #
-#  ktool | kdsc
+#  ktool | ktool_dsc
 #  __init__.py
 #
 #
@@ -9,5 +9,5 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #

@@ -10,26 +10,20 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 from collections import namedtuple
 from typing import List, Union, Dict
 
-from kmacho import (
-    MH_FLAGS,
-    MH_FILETYPE,
-    LOAD_COMMAND,
-    BINDING_OPCODE,
-    LOAD_COMMAND_MAP,
-    BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB,
-    BIND_SUBOPCODE_THREADED_APPLY, MH_MAGIC_64, CPUType, CPUSubTypeARM64, MH_MAGIC
-)
-from kmacho.base import Constructable
-from kmacho.fixups import *
+from ktool_macho import (MH_FLAGS, MH_FILETYPE, LOAD_COMMAND, BINDING_OPCODE, LOAD_COMMAND_MAP,
+                    BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB, BIND_SUBOPCODE_THREADED_APPLY,
+                    MH_MAGIC_64, CPUType, CPUSubTypeARM64, MH_MAGIC)
+from ktool_macho.base import Constructable
+from ktool_macho.fixups import *
 from ktool.codesign import CodesignInfo
 from ktool.exceptions import MachOAlignmentError
 from ktool.macho import Segment, Slice, MachOImageHeader, PlatformType
-from katlib.log import log
+from lib0cyn.log import log
 from ktool.util import macho_is_malformed, ignore, bytes_to_hex
 from ktool.image import Image, os_version, LinkedImage, MisalignedVM
 
@@ -43,7 +37,8 @@ class MachOImageLoader:
     SYMTAB_LOADER = None
 
     @classmethod
-    def load(cls, macho_slice: Slice, load_symtab=True, load_imports=True, load_exports=True, force_misaligned_vm=False) -> Image:
+    def load(cls, macho_slice: Slice, load_symtab=True, load_imports=True, load_exports=True,
+             force_misaligned_vm=False) -> Image:
         """
         Take a slice of a macho file and process it using the dyld functions
 
@@ -99,7 +94,7 @@ class MachOImageLoader:
                 thread_state = []
                 for i in range(cmd.count):
                     off = cmd.off + 16 + (i * 4)
-                    val = image.get_uint_at(off, 4)
+                    val = image.read_uint(off, 4)
                     thread_state.append(val)
 
                 image.thread_state = thread_state
@@ -132,7 +127,7 @@ class MachOImageLoader:
                 fs_addr = image.vm.vm_base_addr
 
                 while read_head < fs_start + fs_size:
-                    fs_r_addr, read_head = image.decode_uleb128(read_head)
+                    fs_r_addr, read_head = image.read_uleb128(read_head)
                     fs_addr += fs_r_addr
                     image.function_starts.append(fs_addr)
 
@@ -157,22 +152,21 @@ class MachOImageLoader:
                 log.info(f'image UUID: {image.uuid}')
 
             elif load_command == LOAD_COMMAND.SUB_CLIENT:
-                string = image.get_cstr_at(cmd.off + cmd.offset)
+                string = image.read_cstr(cmd.off + cmd.offset)
                 image.allowed_clients.append(string)
                 log.debug(f'Loaded Subclient "{string}"')
 
             elif load_command == LOAD_COMMAND.RPATH:
-                string = image.get_cstr_at(cmd.off + cmd.path)
+                string = image.read_cstr(cmd.off + cmd.path)
                 image.rpath = string
                 log.info(f'image Resource Path: {string}')
 
             elif load_command == LOAD_COMMAND.BUILD_VERSION:
                 image.platform = PlatformType(cmd.platform)
-                image.minos = os_version(x=image.get_uint_at(cmd.off + 14, 2), y=image.get_uint_at(cmd.off + 13, 1),
-                                         z=image.get_uint_at(cmd.off + 12, 1))
-                image.sdk_version = os_version(x=image.get_uint_at(cmd.off + 18, 2),
-                                               y=image.get_uint_at(cmd.off + 17, 1),
-                                               z=image.get_uint_at(cmd.off + 16, 1))
+                image.minos = os_version(x=image.read_uint(cmd.off + 14, 2), y=image.read_uint(cmd.off + 13, 1),
+                                         z=image.read_uint(cmd.off + 12, 1))
+                image.sdk_version = os_version(x=image.read_uint(cmd.off + 18, 2), y=image.read_uint(cmd.off + 17, 1),
+                                               z=image.read_uint(cmd.off + 16, 1))
                 log.info(f'Loaded platform {image.platform.name} | '
                          f'Minimum OS {image.minos.x}.{image.minos.y}'
                          f'.{image.minos.z} | SDK Version {image.sdk_version.x}'
@@ -190,9 +184,8 @@ class MachOImageLoader:
                     elif load_command == LOAD_COMMAND.VERSION_MIN_WATCHOS:
                         image.platform = PlatformType.WATCHOS
 
-                    image.minos = os_version(x=image.get_uint_at(cmd.off + 10, 2),
-                                             y=image.get_uint_at(cmd.off + 9, 1),
-                                             z=image.get_uint_at(cmd.off + 8, 1))
+                    image.minos = os_version(x=image.read_uint(cmd.off + 10, 2), y=image.read_uint(cmd.off + 9, 1),
+                                             z=image.read_uint(cmd.off + 8, 1))
 
             elif load_command == LOAD_COMMAND.ID_DYLIB:
                 image.dylib = LinkedImage(image, cmd)
@@ -277,7 +270,7 @@ class Symbol(Constructable):
 
     @classmethod
     def from_image(cls, image, cmd, entry):
-        fullname = image.get_cstr_at(entry.str_index + cmd.stroff)
+        fullname = image.read_cstr(entry.str_index + cmd.stroff)
         addr = entry.value
 
         symbol = cls.from_values(fullname, addr)
@@ -319,12 +312,7 @@ class Symbol(Constructable):
         pass
 
     def serialize(self):
-        return {
-            'name': self.fullname,
-            'address': self.address,
-            'external': self.external,
-            'ordinal': self.ordinal
-        }
+        return {'name': self.fullname, 'address': self.address, 'external': self.external, 'ordinal': self.ordinal}
 
     def __init__(self, fullname=None, name=None, dec_type=None, external=False, value=0, ordinal=0):
         self.fullname = fullname
@@ -367,7 +355,7 @@ class SymbolTable:
         typing = symtab_entry if self.image.macho_header.is64 else symtab_entry_32
 
         for i in range(0, self.cmd.nsyms):
-            entry = self.image.load_struct(read_address + typing.SIZE * i, typing)
+            entry = self.image.read_struct(read_address + typing.SIZE * i, typing)
             symbol = Symbol.from_image(self.image, self.cmd, entry)
             symbol_table.append(symbol)
 
@@ -386,7 +374,7 @@ class ChainedFixups(Constructable):
 
         syms = []
 
-        fixup_header = image.load_struct(chained_fixup_cmd.dataoff, dyld_chained_fixups_header)
+        fixup_header = image.read_struct(chained_fixup_cmd.dataoff, dyld_chained_fixups_header)
         log.debug_tm(f'{fixup_header.render_indented()}')
 
         if fixup_header.fixups_version > 0:
@@ -407,28 +395,28 @@ class ChainedFixups(Constructable):
         import_table = []
         for i in range(0, fixup_header.imports_count):
             i_addr = (i * 4) + imports_address
-            i_entry = image.load_struct(i_addr, dyld_chained_import)
+            i_entry = image.read_struct(i_addr, dyld_chained_import)
             lib_ord = i_entry.lib_ordinal
             is_weak = i_entry.weak_import
             name_addr = symbols_address + i_entry.name_offset
-            sym_name = image.get_cstr_at(name_addr)
+            sym_name = image.read_cstr(name_addr)
             entry = import_entry_t(lib_ord, is_weak, sym_name)
             import_table.append(entry)
             log.debug_tm(f'ChFx:ImportTable: {sym_name} @ ord {lib_ord}')
 
         fixup_starts_address = chained_fixup_cmd.dataoff + fixup_header.starts_offset
-        segment_count = image.get_uint_at(fixup_starts_address, 4)
+        segment_count = image.read_uint(fixup_starts_address, 4)
         seg_info_offsets = []
         cursor = fixup_starts_address + 4
         for i in range(0, segment_count):
-            seg_info_offsets.append(image.get_uint_at(cursor, 4))
+            seg_info_offsets.append(image.read_uint(cursor, 4))
             cursor += 4
 
         for off in seg_info_offsets:
             if off == 0:
                 continue
             segstarts_addr = fixup_starts_address + off
-            starts = image.load_struct(segstarts_addr, dyld_chained_starts_in_segment, endian="little")
+            starts = image.read_struct(segstarts_addr, dyld_chained_starts_in_segment, endian="little")
 
             stride_size: int = 0
             ptr_format: ChainedFixupPointerGeneric = ChainedFixupPointerGeneric.Error
@@ -466,14 +454,14 @@ class ChainedFixups(Constructable):
             for i in range(0, starts.page_count):
                 page_start_table_start_address = segstarts_addr + 22
                 i_addr = page_start_table_start_address + (2 * i)
-                start = image.get_uint_at(i_addr, 2)
+                start = image.read_uint(i_addr, 2)
                 if (start & DYLD_CHAINED_PTR_START_MULTI) and (start != DYLD_CHAINED_PTR_START_NONE):
                     overflow_index = start & ~DYLD_CHAINED_PTR_START_MULTI
                     page_start_sub_starts: List[int] = []
                     cursor = page_start_table_start_address + (overflow_index * 2)
                     done = False
                     while not done:
-                        sub_page_start = image.get_uint_at(cursor, 2)
+                        sub_page_start = image.read_uint(cursor, 2)
                         cursor += 2
                         if sub_page_start & DYLD_CHAINED_PTR_START_LAST:
                             page_start_sub_starts.append(sub_page_start & ~DYLD_CHAINED_PTR_START_LAST)
@@ -495,15 +483,15 @@ class ChainedFixups(Constructable):
                     fixups_done = False
                     while not fixups_done:
                         cursor = chain_entry_address
-                        mapped_cursor = image.vm.detranslate(cursor)
+                        mapped_cursor = image.vm.de_translate(cursor)
                         pointer32: ChainedFixupPointer32 = None
                         pointer64: ChainedFixupPointer64 = None
 
                         if ptr_format in [ChainedFixupPointerGeneric.Generic32FixupFormat,
                                           ChainedFixupPointerGeneric.Firmware32FixupFormat]:
-                            pointer32 = image.load_struct(cursor, ChainedFixupPointer32)
+                            pointer32 = image.read_struct(cursor, ChainedFixupPointer32)
                         else:
-                            pointer64 = image.load_struct(cursor, ChainedFixupPointer64)
+                            pointer64 = image.read_struct(cursor, ChainedFixupPointer64)
 
                         bind: bool = False
                         next_entry_stride_count = 0
@@ -525,25 +513,17 @@ class ChainedFixups(Constructable):
 
                         if bind:
                             ordinal = 0
-                            if starts.pointer_format in [
-                                dyld_chained_ptr_format.DYLD_CHAINED_PTR_64.value,
+                            if starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_64.value,
                                 dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET.value]:
                                 ordinal = pointer64.generic64.ChainedPointerGeneric64.dyld_chained_ptr_64_bind.ordinal
-                            elif starts.pointer_format in [ # i swear this looks better in c++
+                            elif starts.pointer_format in [  # i swear this looks better in c++
                                 dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E.value,
                                 dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND.value,
-                                dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_KERNEL.value
-                                ]:
+                                dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_KERNEL.value]:
                                 if (pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_bind.auth != 0):
-                                    ordinal = pointer64.generic64.ChainedPointerArm64E\
-                                        .dyld_chained_ptr_arm64e_auth_bind24.ordinal if \
-                                    starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24 \
-                                        else pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_bind.ordinal
+                                    ordinal = pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_bind24.ordinal if starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24 else pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_bind.ordinal
                                 else:
-                                    ordinal = pointer64.generic64.ChainedPointerArm64E\
-                                        .dyld_chained_ptr_arm64e_bind24.ordinal if \
-                                    starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24 \
-                                        else pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_bind.ordinal
+                                    ordinal = pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_bind24.ordinal if starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24 else pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_bind.ordinal
                             elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32.value:
                                 ordinal = pointer32.generic32.dyld_chained_ptr_32_bind.ordinal
 
@@ -595,7 +575,7 @@ class ExportTrie(Constructable):
 
         trie.nodes = nodes
         trie.symbols = symbols
-        trie.raw = image.get_bytes_at(export_start, export_size)
+        trie.raw = image.read_bytearray(export_start, export_size)
 
         return trie
 
@@ -619,26 +599,26 @@ class ExportTrie(Constructable):
             macho_is_malformed()
 
         start = cursor
-        terminal_size, cursor = image.decode_uleb128(cursor)
+        terminal_size, cursor = image.read_uleb128(cursor)
         results = []
         log.debug_tm(f'@ {hex(start)} node: {hex(terminal_size)} current_symbol: {string}')
         child_start = cursor + terminal_size
         if terminal_size != 0:
             log.debug_tm(f'TERM: 0')
-            size, cursor = image.decode_uleb128(cursor)
-            flags = image.get_uint_at(cursor, 1)
+            size, cursor = image.read_uleb128(cursor)
+            flags = image.read_uint(cursor, 1)
             cursor += 1
-            offset, cursor = image.decode_uleb128(cursor)
+            offset, cursor = image.read_uleb128(cursor)
             results.append(export_node(string, offset, flags))
         cursor = child_start
-        branches = image.get_uint_at(cursor, 1)
+        branches = image.read_uint(cursor, 1)
         log.debug_tm(f'BRAN {branches}')
         for i in range(0, branches):
             if i == 0:
                 cursor += 1
-            proc_str = image.get_cstr_at(cursor)
+            proc_str = image.read_cstr(cursor)
             cursor += len(proc_str) + 1
-            offset, cursor = image.decode_uleb128(cursor)
+            offset, cursor = image.read_uleb128(cursor)
             log.debug_tm(f'({i}) string: {string + proc_str} next_node: {hex(trie_start + offset)}')
             results += ExportTrie.read_node(image, trie_start, string + proc_str, trie_start + offset, endpoint)
 
@@ -646,17 +626,8 @@ class ExportTrie(Constructable):
 
 
 action = namedtuple("action", ["vmaddr", "libname", "item"])
-record = namedtuple("record", [
-    "off",
-    "seg_index",
-    "seg_offset",
-    "lib_ordinal",
-    "type",
-    "flags",
-    "name",
-    "addend",
-    "special_dylib"
-])
+record = namedtuple("record", ["off", "seg_index", "seg_offset", "lib_ordinal", "type", "flags", "name", "addend",
+    "special_dylib"])
 
 
 class BindingTable:
@@ -730,15 +701,15 @@ class BindingTable:
             while True:
                 # There are 0xc opcodes total
                 # Bitmask opcode byte with 0xF0 to get opcode, 0xF to get value
-                binding_opcode = self.image.get_uint_at(read_address, 1) & 0xF0
-                value = self.image.get_uint_at(read_address, 1) & 0x0F
+                binding_opcode = self.image.read_uint(read_address, 1) & 0xF0
+                value = self.image.read_uint(read_address, 1) & 0x0F
                 log.debug_tm(f'{BINDING_OPCODE(binding_opcode).name}: {hex(value)}')
                 cmd_start_addr = read_address
                 read_address += 1
 
                 if binding_opcode == BINDING_OPCODE.THREADED:
                     if value == BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB:
-                        a_table_size, read_address = self.image.decode_uleb128(read_address)
+                        a_table_size, read_address = self.image.read_uleb128(read_address)
                         uses_threaded_bind = True
                     elif value == BIND_SUBOPCODE_THREADED_APPLY:
                         pass
@@ -753,7 +724,7 @@ class BindingTable:
                     lib_ordinal = value
 
                 elif binding_opcode == BINDING_OPCODE.SET_DYLIB_ORDINAL_ULEB:
-                    lib_ordinal, read_address = self.image.decode_uleb128(read_address)
+                    lib_ordinal, read_address = self.image.read_uleb128(read_address)
 
                 elif binding_opcode == BINDING_OPCODE.SET_DYLIB_SPECIAL_IMM:
                     special_dylib = 0x1
@@ -761,21 +732,21 @@ class BindingTable:
 
                 elif binding_opcode == BINDING_OPCODE.SET_SYMBOL_TRAILING_FLAGS_IMM:
                     flags = value
-                    name = self.image.get_cstr_at(read_address)
+                    name = self.image.read_cstr(read_address)
                     read_address += len(name) + 1
 
                 elif binding_opcode == BINDING_OPCODE.SET_TYPE_IMM:
                     btype = value
 
                 elif binding_opcode == BINDING_OPCODE.SET_ADDEND_SLEB:
-                    addend, read_address = self.image.decode_uleb128(read_address)
+                    addend, read_address = self.image.read_uleb128(read_address)
 
                 elif binding_opcode == BINDING_OPCODE.SET_SEGMENT_AND_OFFSET_ULEB:
                     seg_index = value
-                    seg_offset, read_address = self.image.decode_uleb128(read_address)
+                    seg_offset, read_address = self.image.read_uleb128(read_address)
 
                 elif binding_opcode == BINDING_OPCODE.ADD_ADDR_ULEB:
-                    o, read_address = self.image.decode_uleb128(read_address)
+                    o, read_address = self.image.read_uleb128(read_address)
                     seg_offset += o
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_ULEB:
@@ -783,7 +754,7 @@ class BindingTable:
                         record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
                                special_dylib))
                     seg_offset += 8
-                    o, read_address = self.image.decode_uleb128(read_address)
+                    o, read_address = self.image.read_uleb128(read_address)
                     seg_offset += o
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ADD_ADDR_IMM_SCALED:
@@ -793,8 +764,8 @@ class BindingTable:
                     seg_offset = seg_offset + (value * 8) + 8
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
-                    count, read_address = self.image.decode_uleb128(read_address)
-                    skip, read_address = self.image.decode_uleb128(read_address)
+                    count, read_address = self.image.read_uleb128(read_address)
+                    skip, read_address = self.image.read_uleb128(read_address)
 
                     for i in range(0, count):
                         import_stack.append(

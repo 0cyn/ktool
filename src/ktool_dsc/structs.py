@@ -1,5 +1,5 @@
 #
-#  ktool | kdsc
+#  ktool | ktool_dsc
 #  structs.py
 #
 #
@@ -9,10 +9,10 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 
-from katlib.structs import *
+from lib0cyn.structs import *
 
 
 class dyld_cache_header(Struct):

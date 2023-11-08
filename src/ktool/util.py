@@ -9,7 +9,7 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 import concurrent.futures
 import inspect
@@ -20,12 +20,12 @@ from enum import Enum
 from typing import List, Union
 import re
 
-from kmacho import Struct, FAT_CIGAM, FAT_MAGIC, MH_CIGAM, MH_CIGAM_64, MH_MAGIC, MH_MAGIC_64
+from ktool_macho import Struct, FAT_CIGAM, FAT_MAGIC, MH_CIGAM, MH_CIGAM_64, MH_MAGIC, MH_MAGIC_64
 from ktool.exceptions import *
 
 import pkg_resources
 
-import katlib.log as log
+import lib0cyn.log as log
 
 try:
     KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
@@ -33,127 +33,16 @@ except pkg_resources.DistributionNotFound:
     KTOOL_VERSION = '1.0.0'
 THREAD_COUNT = os.cpu_count() - 1
 
-
 OUT_IS_TTY = sys.stdout.isatty()
-
 
 MY_DIR = __file__
 
 
 def version_output():
-
     if OUT_IS_TTY:
+        pass
 
-        up_chr = "\x1B[3A"
-        clr_chr = "\x1B[0K"
-
-        char_set = """                     ___====-_  _-====___
-                   _--^^^#####//      \\\\#####^^^--_
-                _-^##########// (    ) \\\\##########^-_
-               -############//  |\\^^/|  \\\\############-
-             _/############//   (@::@)   \\\\############\\_
-            /#############((     \\\\//     ))#############\\
-           -###############\\\\    (oo)    //###############-
-          -#################\\\\  /    \\  //#################-
-         -###################\\\\/      \\//###################-
-        _#/|##########/\\######(   /\\   )######/\\##########|\\#_
-        |/ |#/\\#/\\#/\\/  \\#/\\##\\  |  |  /##/\\#/  \\/\\#/\\#/\\#| \\|
-        `  |/  V  V  `   V  \\#\\| |  | |/#/  V   '  V  V  \\|  '
-           `   `  `      `   / | |  | | \\   '      '  '   '
-                            (  | |  | |  )    {}
-           {}__\\ | |  | | /__   {}
-                          (vvv(VVV)(VVV)vvv)  {}"""
-
-        line_count = char_set.count('\n')
-        print('\n' * (line_count + 2))
-
-        up_count = line_count - 6
-        cset_proc = char_set.format('by cynder', f'ktool v{KTOOL_VERSION}'.ljust(16, ' '), 'gh/cxnder', '@arm64e')
-
-        lines = cset_proc.split("\n")
-
-        maxwid = 0
-        for line in lines:
-            maxwid = max(maxwid, len(line))
-
-        lines = [i.ljust(maxwid, ' ') for i in lines]
-
-        for i in range(maxwid * 2):
-            if i < 5:
-                continue
-
-            pre_lines = [*lines]
-
-            for y, line in enumerate(pre_lines):
-                target = y + (i - maxwid + 1)
-                if 0 <= target - 3 <= maxwid - 5:
-                    chop_pre = line[:target - 3]
-                    chop_post = line[target + 3 + 1:]
-                    chop_sect = line[target - 3:target + 3]
-                    chop_color = ""
-                    try:
-                        chop_color += f'\033[38;5;52m{chop_sect[0]}'
-                        chop_color += f'\033[38;5;166m{chop_sect[1]}'
-                        chop_color += f'\033[38;5;120m{chop_sect[2]}'
-                        chop_color += f'\033[38;5;26m{chop_sect[3]}'
-                        chop_color += f'\033[38;5;20m{chop_sect[4]}'
-                        chop_color += f'\033[38;5;69m{chop_sect[5]}'
-                    except IndexError:
-                        pass  # too lazy to debug this at 2 am for what's essentially a meme
-
-                    pre_lines[y] = chop_pre + f'{chop_color}\033[0m' + chop_post
-
-            # append CLR op to the lines
-            cset_proc = ''.join([f'{i}{clr_chr}\n' for i in pre_lines]) + '\n'
-
-            # erase previous output
-            for _ in range(up_count):
-                print(f'{up_chr}')
-
-            # print our latest iteration
-            print(cset_proc)
-            time.sleep(0.015)
-
-        for i in reversed(range(maxwid * 2)):
-            if i < 5:
-                continue
-
-            pre_lines = [*lines]
-
-            for y, line in enumerate(pre_lines):
-                target = y + (i - maxwid + 1)
-                if 0 <= target - 3 <= maxwid - 5:
-                    chop_pre = line[:target - 3]
-                    chop_post = line[target + 3 + 1:]
-                    chop_sect = line[target - 3:target + 3]
-                    chop_color = ""
-                    try:
-                        chop_color += f'\033[38;5;52m{chop_sect[0]}'
-                        chop_color += f'\033[38;5;166m{chop_sect[1]}'
-                        chop_color += f'\033[38;5;120m{chop_sect[2]}'
-                        chop_color += f'\033[38;5;26m{chop_sect[3]}'
-                        chop_color += f'\033[38;5;20m{chop_sect[4]}'
-                        chop_color += f'\033[38;5;69m{chop_sect[5]}'
-                    except IndexError:
-                        pass  # too lazy to debug this at 2 am for what's essentially a meme
-
-                    pre_lines[y] = chop_pre + f'{chop_color}\033[0m' + chop_post
-
-            # append CLR op to the lines
-            cset_proc = ''.join([f'{i}{clr_chr}\n' for i in pre_lines]) + '\n'
-
-            # erase previous output
-            for _ in range(up_count):
-                print(f'{up_chr}')
-
-            # print our latest iteration
-            print(cset_proc)
-            time.sleep(0.02)
-
-        for i in range(up_count):
-            print(f'{up_chr}')
-
-    print(f'ktool v{KTOOL_VERSION}. by cynder. gh/cxnder || @arm64e')
+    print(f'ktool v{KTOOL_VERSION}. by cynder. gh/0cyn')
 
 
 class ignore:
@@ -264,13 +153,10 @@ class TapiYAMLWriter:
 
     @staticmethod
     def write_out(tapi_dict: dict):
-        text = ["---",
-                "archs:".ljust(23) + TapiYAMLWriter.serialize_list(tapi_dict['archs']),
-                "platform:".ljust(23) + tapi_dict['platform'],
-                "install-name:".ljust(23) + tapi_dict['install-name'],
+        text = ["---", "archs:".ljust(23) + TapiYAMLWriter.serialize_list(tapi_dict['archs']),
+                "platform:".ljust(23) + tapi_dict['platform'], "install-name:".ljust(23) + tapi_dict['install-name'],
                 "current-version:".ljust(23) + str(tapi_dict['current-version']),
-                "compatibility-version: " + str(tapi_dict['compatibility-version']),
-                "exports:"]
+                "compatibility-version: " + str(tapi_dict['compatibility-version']), "exports:"]
         for arch in tapi_dict['exports']:
             text.append(TapiYAMLWriter.serialize_export_arch(arch))
         text.append('...')
@@ -280,8 +166,8 @@ class TapiYAMLWriter:
     def serialize_export_arch(export_dict):
         text = ['  - ' + 'archs:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['archs'])]
         if 'allowed-clients' in export_dict:
-            text.append \
-                ('    ' + 'allowed-clients:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['allowed-clients']))
+            text.append(
+                '    ' + 'allowed-clients:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['allowed-clients']))
         if 'symbols' in export_dict:
             text.append('    ' + 'symbols:'.ljust(22) + TapiYAMLWriter.serialize_list(export_dict['symbols']))
         if 'objc-classes' in export_dict:

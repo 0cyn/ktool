@@ -2,17 +2,17 @@
 #  ktool | ktool
 #  structs.py
 #
-#  This file contains objc2 structs conforming to the kmacho struct system.
+#  This file contains objc2 structs conforming to the ktool_macho struct system.
 #
 #  This file is part of ktool. ktool is free software that
 #  is made available under the MIT license. Consult the
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 
-from katlib.structs import *
+from lib0cyn.structs import *
 
 
 class objc2_class(Struct):
@@ -30,8 +30,8 @@ class objc2_class(Struct):
 
 
 class objc2_class_ro(Struct):
-    _FIELDNAMES = ['flags', 'ivar_base_start', 'ivar_base_size', 'reserved', 'ivar_lyt',
-                   'name', 'base_meths', 'base_prots', 'ivars', 'weak_ivar_lyt', 'base_props']
+    _FIELDNAMES = ['flags', 'ivar_base_start', 'ivar_base_size', 'reserved', 'ivar_lyt', 'name', 'base_meths',
+                   'base_prots', 'ivars', 'weak_ivar_lyt', 'base_props']
     _SIZES = [4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8]
     SIZE = sum(_SIZES)
 

@@ -7,14 +7,6 @@
 #  This uses the 3.7 version (since the new API is busted) and
 #       modifies the integer reading stuff to properly support empty values and hex strings.
 #
-#  This file is part of ktool. ktool is free software that
-#  is made available under the MIT license. Consult the
-#  file "LICENSE" that is distributed together with this file
-#  for the exact licensing terms.
-#
-#  Copyright (c) kat 2022.
-#
-
 
 r"""plistlib.py -- a tool to generate and parse MacOSX .plist files.
 The property list (.plist) file format is a simple XML pickle supporting

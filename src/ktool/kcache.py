@@ -9,16 +9,16 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 from io import BytesIO
 
 import ktool
-from katlib.structs import *
+from lib0cyn.structs import *
 from ktool import MachOFile, Image
-from katlib.log import log
+from lib0cyn.log import log
 from ktool.loader import MachOImageHeader, MachOImageLoader
-import katlib.kplistlib as plistlib
+import lib0cyn.kplistlib as plistlib
 from ktool.exceptions import UnsupportedFiletypeException
 
 
@@ -27,8 +27,8 @@ class kmod_info_64(Struct):
     """
     _FIELDNAMES = ['next_addr', 'info_version', 'id', 'name', 'version', 'reference_count', 'reference_list_addr',
                    'address', 'size', 'hdr_size', 'start_addr', 'stop_addr']
-    _SIZES = [uint64_t, int32_t, uint32_t, char_t[64], char_t[64], int32_t, uint64_t,
-              uint64_t, uint64_t, uint64_t, uint64_t, uint64_t]
+    _SIZES = [uint64_t, int32_t, uint32_t, char_t[64], char_t[64], int32_t, uint64_t, uint64_t, uint64_t, uint64_t,
+              uint64_t, uint64_t]
     SIZE = sum([0xffff & i for i in _SIZES])
 
     def __init__(self, byte_order="little"):
@@ -37,7 +37,6 @@ class kmod_info_64(Struct):
 
 class Kext:
     def __init__(self):
-
         self.prelink_info = {}
 
         self.name = ""
@@ -64,7 +63,7 @@ class EmbeddedKext(Kext):
         self.version = prelink_info['CFBundleVersion']
 
         self.backing_file = BytesIO()
-        self.backing_file.write(image.get_bytes_at(self.start_addr, self.size, vm=True))
+        self.backing_file.write(image.read_bytearray(self.start_addr, self.size, vm=True))
         self.backing_file.seek(0)
         self.image = ktool.load_image(self.backing_file)
 
@@ -77,8 +76,8 @@ class MergedKext(Kext):
         self.backing_slice = image.slice
 
         is64 = image.macho_header.is64
-        self.name = image.get_cstr_at(kmod_info.off + (0x10 if is64 else 0x8), vm=False)
-        self.version = image.get_cstr_at(kmod_info.off + 64 + (0x10 if is64 else 0x8), vm=False)
+        self.name = image.read_cstr(kmod_info.off + (0x10 if is64 else 0x8), vm=False)
+        self.version = image.read_cstr(kmod_info.off + 64 + (0x10 if is64 else 0x8), vm=False)
         self.start_addr = start_addr
         self.info = kmod_info
 
@@ -120,7 +119,7 @@ class KernelCache:
 
         self.version_str = ""
         vloc = self.mach_kernel.slice.find('@(#)VERSION:')
-        self.version_str = self.mach_kernel.get_cstr_at(vloc)
+        self.version_str = self.mach_kernel.read_cstr(vloc)
         dat = self.version_str.split('xnu_')[-1].split('/')[-1].lower()
 
         self.release_type = dat.split('_')[0]
@@ -152,14 +151,16 @@ class KernelCache:
                 kext.id = self.prelink_info[kext.name]['CFBundleIdentifier']
                 kext.bundle_name = self.prelink_info[kext.name]['CFBundleName']
                 kext.package_type = self.prelink_info[kext.name]['CFBundlePackageType']
-                kext.info_string = self.prelink_info[kext.name]['CFBundleGetInfoString'] if 'CFBundleGetInfoString' in self.prelink_info[kext.name] else ''
+                kext.info_string = self.prelink_info[kext.name]['CFBundleGetInfoString'] if 'CFBundleGetInfoString' in \
+                                                                                            self.prelink_info[
+                                                                                                kext.name] else ''
                 kext.version_str = self.prelink_info[kext.name]['CFBundleVersion']
 
                 kext.prelink_info = self.prelink_info[kext.name]
 
     def _process_prelink_info(self):
         address = self.mach_kernel.segments['__PRELINK_INFO'].sections['__info'].vm_address
-        prelink_info_str = f'<plist version="1.0">{self.mach_kernel.get_cstr_at(address, vm=True)}</plist>'
+        prelink_info_str = f'<plist version="1.0">{self.mach_kernel.read_cstr(address, vm=True)}</plist>'
         prelink_info_dat = prelink_info_str.encode('utf-8')
         prelink_info = plistlib.readPlistFromBytes(prelink_info_dat)
         items = prelink_info['_PrelinkInfoDictionary']
@@ -173,17 +174,17 @@ class KernelCache:
         ptr_size = 8 if self.mach_kernel.macho_header.is64 else 4
 
         for i in range(kmod_start_sect.file_address, kmod_start_sect.file_address + kmod_start_sect.size, ptr_size):
-            kext_starts.append(self.mach_kernel.get_uint_at(i, ptr_size, vm=False))
+            kext_starts.append(self.mach_kernel.read_uint(i, ptr_size, vm=False))
 
         kmod_info_locations = []
         kmod_info_sect = self.mach_kernel.segments['__PRELINK_INFO'].sections['__kmod_info']
 
         for i in range(kmod_info_sect.file_address, kmod_info_sect.file_address + kmod_info_sect.size, ptr_size):
-            kmod_info_locations.append(self.mach_kernel.get_uint_at(i, ptr_size, vm=False))
+            kmod_info_locations.append(self.mach_kernel.read_uint(i, ptr_size, vm=False))
 
         # start processing kmod info
         for i, info_loc in enumerate(kmod_info_locations):
-            info = self.mach_kernel.load_struct(info_loc, kmod_info_64, vm=True)
+            info = self.mach_kernel.read_struct(info_loc, kmod_info_64, vm=True)
 
             start_addr = kext_starts[i]
             kext = MergedKext(self.mach_kernel, info, start_addr)

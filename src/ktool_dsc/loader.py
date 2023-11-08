@@ -1,5 +1,5 @@
 #
-#  ktool | kdsc
+#  ktool | ktool_dsc
 #  loader.py
 #
 #
@@ -9,17 +9,17 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 import ktool.ktool
-from katlib.log import LogLevel
+from lib0cyn.log import LogLevel
 
-from kdsc.file import *
-from kdsc.structs import *
-from kdsc.shared_cache import *
+from ktool_dsc.file import *
+from ktool_dsc.structs import *
+from ktool_dsc.shared_cache import *
 import os.path as path
 
-from kmacho.structs import *
+from ktool_macho.structs import *
 from ktool.macho import MachOImageHeader, Segment
 from ktool.image import MisalignedVM, Image
 from ktool.objc import MethodList, ObjCImage
@@ -61,7 +61,7 @@ class DyldSharedCacheLoader:
             for off in range(sca_off, sca_off + (sub_cache_entry_type.SIZE * sca_cnt), sub_cache_entry_type.SIZE):
                 subcaches.append(dsc.load_struct(off, sub_cache_entry_type))
             for i, subcache in enumerate(subcaches):
-                suffix = f'.{i+1}' if not isV2Cache else subcache.fileExtension
+                suffix = f'.{i + 1}' if not isV2Cache else subcache.fileExtension
                 file = MemoryCappedBufferedFileReader(open(path + suffix, 'rb'))
                 dsc.subcache_files.append(file)
                 subheader = dsc._load_struct(file, 0, dyld_cache_header)
@@ -72,15 +72,14 @@ class DyldSharedCacheLoader:
                     mapping = dsc._load_struct(file, off, dyld_cache_mapping_info)
                     dsc.vm.map_pages(mapping.fileOffset, mapping.address & 0xFFFFFFFFF, mapping.size, file=file)
             try:
-                file = MemoryCappedBufferedFileReader(open(path+f'.symbols', 'rb'))
+                file = MemoryCappedBufferedFileReader(open(path + f'.symbols', 'rb'))
             except FileNotFoundError:
                 return dsc
             dsc.subcache_files.append(file)
             subheader = dsc._load_struct(file, 0, dyld_cache_header)
             map_off = subheader.mappingOffset
             map_cnt = subheader.mappingCount
-            for off in range(map_off, map_off + map_cnt * dyld_cache_mapping_info.SIZE,
-                             dyld_cache_mapping_info.SIZE):
+            for off in range(map_off, map_off + map_cnt * dyld_cache_mapping_info.SIZE, dyld_cache_mapping_info.SIZE):
                 mapping = dsc._load_struct(file, off, dyld_cache_mapping_info)
                 dsc.vm.map_pages(mapping.fileOffset, mapping.address, mapping.size, file=file)
 
@@ -95,7 +94,7 @@ class DyldSharedCacheLoader:
                 dsc_image = v
                 break
         img = dsc_image
-        header = dsc.load_struct(img.info.address & 0xFFFFFFFFF, mach_header_64, vm=True)
+        header = dsc.read_struct(img.info.address & 0xFFFFFFFFF, mach_header_64, vm=True)
         addr, file = dsc.vm.translate_and_get_file(img.info.address & 0xFFFFFFFFF)
         dsc.vm.detag_64 = True
         dsc.current_base_cache = file
@@ -107,10 +106,10 @@ class DyldSharedCacheLoader:
         image.vm.fallback = dsc.vm
         image.vm.detag_64 = True
         image.slice = DyldSharedCacheImageSliceAdapter(dsc, basename)
-        image.load_struct = dsc.load_struct
-        image.get_uint_at = dsc.get_uint_at
-        image.get_bytes_at = dsc.get_bytes_at
-        image.get_cstr_at = dsc.get_cstr_at
+        image.read_struct = dsc.read_struct
+        image.read_uint = dsc.read_uint
+        image.read_bytearray = dsc.read_bytearray
+        image.read_cstr = dsc.read_cstr
         MachOImageLoader.SYMTAB_LOADER = DSCSymbolTable
         MachOImageLoader._parse_load_commands(image)
 

@@ -9,14 +9,14 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 
 import os
 from collections import namedtuple
 
-from kmacho.structs import *
-from katlib.log import log
+from ktool_macho.structs import *
+from lib0cyn.log import log
 from ktool.loader import MachOImageLoader, SymbolType, Image
 from ktool.macho import Slice
 from ktool.objc import ObjCImage
@@ -82,14 +82,7 @@ class TBDGenerator:
         return tbd
 
 
-fat_arch_for_slice = namedtuple("fat_arch_for_slice", [
-    "slice",
-    "cpu_type",
-    "cpu_subtype",
-    "offset",
-    "size",
-    "align"
-])
+fat_arch_for_slice = namedtuple("fat_arch_for_slice", ["slice", "cpu_type", "cpu_subtype", "offset", "size", "align"])
 
 
 class FatMachOGenerator:

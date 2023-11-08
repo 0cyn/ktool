@@ -11,7 +11,7 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 
 import json
@@ -36,17 +36,11 @@ except ImportError:
     from pkg_resources._vendor import packaging
 
 import ktool
-from kmacho import LOAD_COMMAND
+from ktool_macho import LOAD_COMMAND
 
-from ktool import (
-    MachOFileType,
-    KTOOL_VERSION,
-    ignore,
-    LogLevel,
-    Table
-)
+from ktool import (MachOFileType, KTOOL_VERSION, ignore, LogLevel, Table)
 
-from katlib.log import log
+from lib0cyn.log import log
 
 from ktool.swift import *
 
@@ -57,9 +51,9 @@ from ktool.window import KToolScreen, external_hard_fault_teardown
 
 from ktool.kcache import KernelCache, Kext, EmbeddedKext
 
-from kdsc.loader import *
+from ktool_dsc.loader import *
 
-from kmacho.structs import *
+from ktool_macho.structs import *
 
 UPDATE_AVAILABLE = False
 MAIN_PARSER = None
@@ -295,11 +289,13 @@ def main():
     parser_dump.add_argument('--sorted', dest='sort_headers', action='store_true')
     parser_dump.add_argument('--tbd', dest='do_tbd', action='store_true')
     parser_dump.add_argument('--out', dest='outdir', help="Directory to dump headers into")
-    parser_dump.add_argument('--force-misaligned-vm', dest='force_misaligned', action="store_true", help="Force misaligned VM")
+    parser_dump.add_argument('--force-misaligned-vm', dest='force_misaligned', action="store_true",
+                             help="Force misaligned VM")
     parser_dump.add_argument('filename', nargs='?', default='')
 
-    parser_dump.set_defaults(func=commands.dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False, slice_index=0,
-                             hard_fail=False, get_class=None, forward_declare=False, force_misaligned=False)
+    parser_dump.set_defaults(func=commands.dump, do_headers=False, usfs=False, sort_headers=False, do_tbd=False,
+                             slice_index=0, hard_fail=False, get_class=None, forward_declare=False,
+                             force_misaligned=False)
 
     # list command: Lists lists of things contained in lists in the image.
     parser_list = subparsers.add_parser('list', help='Print various lists')
@@ -328,8 +324,8 @@ def main():
                                 help="Specify Index of Slice (in FAT MachO) to examine")
     parser_symbols.add_argument('filename', nargs='?', default='')
 
-    parser_symbols.set_defaults(func=commands.symbols, get_imports=False, get_actions=False, get_exports=False, get_symtab=False,
-                                slice_index=0)
+    parser_symbols.set_defaults(func=commands.symbols, get_imports=False, get_actions=False, get_exports=False,
+                                get_symtab=False, slice_index=0)
 
     parser_kcache = subparsers.add_parser('kcache', help='Kernel Cache Processing')
 
@@ -345,7 +341,7 @@ def main():
 
     parser_ent.add_argument('--ent', dest='get_ent', action='store_true')
     parser_ent.add_argument('--slice', dest='slice_index', type=int,
-                                help="Specify Index of Slice (in FAT MachO) to examine")
+                            help="Specify Index of Slice (in FAT MachO) to examine")
     parser_ent.add_argument('filename', nargs='?', default='')
 
     parser_ent.set_defaults(func=commands.ent, get_ent=False, slice_index=0)
@@ -563,9 +559,7 @@ class DSCFileCommands:
         dsc = ktool.load_dsc(dsc_path)
         image = ktool.load_image_from_dsc(dsc, args.filename)
         image_dict = image.serialize()
-        out_dict = {
-            'image': image_dict
-        }
+        out_dict = {'image': image_dict}
 
         if args.with_objc:
             objc_image = ktool.load_objc_metadata(image)
@@ -590,7 +584,7 @@ class DSCFileCommands:
         if args.get_ent:
             with open(args.filename, 'rb') as fd:
                 image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
-                                     use_mmaped_io=MMAP_ENABLED)
+                                         use_mmaped_io=MMAP_ENABLED)
                 ents = image.codesign_info.entitlements
                 print(ents)
 
@@ -652,8 +646,8 @@ class DSCFileCommands:
                                                               image.linked_images[int(sym.ordinal) - 1].install_name,
                                                               sym.attr)
                     except IndexError:
-                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, "ordinal: " + str(int(sym.ordinal)),
-                                                              sym.attr)
+                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname,
+                                                              "ordinal: " + str(int(sym.ordinal)), sym.attr)
 
                 table = Table()
                 table.titles = ['Addr', 'Symbol', 'Image', 'Binding']
@@ -670,29 +664,26 @@ class DSCFileCommands:
                 print('\nBinding Info'.ljust(60, '-') + '\n')
                 for sym in image.binding_table.symbol_table:
                     try:
-                        print(
-                            f'{hex(sym.address).ljust(15, " ")} | '
-                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                            f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
+                        print(f'{hex(sym.address).ljust(15, " ")} | '
+                              f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                              f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
                     except IndexError:
                         pass
                 print('\nWeak Binding Info'.ljust(60, '-') + '\n')
                 for sym in image.weak_binding_table.symbol_table:
                     try:
-                        print(
-                            f'{hex(sym.address).ljust(15, " ")} | '
-                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                            f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
+                        print(f'{hex(sym.address).ljust(15, " ")} | '
+                              f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                              f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
                     except IndexError:
                         pass
                 print('\nLazy Binding Info'.ljust(60, '-') + '\n')
                 for sym in image.lazy_binding_table.symbol_table:
                     try:
-                        print(
-                            f'{hex(sym.address).ljust(15, " ")} | '
-                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                            f'{sym.name.ljust(20, " ")} | '
-                            f'{sym.dec_type}')
+                        print(f'{hex(sym.address).ljust(15, " ")} | '
+                              f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                              f'{sym.name.ljust(20, " ")} | '
+                              f'{sym.dec_type}')
                     except IndexError:
                         pass
 
@@ -741,7 +732,8 @@ class DSCFileCommands:
 
                 dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
                 dylib_cmd = Struct.create_with_values(dylib_command, [lc.value, 0, dylib_item.raw])
-                new_header = image.macho_header.insert_load_command(dylib_cmd, last_dylib_command_index, suffix=args.payload)
+                new_header = image.macho_header.insert_load_command(dylib_cmd, last_dylib_command_index,
+                                                                    suffix=args.payload)
                 image.slice.patch(0, new_header.raw)
                 log.info("Reloading MachO Slice to verify integrity")
                 image = process_patches(image)
@@ -818,7 +810,8 @@ class DSCFileCommands:
     > ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
         """
 
-        exit_with_error(KToolError.ArgumentError, "img4 command not supported with dsc arg. What were you expecting to happen?")
+        exit_with_error(KToolError.ArgumentError,
+                        "img4 command not supported with dsc arg. What were you expecting to happen?")
 
         require_args(args, one_of=['get_kbag', 'do_decrypt'])
 
@@ -911,7 +904,8 @@ class DSCFileCommands:
     > ktool list --funcs [filename]
         """
 
-        require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types', 'get_fstarts'])
+        require_args(args,
+                     one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types', 'get_fstarts'])
 
         with open(args.filename, 'rb') as fd:
 
@@ -927,10 +921,11 @@ class DSCFileCommands:
                 table.size_pinned_columns = [0, 1]
                 for i, lc in enumerate(image.macho_header.load_commands):
                     lc_dat = str(lc)
-                    if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB, LOAD_COMMAND.SUB_CLIENT]:
-                        lc_dat += '\n"' + image.get_cstr_at(lc.off + lc.SIZE, vm=False) + '"'
+                    if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB,
+                                                LOAD_COMMAND.SUB_CLIENT]:
+                        lc_dat += '\n"' + image.read_cstr(lc.off + lc.SIZE, vm=False) + '"'
                     table.rows.append([str(i), LOAD_COMMAND(lc.cmd).name.ljust(15, ' '), lc_dat])
-                print(table.fetch_all(get_terminal_size().columns-5))
+                print(table.fetch_all(get_terminal_size().columns - 5))
             elif args.get_classes:
                 for obj_class in objc_image.classlist:
                     print(f'{obj_class.name}')
@@ -961,10 +956,8 @@ class DSCFileCommands:
             table.titles = ['Address', 'CPU Type', 'CPU Subtype']
 
             for macho_slice in macho_file.slices:
-                table.rows.append([
-                        f'{hex(macho_slice.offset)}',
-                        f'{macho_slice.type.name}',
-                        f'{macho_slice.subtype.name}'])
+                table.rows.append(
+                    [f'{hex(macho_slice.offset)}', f'{macho_slice.type.name}', f'{macho_slice.subtype.name}'])
 
             print(table.fetch_all(get_terminal_size().columns))
 
@@ -992,7 +985,7 @@ class DSCFileCommands:
         else:
             message = (f'\033[32m{image.base_name} \33[37m--- \n'
                        f'\033[34mInstall Name: \33[37m{image.install_name}\n'
-                       f'\033[34mFiletype: \33[37m{image.macho_header.filetype.name}\n' 
+                       f'\033[34mFiletype: \33[37m{image.macho_header.filetype.name}\n'
                        f'\033[34mFlags: \33[37m{", ".join([i.name for i in image.macho_header.flags])}\n'
                        f'\033[34mUUID: \33[37m{image.uuid.hex().upper()}\n'
                        f'\033[34mPlatform: \33[37m{image.platform.name}\n'
@@ -1028,7 +1021,8 @@ class DSCFileCommands:
             image = ktool.load_image_from_dsc(dsc, args.filename)
             objc_image = ktool.load_objc_metadata(image)
 
-            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
+            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers,
+                                                  forward_declare_private_imports=args.forward_declare)
             found = False
             for header_name, header in objc_headers.items():
                 if args.get_class.lower() == header_name[:-2].lower():
@@ -1051,7 +1045,8 @@ class DSCFileCommands:
             image = ktool.load_image_from_dsc(dsc, args.filename)
             objc_image = ktool.load_objc_metadata(image)
 
-            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
+            objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers,
+                                                  forward_declare_private_imports=args.forward_declare)
 
             for header_name, header in objc_headers.items():
                 if not args.outdir:
@@ -1064,8 +1059,7 @@ class DSCFileCommands:
                         out.write(str(header))
 
                 if args.bench:
-                    pass
-                    # pprint(image.bench_stats)
+                    pass  # pprint(image.bench_stats)
 
         elif args.do_tbd:
             with open(args.filename, 'rb') as fp:
@@ -1136,6 +1130,7 @@ class DSCFileCommands:
             else:
                 print('Kext Not Found')
 
+
 class MachOFileCommands:
     @staticmethod
     def _open(args):
@@ -1181,21 +1176,14 @@ class MachOFileCommands:
 
             macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
 
-            out_dict = {
-                'filetype': macho_file.type.name
-            }
+            out_dict = {'filetype': macho_file.type.name}
             slices = []
 
             for macho_slice in macho_file.slices:
                 image = ktool.load_image(macho_slice)
                 image_dict = image.serialize()
-                slice_dict = {
-                    'offset': macho_slice.offset,
-                    'size': macho_slice.size,
-                    'type': macho_slice.type.name,
-                    'subtype': macho_slice.subtype.name,
-                    'image': image_dict
-                }
+                slice_dict = {'offset': macho_slice.offset, 'size': macho_slice.size, 'type': macho_slice.type.name,
+                    'subtype': macho_slice.subtype.name, 'image': image_dict}
                 slices.append(slice_dict)
 
             out_dict['slices'] = slices
@@ -1220,7 +1208,7 @@ class MachOFileCommands:
         if args.get_ent:
             with open(args.filename, 'rb') as fd:
                 image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
-                                     use_mmaped_io=MMAP_ENABLED)
+                                         use_mmaped_io=MMAP_ENABLED)
                 ents = image.codesign_info.entitlements
                 print(ents)
 
@@ -1282,8 +1270,8 @@ class MachOFileCommands:
                                                               image.linked_images[int(sym.ordinal) - 1].install_name,
                                                               sym.attr)
                     except IndexError:
-                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname, "ordinal: " + str(int(sym.ordinal)),
-                                                              sym.attr)
+                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname,
+                                                              "ordinal: " + str(int(sym.ordinal)), sym.attr)
 
                 table = Table()
                 table.titles = ['Addr', 'Symbol', 'Image', 'Binding']
@@ -1300,29 +1288,26 @@ class MachOFileCommands:
                 print('\nBinding Info'.ljust(60, '-') + '\n')
                 for sym in image.binding_table.symbol_table:
                     try:
-                        print(
-                            f'{hex(sym.address).ljust(15, " ")} | '
-                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                            f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
+                        print(f'{hex(sym.address).ljust(15, " ")} | '
+                              f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                              f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
                     except IndexError:
                         pass
                 print('\nWeak Binding Info'.ljust(60, '-') + '\n')
                 for sym in image.weak_binding_table.symbol_table:
                     try:
-                        print(
-                            f'{hex(sym.address).ljust(15, " ")} | '
-                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                            f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
+                        print(f'{hex(sym.address).ljust(15, " ")} | '
+                              f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                              f'{sym.name.ljust(20, " ")} | {sym.dec_type}')
                     except IndexError:
                         pass
                 print('\nLazy Binding Info'.ljust(60, '-') + '\n')
                 for sym in image.lazy_binding_table.symbol_table:
                     try:
-                        print(
-                            f'{hex(sym.address).ljust(15, " ")} | '
-                            f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
-                            f'{sym.name.ljust(20, " ")} | '
-                            f'{sym.dec_type}')
+                        print(f'{hex(sym.address).ljust(15, " ")} | '
+                              f'{image.linked_images[int(sym.ordinal) - 1].install_name} | '
+                              f'{sym.name.ljust(20, " ")} | '
+                              f'{sym.dec_type}')
                     except IndexError:
                         pass
 
@@ -1369,7 +1354,8 @@ class MachOFileCommands:
 
                 dylib_item = Struct.create_with_values(dylib, [0x18, 0x2, 0x010000, 0x010000])
                 dylib_cmd = Struct.create_with_values(dylib_command, [lc.value, 0, dylib_item.raw])
-                new_header = image.macho_header.insert_load_command(dylib_cmd, last_dylib_command_index, suffix=args.payload)
+                new_header = image.macho_header.insert_load_command(dylib_cmd, last_dylib_command_index,
+                                                                    suffix=args.payload)
                 image.slice.patch(0, new_header.raw)
                 log.info("Reloading MachO Slice to verify integrity")
                 image = process_patches(image)
@@ -1533,7 +1519,8 @@ class MachOFileCommands:
     > ktool list --funcs [filename]
         """
 
-        require_args(args, one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types', 'get_fstarts'])
+        require_args(args,
+                     one_of=['get_classes', 'get_protos', 'get_linked', 'get_lcs', 'get_swift_types', 'get_fstarts'])
 
         with open(args.filename, 'rb') as fd:
 
@@ -1549,10 +1536,11 @@ class MachOFileCommands:
                 table.size_pinned_columns = [0, 1]
                 for i, lc in enumerate(image.macho_header.load_commands):
                     lc_dat = str(lc)
-                    if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB, LOAD_COMMAND.SUB_CLIENT]:
-                        lc_dat += '\n"' + image.get_cstr_at(lc.off + lc.SIZE, vm=False) + '"'
+                    if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB,
+                                                LOAD_COMMAND.SUB_CLIENT]:
+                        lc_dat += '\n"' + image.read_cstr(lc.off + lc.SIZE, vm=False) + '"'
                     table.rows.append([str(i), LOAD_COMMAND(lc.cmd).name.ljust(15, ' '), lc_dat])
-                print(table.fetch_all(get_terminal_size().columns-5))
+                print(table.fetch_all(get_terminal_size().columns - 5))
             elif args.get_classes:
                 for obj_class in objc_image.classlist:
                     print(f'{obj_class.name}')
@@ -1583,10 +1571,8 @@ class MachOFileCommands:
             table.titles = ['Address', 'CPU Type', 'CPU Subtype']
 
             for macho_slice in macho_file.slices:
-                table.rows.append([
-                        f'{hex(macho_slice.offset)}',
-                        f'{macho_slice.type.name}',
-                        f'{macho_slice.subtype.name}'])
+                table.rows.append(
+                    [f'{hex(macho_slice.offset)}', f'{macho_slice.type.name}', f'{macho_slice.subtype.name}'])
 
             print(table.fetch_all(get_terminal_size().columns))
 
@@ -1613,7 +1599,7 @@ class MachOFileCommands:
             else:
                 message = (f'\033[32m{image.base_name} \33[37m--- \n'
                            f'\033[34mInstall Name: \33[37m{image.install_name}\n'
-                           f'\033[34mFiletype: \33[37m{image.macho_header.filetype.name}\n' 
+                           f'\033[34mFiletype: \33[37m{image.macho_header.filetype.name}\n'
                            f'\033[34mFlags: \33[37m{", ".join([i.name for i in image.macho_header.flags])}\n'
                            f'\033[34mUUID: \33[37m{image.uuid.hex().upper()}\n'
                            f'\033[34mPlatform: \33[37m{image.platform.name}\n'
@@ -1642,13 +1628,15 @@ class MachOFileCommands:
 
         if args.get_class:
             with open(args.filename, 'rb') as fp:
-                image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED, force_misaligned_vm=args.force_misaligned)
+                image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED,
+                                         force_misaligned_vm=args.force_misaligned)
 
                 if image.name == "":
                     image.name = os.path.basename(args.filename)
 
                 objc_image = ktool.load_objc_metadata(image)
-                objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
+                objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers,
+                                                      forward_declare_private_imports=args.forward_declare)
                 found = False
                 for header_name, header in objc_headers.items():
                     if args.get_class.lower() == header_name[:-2].lower():
@@ -1674,7 +1662,8 @@ class MachOFileCommands:
 
                 objc_image = ktool.load_objc_metadata(image)
 
-                objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers, forward_declare_private_imports=args.forward_declare)
+                objc_headers = ktool.generate_headers(objc_image, sort_items=args.sort_headers,
+                                                      forward_declare_private_imports=args.forward_declare)
 
                 for header_name, header in objc_headers.items():
                     if not args.outdir:
@@ -1687,8 +1676,7 @@ class MachOFileCommands:
                             out.write(str(header))
 
                     if args.bench:
-                        pass
-                        # pprint(image.bench_stats)
+                        pass  # pprint(image.bench_stats)
 
         elif args.do_tbd:
             with open(args.filename, 'rb') as fp:

@@ -149,29 +149,29 @@ You should obtain an instance of this class using the public :python:`ktool.load
 
       The underlying :python:`Slice` class should handle specifying endianness. If you for some reason need to load an int in the opposite endianness, you'll need to do VM translation yourself using :python:`image.vm.get_file_address` and then call the :python:`Slice` method yourself.
 
-   .. py:method:: get_bytes_at(address: int, length: int, vm=False, section_name=None) -> bytes
+   .. py:method:: read_bytearray(address: int, length: int, vm=False, section_name=None) -> bytes
 
       Pull :python:`length` :python:`bytes` from :python:`address`.
 
-      Does VM address translation then falls through to :python:`Slice.get_bytes_at()`
+      Does VM address translation then falls through to :python:`Slice.read_bytearray()`
 
-   .. py:method:: load_struct(address: int, struct_type: Struct, vm=False, section_name=None, endian="little", force_reload=True) -> Struct
+   .. py:method:: read_struct(address: int, struct_type: Struct, vm=False, section_name=None, endian="little", force_reload=True) -> Struct
 
       Load a struct of :python:`struct_type` from :python:`address`, performing address translation if :python:`vm`.
 
       This struct will be cached; if we need to for some reason reload the struct at this address, pass :python:`force_reload=True`
 
-   .. py:method:: get_str_at(address: int, length: int, vm=False, section_name=None) -> str
+   .. py:method:: read_fixed_len_str(address: int, length: int, vm=False, section_name=None) -> str
 
       Load a fixed-length string from :python:`address` with the size :python:`length`.
 
-      Does VM address translation then falls through to :python:`Slice.get_str_at()`
+      Does VM address translation then falls through to :python:`Slice.read_fixed_len_str()`
 
-   .. py:method:: get_cstr_at(address: int, limit: int = 0, vm=False, section_name=None) -> str
+   .. py:method:: read_cstr(address: int, limit: int = 0, vm=False, section_name=None) -> str
 
       Load a null-terminated string from :python:`address`, stopping after :python:`limit` if :python:`limit` is not 0
 
-   .. py:method:: decode_uleb128(address: int) -> (value, new_address)
+   .. py:method:: read_uleb128(address: int) -> (value, new_address)
 
       Decode uleb from starting address, returning the value, and the end address of the leb128
 
@@ -284,16 +284,16 @@ ObjCImage
 
       Method that performs VM address translation if :python:`vm` is true, then falls through to Slice().get_int_at(address, length)
 
-   .. py:method:: load_struct(address: int, struct_type: Struct, vm=True, section_name=None, endian="little", force_reload=True) -> Struct
+   .. py:method:: read_struct(address: int, struct_type: Struct, vm=True, section_name=None, endian="little", force_reload=True) -> Struct
 
       Load a struct of :python:`struct_type` from :python:`address`, performing address translation if :python:`vm`.
       This struct will be cached; if we need to for some reason reload the struct at this address, pass :python:`force_reload=True`
 
-   .. py:method:: get_str_at(address: int, length: int, vm=True, section_name=None) -> str
+   .. py:method:: read_fixed_len_str(address: int, length: int, vm=True, section_name=None) -> str
 
       Load a fixed-length string from :python:`address` with the size :python:`length`.
 
-   .. py:method:: get_cstr_at(address: int, limit: int = 0, vm=True, section_name=None) -> str
+   .. py:method:: read_cstr(address: int, limit: int = 0, vm=True, section_name=None) -> str
 
       Load a null-terminated string from :python:`address`, stopping after :python:`limit` if `:python:limit` is set
 
@@ -372,7 +372,7 @@ Slice
 
       Byte Order ("little" or "big") of the Slice.
 
-   .. py:method:: load_struct(address: int, struct_type: Struct, endian="little")
+   .. py:method:: read_struct(address: int, struct_type: Struct, endian="little")
 
       Load a struct from :python:`address`
 
@@ -382,19 +382,19 @@ Slice
 
       The code for this method (and the rest of the :python:`get_` methods) will either use mmapped or non-mmapped io based on the MachOFile's .use_mmaped_io attribute.
 
-   .. py:method:: get_bytes_at(addr: int, count: int, endian="little") -> int
+   .. py:method:: read_bytearray(addr: int, count: int, endian="little") -> int
 
       Load :python:`count` bytes from :python:`address`
 
-   .. py:method:: get_str_at(addr: int, count: int) -> str
+   .. py:method:: read_fixed_len_str(addr: int, count: int) -> str
 
       Load a fixed-length string from :python:`address` with the size :python:`length`.
 
-   .. py:method:: get_cstr_at(addr: int, limit: int) -> str
+   .. py:method:: read_cstr(addr: int, limit: int) -> str
 
       Load a null-terminated string from :python:`address`, stopping after :python:`limit` if :python:`limit` is not 0
 
-   .. py:method:: decode_uleb128(address: int) -> (value, new_address)
+   .. py:method:: read_uleb128(address: int) -> (value, new_address)
 
       Decode uleb from starting address, returning the value, and the end address of the leb128
 

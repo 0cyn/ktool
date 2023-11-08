@@ -9,12 +9,12 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 
-from kmacho.base import Constructable
-from kswift.structs import *
-from kswift.demangle import demangle
+from ktool_macho.base import Constructable
+from ktool_swift.structs import *
+from ktool_swift.demangle import demangle
 from ktool import ObjCImage
 
 from ktool.loader import Image
@@ -40,21 +40,21 @@ class _FieldDescriptor(Constructable):
 
         fields = []
 
-        fd = image.load_struct(location, FieldDescriptor, vm=True)
+        fd = image.read_struct(location, FieldDescriptor, vm=True)
 
         for i in range(fd.numFields):
             ea = location + (i * 0xc)
-            record = image.load_struct(ea, FieldRecord, vm=True)
+            record = image.read_struct(ea, FieldRecord, vm=True)
 
             flags = record.Flags
             type_name_loc = ea + 4 + record.Type
             name_loc = ea + 8 + record.Name
             try:
-                name = image.get_cstr_at(name_loc, vm=True)
+                name = image.read_cstr(name_loc, vm=True)
             except ValueError:
                 name = ""
             try:
-                type_name = image.get_cstr_at(type_name_loc, vm=True)
+                type_name = image.read_cstr(type_name_loc, vm=True)
             except ValueError:
                 type_name = ""
 
@@ -78,8 +78,8 @@ class SwiftClass(Constructable):
 
     @classmethod
     def from_image(cls, image: Image, objc_image: ObjCImage, type_location):
-        class_descriptor = image.load_struct(type_location, NominalClassDescriptor, vm=True)
-        name = image.get_cstr_at(type_location + 8 + class_descriptor.Name, vm=True)
+        class_descriptor = image.read_struct(type_location, NominalClassDescriptor, vm=True)
+        name = image.read_cstr(type_location + 8 + class_descriptor.Name, vm=True)
         fd_loc = class_descriptor.Fields + type_location + 16
         field_descriptor = _FieldDescriptor.from_image(image, fd_loc)
         ivars = []
@@ -113,10 +113,9 @@ class SwiftType(Constructable):
 
     @classmethod
     def from_image(cls, image: Image, objc_image, type_location):
-
-        typedesc = image.load_struct(type_location, NominalTypeDescriptor, vm=True)
-        name = image.get_cstr_at(type_location + 8 + typedesc.mangledName, vm=True)
-        kind = ContextDescriptorKind(image.get_uint_at(typedesc.off, 1, vm=False) & 0x1f)
+        typedesc = image.read_struct(type_location, NominalTypeDescriptor, vm=True)
+        name = image.read_cstr(type_location + 8 + typedesc.mangledName, vm=True)
+        kind = ContextDescriptorKind(image.read_uint(typedesc.off, 1, vm=False) & 0x1f)
 
         if kind == ContextDescriptorKind.Class:
             return SwiftClass.from_image(image, objc_image, type_location)
@@ -141,7 +140,6 @@ class SwiftType(Constructable):
 
 
 def load_swift_types(image: Image):
-
     objc_image = ObjCImage.from_image(image)
 
     swift_type_seg_start_sect: Section = image.segments['__TEXT'].sections['__swift5_types']
@@ -151,7 +149,7 @@ def load_swift_types(image: Image):
     types = []
 
     for ea in range(sect_start, sect_start + sect_size, 4):
-        typeref = usi32_to_si32(image.get_uint_at(ea, 4, vm=True))
+        typeref = usi32_to_si32(image.read_uint(ea, 4, vm=True))
         type_loc = ea + typeref
         types.append(SwiftType.from_image(image, objc_image, type_loc))
 

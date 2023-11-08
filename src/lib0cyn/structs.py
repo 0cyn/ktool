@@ -1,5 +1,5 @@
 #
-#  ktool | katlib
+#  ktool | lib0cyn
 #  structs.py
 #
 #  Custom Struct implementation reflecting behavior of named tuples while also handling behind-the-scenes
@@ -10,7 +10,7 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2022.
+#  Copyright (c) 0cyn 2022.
 #
 from typing import List
 
@@ -32,7 +32,6 @@ int16_t = type_sint | 2
 int32_t = type_sint | 4
 int64_t = type_sint | 8
 
-
 char_t = [type_str | i for i in range(65)]
 bytes_t = [type_bytes | i for i in range(65)]
 
@@ -45,6 +44,7 @@ class Bitfield:
         Load fields with ``myBitfieldInstance.decode_bitfield(myProperlySizedBytearray)``
         Access by myBitfieldInstance.field_name
     """
+
     def __init__(self, fields: dict):
         self.fields = fields
         self.size = sum(self.fields.values()) // 8
@@ -84,6 +84,7 @@ class StructUnion:
 
     """
     SIZE = 0
+
     def __init__(self, size: int, types: List[object]):
         self.size = size
         self.types = types
@@ -178,7 +179,7 @@ class Struct:
 
             elif isinstance(value, Bitfield):
                 size = value.size
-                data = raw[current_off:current_off+size]
+                data = raw[current_off:current_off + size]
                 assert len(data) == size
                 value.decode_bitfield(data)
                 for f, fv in value.decoded_fields.items():
@@ -186,14 +187,14 @@ class Struct:
                 field_value = None
 
             elif issubclass(value, StructUnion):
-                data = raw[current_off:current_off+value.SIZE]
+                data = raw[current_off:current_off + value.SIZE]
                 size = value.SIZE
                 field_value = value()
                 field_value.load_from_bytes(data)
 
             elif issubclass(value, Struct):
                 size = value.SIZE
-                data = raw[current_off:current_off+size]
+                data = raw[current_off:current_off + size]
                 field_value = Struct.create_with_bytes(value, data)
 
             else:
@@ -325,16 +326,14 @@ class Struct:
                 attr: Bitfield = attr
                 field_item = '\n'
                 for subfield in attr.fields:
-                    field_item += " "*(indent_size+2) + subfield + '=' + str(getattr(self, subfield)) + '\n'
+                    field_item += " " * (indent_size + 2) + subfield + '=' + str(getattr(self, subfield)) + '\n'
             elif issubclass(attr.__class__, Struct):
-                field_item = '\n' + " "*(indent_size+2) + attr.render_indented(indent_size+2)
-            text += f'{" "*indent_size}{field}={field_item}\n'
+                field_item = '\n' + " " * (indent_size + 2) + attr.render_indented(indent_size + 2)
+            text += f'{" " * indent_size}{field}={field_item}\n'
         return text
 
     def serialize(self):
-        struct_dict = {
-            'type': self.__class__.__name__
-        }
+        struct_dict = {'type': self.__class__.__name__}
 
         for field in self._fields:
             field_item = None
@@ -374,7 +373,6 @@ class Struct:
         for index, i in enumerate(fields):
             self._field_sizes[i] = sizes[index]
 
-
         self.off = 0
 
     def pre_init(self):
@@ -384,4 +382,3 @@ class Struct:
     def post_init(self):
         """stub for subclasses. gets called *after* patch code is enabled"""
         pass
-

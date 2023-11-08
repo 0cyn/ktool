@@ -9,7 +9,7 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 
 import os
@@ -17,12 +17,12 @@ from enum import Enum
 from io import BytesIO
 from typing import Tuple, Dict, Union, BinaryIO, List
 
-from kmacho import *
-from kmacho.base import Constructable
-from kmacho.structs import *
-from kmacho.load_commands import SegmentLoadCommand
+from ktool_macho import *
+from ktool_macho.base import Constructable
+from ktool_macho.structs import *
+from ktool_macho.load_commands import SegmentLoadCommand
 from ktool.exceptions import *
-from katlib.log import log
+from lib0cyn.log import log
 from ktool.util import ignore
 
 mmap = None
@@ -64,7 +64,7 @@ class BackingFile:
             self.size = len(self.file)
 
     def read_bytes(self, location, count):
-        return bytes(self.file[location:location+count])
+        return bytes(self.file[location:location + count])
 
     def read_int(self, location, count, endian="big"):
         return int.from_bytes(self.read_bytes(location, count), endian)
@@ -75,7 +75,7 @@ class BackingFile:
         if isinstance(self.file, bytearray):
             count = len(data)
             for i in range(count):
-                self.file[location+i] = data[i]
+                self.file[location + i] = data[i]
 
         else:
             # noinspection PyUnresolvedReferences
@@ -95,7 +95,7 @@ class SlicedBackingFile:
         self.name = backing_file.name
 
     def read_bytes(self, location, count):
-        return bytes(self.file[location:location+count])
+        return bytes(self.file[location:location + count])
 
     def read_int(self, location, count, endian="big"):
         return int.from_bytes(self.read_bytes(location, count), endian)
@@ -175,13 +175,8 @@ class Section:
         self.size = cmd.size
 
     def serialize(self):
-        return {
-            'command': self.cmd.serialize(),
-            'name': self.name,
-            'vm_address': self.vm_address,
-            'file_address': self.file_address,
-            'size': self.size
-        }
+        return {'command': self.cmd.serialize(), 'name': self.name, 'vm_address': self.vm_address,
+            'file_address': self.file_address, 'size': self.size}
 
 
 class Segment:
@@ -207,14 +202,8 @@ class Segment:
         return f'Segment {self.name} at {hex(self.vm_address)}\n'
 
     def serialize(self):
-        segment = {
-            'command': self.cmd.serialize(),
-            'name': self.name,
-            'vm_address': self.vm_address,
-            'file_address': self.file_address,
-            'size': self.size,
-            'type': self.type.name,
-        }
+        segment = {'command': self.cmd.serialize(), 'name': self.name, 'vm_address': self.vm_address,
+            'file_address': self.file_address, 'size': self.size, 'type': self.type.name, }
         sects = {}
         for section_name, sect in self.sections.items():
             sects[section_name] = sect.serialize()
@@ -226,7 +215,7 @@ class Segment:
         ea = self.cmd.off + self.cmd.SIZE
 
         for sect in range(0, self.cmd.nsects):
-            sect = self.image.load_struct(ea, section_64 if self.is64 else section)
+            sect = self.image.read_struct(ea, section_64 if self.is64 else section)
             sect = Section(self, sect)
             sections[sect.name] = sect
             ea += section_64.SIZE if self.is64 else section.SIZE
@@ -235,7 +224,8 @@ class Segment:
 
 
 class Slice:
-    def __init__(self, macho_file, sliced_backing_file: Union[BackingFile, SlicedBackingFile], arch_struct: fat_arch=None, offset=0):
+    def __init__(self, macho_file, sliced_backing_file: Union[BackingFile, SlicedBackingFile],
+                 arch_struct: fat_arch = None, offset=0):
         self.file = sliced_backing_file
         self.macho_file = macho_file
         self.arch_struct: fat_arch = arch_struct
@@ -246,7 +236,7 @@ class Slice:
             self.subtype = self._load_subtype(self.type)
         else:
             self.offset = offset
-            hdr = Struct.create_with_bytes(mach_header, self.get_bytes_at(0, 28))
+            hdr = Struct.create_with_bytes(mach_header, self.read_bytearray(0, 28))
             self.arch_struct = Struct.create_with_values(fat_arch, [hdr.cpu_type, hdr.cpu_subtype, 0, 0, 0])
             self.type = self._load_type()
             self.subtype = self._load_subtype(self.type)
@@ -254,7 +244,7 @@ class Slice:
         self.size = sliced_backing_file.size
 
         # noinspection PyArgumentList
-        self.byte_order = "little" if self.get_uint_at(0, 4, "little") in [MH_MAGIC, MH_MAGIC_64] else "big"
+        self.byte_order = "little" if self.read_uint(0, 4, "little") in [MH_MAGIC, MH_MAGIC_64] else "big"
 
         self._cstring_cache = {}
 
@@ -272,22 +262,22 @@ class Slice:
 
         return self.file.file.find(pattern)
 
-    def load_struct(self, addr: int, struct_type, endian="little"):
+    def read_struct(self, addr: int, struct_type, endian="little"):
         size = struct_type.SIZE
-        data = self.get_bytes_at(addr, size)
+        data = self.read_bytearray(addr, size)
 
         struct = Struct.create_with_bytes(struct_type, data, endian)
         struct.off = addr
 
         return struct
 
-    def get_uint_at(self, addr: int, count: int, endian="little"):
+    def read_uint(self, addr: int, count: int, endian="little"):
         return int.from_bytes(self.file.read_bytes(addr, count), endian)
 
-    def get_bytes_at(self, addr: int, count: int):
+    def read_bytearray(self, addr: int, count: int):
         return self.file.read_bytes(addr, count)
 
-    def get_str_at(self, addr: int, count: int, force=False) -> str:
+    def read_fixed_len_str(self, addr: int, count: int, force=False) -> str:
         if force:
             data = self.file.file[addr:addr + count]
             string = ""
@@ -301,7 +291,7 @@ class Slice:
 
         return self.file.file[addr:addr + count].decode().rstrip('\x00')
 
-    def get_cstr_at(self, addr: int, limit: int = 0):
+    def read_cstr(self, addr: int, limit: int = 0):
         ea = addr
 
         if addr in self._cstring_cache:
@@ -315,30 +305,30 @@ class Slice:
             else:
                 break
 
-        text = self.get_str_at(addr, count)
+        text = self.read_fixed_len_str(addr, count)
 
         self._cstring_cache[addr] = text
 
         return text
 
-    def decode_uleb128(self, readHead: int) -> Tuple[int, int]:
+    def read_uleb128(self, read_head: int) -> Tuple[int, int]:
 
         value = 0
         shift = 0
 
         while True:
 
-            byte = self.get_uint_at(readHead, 1)
+            byte = self.read_uint(read_head, 1)
 
             value |= (byte & 0x7f) << shift
 
-            readHead += 1
+            read_head += 1
             shift += 7
 
             if (byte & 0x80) == 0:
                 break
 
-        return value, readHead
+        return value, read_head
 
     def _load_type(self) -> CPUType:
         cpu_type = self.arch_struct.cpu_type
@@ -373,10 +363,10 @@ class MachOImageHeader(Constructable):
 
         image_header = cls()
 
-        header: mach_header = macho_slice.load_struct(offset, mach_header)
+        header: mach_header = macho_slice.read_struct(offset, mach_header)
 
         if header.magic == MH_MAGIC_64:
-            header: mach_header_64 = macho_slice.load_struct(offset, mach_header_64)
+            header: mach_header_64 = macho_slice.read_struct(offset, mach_header_64)
             image_header.is64 = True
 
         raw = header.raw
@@ -392,18 +382,18 @@ class MachOImageHeader(Constructable):
         load_commands = []
 
         for i in range(1, header.loadcnt + 1):
-            cmd = macho_slice.get_uint_at(offset, 4)
-            cmd_size = macho_slice.get_uint_at(offset + 4, 4)
+            cmd = macho_slice.read_uint(offset, 4)
+            cmd_size = macho_slice.read_uint(offset + 4, 4)
 
-            cmd_raw = macho_slice.get_bytes_at(offset, cmd_size)
+            cmd_raw = macho_slice.read_bytearray(offset, cmd_size)
             try:
                 load_cmd = Struct.create_with_bytes(LOAD_COMMAND_MAP[LOAD_COMMAND(cmd)], cmd_raw)
                 load_cmd.off = offset
             except ValueError as ex:
                 if not ignore.MALFORMED:
-                    log.error(f'Bad Load Command at {hex(offset)} index {i-1}\n        {hex(cmd)} - {hex(cmd_size)}')
+                    log.error(f'Bad Load Command at {hex(offset)} index {i - 1}\n        {hex(cmd)} - {hex(cmd_size)}')
 
-                unk_lc = macho_slice.load_struct(offset, unk_command)
+                unk_lc = macho_slice.read_struct(offset, unk_command)
                 load_cmd = unk_lc
             except KeyError as ex:
                 if not ignore.MALFORMED:
@@ -413,7 +403,7 @@ class MachOImageHeader(Constructable):
                     log.error()
                     log.error(f'Run with the -f flag to hide this warning.')
                     log.error()
-                unk_lc = macho_slice.load_struct(offset, unk_command)
+                unk_lc = macho_slice.read_struct(offset, unk_command)
                 load_cmd = unk_lc
 
             load_commands.append(load_cmd)
@@ -427,7 +417,8 @@ class MachOImageHeader(Constructable):
         return image_header
 
     @classmethod
-    def from_values(cls, is_64: bool,  cpu_type, cpu_subtype, filetype: MH_FILETYPE, flags: List[MH_FLAGS], load_commands: List):
+    def from_values(cls, is_64: bool, cpu_type, cpu_subtype, filetype: MH_FILETYPE, flags: List[MH_FLAGS],
+                    load_commands: List):
 
         if isinstance(cpu_type, int):
             cpu_type = CPUType(cpu_type)
@@ -469,7 +460,8 @@ class MachOImageHeader(Constructable):
                 lc_count += 1
                 for sect in lc.sections.values():
                     dat += sect.cmd.raw
-                assert len(dat) == lc.cmd.cmdsize, f'{lc.cmd}, \n[{",".join([str(i.cmd) for i in lc.sections.values()])}]'
+                assert len(
+                    dat) == lc.cmd.cmdsize, f'{lc.cmd}, \n[{",".join([str(i.cmd) for i in lc.sections.values()])}]'
                 full_load_cmds_raw += dat
                 off += lc.cmd.cmdsize
 
@@ -478,9 +470,13 @@ class MachOImageHeader(Constructable):
             embedded_flag |= flag.value
 
         if is_64:
-            header = Struct.create_with_values(struct_type, [MH_MAGIC_64, cpu_type.value, cpu_subtype.value, filetype.value, lc_count, len(full_load_cmds_raw), embedded_flag, 0])
+            header = Struct.create_with_values(struct_type,
+                                               [MH_MAGIC_64, cpu_type.value, cpu_subtype.value, filetype.value,
+                                                lc_count, len(full_load_cmds_raw), embedded_flag, 0])
         else:
-            header = Struct.create_with_values(struct_type, [MH_MAGIC, cpu_type.value, cpu_subtype.value, filetype.value, lc_count, len(full_load_cmds_raw), embedded_flag])
+            header = Struct.create_with_values(struct_type,
+                                               [MH_MAGIC, cpu_type.value, cpu_subtype.value, filetype.value, lc_count,
+                                                len(full_load_cmds_raw), embedded_flag])
 
         image_header.dyld_header = header
 
@@ -508,13 +504,9 @@ class MachOImageHeader(Constructable):
         self.raw = bytearray()
 
     def serialize(self):
-        return {
-            'filetype': self.filetype.name,
-            'flags': [flag.name for flag in self.flags],
-            'is_64_bit': self.is64,
+        return {'filetype': self.filetype.name, 'flags': [flag.name for flag in self.flags], 'is_64_bit': self.is64,
             'dyld_header': self.dyld_header.serialize(),
-            'load_commands': [cmd.serialize() for cmd in self.load_commands]
-        }
+            'load_commands': [cmd.serialize() for cmd in self.load_commands]}
 
     def raw_bytes(self) -> bytes:
         return self.raw
@@ -555,7 +547,9 @@ class MachOImageHeader(Constructable):
                 sect_data = self.raw[command.off + command.__class__.SIZE:]
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
-                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little")))
+                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
+                                                                                                                                  i + 1) * struct_class.SIZE],
+                                                                        "little")))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
                                                      command.maxprot, command.initprot, command.flags, sects)
@@ -621,7 +615,9 @@ class MachOImageHeader(Constructable):
                 sect_data = self.raw[command.off + command.__class__.SIZE:]
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
-                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little")))
+                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
+                                                                                                                                  i + 1) * struct_class.SIZE],
+                                                                        "little")))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
                                                      command.maxprot, command.initprot, command.flags, sects)
@@ -687,7 +683,9 @@ class MachOImageHeader(Constructable):
                 sect_data = self.raw[command.off + command.__class__.SIZE:]
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
-                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i*struct_class.SIZE:(i+1)*struct_class.SIZE], "little")))
+                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
+                                                                                                                                  i + 1) * struct_class.SIZE],
+                                                                        "little")))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
                                                      command.maxprot, command.initprot, command.flags, sects)

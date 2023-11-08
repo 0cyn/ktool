@@ -12,15 +12,16 @@
 #  file "LICENSE" that is distributed together with this file
 #  for the exact licensing terms.
 #
-#  Copyright (c) kat 2021.
+#  Copyright (c) 0cyn 2021.
 #
 
 from typing import Dict, Union, BinaryIO, List
 from io import BytesIO
 
-from kdsc.loader import DyldSharedCacheLoader
+from ktool_dsc.loader import DyldSharedCacheLoader
 from ktool.loader import MachOImageLoader, Image
 from ktool.generator import TBDGenerator, FatMachOGenerator
+
 try:
     from ktool.headers import HeaderGenerator, Header
 except ModuleNotFoundError:
@@ -33,7 +34,7 @@ from ktool.macho import Slice, MachOFile, SlicedBackingFile
 from ktool.objc import ObjCImage, MethodList
 from ktool.util import TapiYAMLWriter, ignore
 
-from katlib.log import log
+from lib0cyn.log import log
 
 
 def load_macho_file(fp: Union[SlicedBackingFile, BinaryIO, BytesIO], use_mmaped_io=False) -> MachOFile:
@@ -71,8 +72,8 @@ def reload_image(image: Image) -> Image:
     return load_image(image.slice)
 
 
-def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO, SlicedBackingFile], slice_index=0, load_symtab=True, load_imports=True,
-               load_exports=True, use_mmaped_io=True, force_misaligned_vm=False) -> Image:
+def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO, SlicedBackingFile], slice_index=0, load_symtab=True,
+               load_imports=True, load_exports=True, use_mmaped_io=True, force_misaligned_vm=False) -> Image:
     """
     Take a bare file, MachOFile, BytesIO, SlicedBackingFile, or Slice, and load MachO/dyld metadata about that item
 
@@ -100,22 +101,23 @@ def load_image(fp: Union[BinaryIO, MachOFile, Slice, BytesIO, SlicedBackingFile]
         macho_file = load_macho_file(fp, use_mmaped_io=use_mmaped_io)
         macho_slice: Slice = macho_file.slices[slice_index]
 
-    return MachOImageLoader.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports, load_exports=load_exports, force_misaligned_vm=force_misaligned_vm)
+    return MachOImageLoader.load(macho_slice, load_symtab=load_symtab, load_imports=load_imports,
+                                 load_exports=load_exports, force_misaligned_vm=force_misaligned_vm)
 
 
 def load_dsc(dsc_path):
     return DyldSharedCacheLoader.load_dsc(dsc_path)
 
 
-def load_image_from_dsc(dsc, filename, slice_index=0, load_symtab=True, load_imports=True,
-               load_exports=True, use_mmaped_io=True, force_misaligned_vm=False):
+def load_image_from_dsc(dsc, filename, slice_index=0, load_symtab=True, load_imports=True, load_exports=True,
+                        use_mmaped_io=True, force_misaligned_vm=False):
     lib_objc = DyldSharedCacheLoader.load_image_from_basename(dsc, "libobjc.A.dylib")
     if "__objc_scoffs" in lib_objc.segments['__DATA_CONST'].sections:
         scoffs = lib_objc.segments['__DATA_CONST'].sections['__objc_scoffs']
         if scoffs.size == 0x20:
-            start = lib_objc.get_uint_at(scoffs.vm_address, 8, vm=True)
+            start = lib_objc.read_uint(scoffs.vm_address, 8, vm=True)
         else:
-            start = lib_objc.get_uint_at(scoffs.vm_address+8, 8, vm=True)
+            start = lib_objc.read_uint(scoffs.vm_address + 8, 8, vm=True)
         MethodList.CUSTOM_RMS_BASE = start & 0xFFFFFFFFF
     image = DyldSharedCacheLoader.load_image_from_basename(dsc, filename)
     return image
@@ -158,7 +160,8 @@ def load_objc_metadata(image: Image) -> ObjCImage:
     return ObjCImage.from_image(image)
 
 
-def generate_headers(objc_image: ObjCImage, sort_items=False, forward_declare_private_imports=False) -> Dict[str, Header]:
+def generate_headers(objc_image: ObjCImage, sort_items=False, forward_declare_private_imports=False) -> Dict[
+    str, Header]:
     out = {}
 
     if sort_items:
@@ -170,7 +173,8 @@ def generate_headers(objc_image: ObjCImage, sort_items=False, forward_declare_pr
             objc_proto.methods.sort(key=lambda h: h.signature)
             objc_proto.opt_methods.sort(key=lambda h: h.signature)
 
-    for header_name, header in HeaderGenerator(objc_image, forward_declare_private_includes=forward_declare_private_imports).headers.items():
+    for header_name, header in HeaderGenerator(objc_image,
+                                               forward_declare_private_includes=forward_declare_private_imports).headers.items():
         out[header_name] = header
 
     return out
