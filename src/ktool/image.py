@@ -6,7 +6,7 @@ from ktool_macho import LOAD_COMMAND, dylib_command, dyld_info_command, Struct, 
 from ktool_macho.base import Constructable
 from ktool.codesign import CodesignInfo
 from ktool.exceptions import VMAddressingError, MachOAlignmentError
-from ktool.util import bytes_to_hex
+from ktool.util import bytes_to_hex, uint_to_int
 from lib0cyn.log import log
 from ktool.macho import Slice, SlicedBackingFile, MachOImageHeader, Segment, PlatformType, ToolType
 
@@ -397,6 +397,9 @@ class Image:
         if vm:
             offset = self.vm.translate(offset)
         return self.slice.read_uint(offset, length)
+
+    def read_int(self, offset: int, length: int, vm=False):
+        return uint_to_int(self.read_uint(offset, length, vm), length * 8)
 
     def read_bytearray(self, offset: int, length: int, vm=False) -> bytearray:
         """

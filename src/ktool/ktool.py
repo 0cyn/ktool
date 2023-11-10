@@ -31,6 +31,7 @@ except ModuleNotFoundError:
     pass
 from ktool.macho import Slice, MachOFile, SlicedBackingFile
 from ktool.objc import ObjCImage, MethodList
+from ktool.swift import SwiftImage
 from ktool.util import TapiYAMLWriter, ignore
 
 from lib0cyn.log import log
@@ -141,7 +142,11 @@ def load_objc_metadata(image: Image) -> ObjCImage:
     return ObjCImage.from_image(image)
 
 
-def generate_headers(objc_image: ObjCImage, sort_items=False, forward_declare_private_imports=False) -> Dict[
+def load_swift_metadata(objc_image: ObjCImage) -> SwiftImage:
+    return SwiftImage.from_image(objc_image)
+
+
+def generate_headers(objc_image: 'ObjCImage', sort_items=False, forward_declare_private_imports=False) -> Dict[
     str, Header]:
     out = {}
 

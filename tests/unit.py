@@ -126,8 +126,6 @@ class ScratchFile:
         self.scratch.seek(0)
 
 
-
-
 class sunion_test(Struct):
     _FIELDNAMES = ['field']
     _SIZES = [ChainedPointerArm64E]
@@ -152,7 +150,8 @@ class StructTestCase(unittest.TestCase):
         tval_raw = tval.to_bytes(8, "little")
         stc = Struct.create_with_bytes(sunion_test, tval_raw)
         # print(bin(stc.field.dyld_chained_ptr_arm64e_auth_rebase.target))
-        assert stc.field.dyld_chained_ptr_arm64e_auth_rebase.target == int('{:08b}'.format(0b01011010101010101111111100100100)[::-1], 2)
+        assert stc.field.dyld_chained_ptr_arm64e_auth_rebase.target == int(
+            '{:08b}'.format(0b01011010101010101111111100100100)[::-1], 2)
 
 
 class BackingFileTestCase(unittest.TestCase):
@@ -414,6 +413,12 @@ class ImageHeaderTestCase(unittest.TestCase):
         assert_error_printed("Bad Load Command ")
         assert_error_printed("0x99 -")
 
+    def test_readint(self):
+        inp = 0xffffffac
+        output = -0x54
+
+        assert uint_to_int(inp, 32) == output
+
     def test_insert_cmd(self):
 
         self.thin.reset()
@@ -624,8 +629,6 @@ class VMTestCase(unittest.TestCase):
         self.assertFalse(vm.vm_check(-4000))
         self.assertTrue(vm.vm_check(vm_base))
 
-
-
     def test_bad_16k_page_vm_map(self):
         vm = VM(0x4000)
 
@@ -746,6 +749,16 @@ class ImageTestCase(unittest.TestCase):
                          image.read_cstr(image.vm.de_translate(cstr_test_location), vm=True))
 
 
+class CodesignTestClass(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.signed = ScratchFile(open(scriptdir + '/bins/testbin1.signed', 'rb'))
+
+    def test_codesigning(self):
+        im = ktool.load_image(self.signed.get())
+        assert len(im.codesign_info.entitlements) != 0
+
+
 class DyldTestCase(unittest.TestCase):
     """
     This operates primarily on the "Image" class, but Image doesn't handle loading its values in, Dyld does
@@ -778,5 +791,3 @@ class DyldTestCase(unittest.TestCase):
 
 if __name__ == '__main__':
     ignore.OBJC_ERRORS = False
-
-

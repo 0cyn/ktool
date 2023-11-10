@@ -36,11 +36,15 @@ pip3 install k2l
 pip3 install --upgrade k2l
 ```
 
-### Usage 
+### Usage
 
+ktool is both a convenient CLI toolkit and a library that can be used
+in other tools.
+
+##### CLI Usage
 ```
 > $ ktool
-Usage: ktool [command] <flags> [filename]
+Usage: ktool <global flags> [command] <flags> [filename]
 
 Commands:
 
@@ -48,11 +52,11 @@ GUI (Still in active development) ---
     ktool open [filename] - Open the ktool command line GUI and browse a file
 
 MachO Analysis ---
-    dump - Tools to reconstruct headers and TBDs from compiled MachOs
+    dump - Tools to reconstruct certain files (headers, .tbds) from compiled MachOs
     json - Dump image metadata as json
     cs - Codesigning info
     kcache - Kernel cache specific tools
-    list - Print various lists (Classlist, etc.)
+    list - Print various lists (ObjC Classes, etc.)
     symbols - Print various tables (Symbols, imports, exports)
     info - Print misc info about the target mach-o
 
@@ -64,11 +68,19 @@ MachO Editing ---
 Misc Utilities ---
     file - Print very basic info about the MachO
     img4 - IMG4 Utilities
-    
 
 Run `ktool [command]` for info/examples on using that command
+
+Global Flags:
+    -f - Force Load (ignores malformations in the MachO and tries to load whatever it can)
+    -v [-1 through 5] - Log verbosiy. -1 completely silences logging.
+    -V - Print version string (`ktool -V | cat`) to disable the animation
 ```
-    
+
+##### Library  
+
+Library documentation is located [here](https://ktool.cynder.me/en/latest/ktool.html)
+
 ---
 
 written in pure, 100% python for the sake of platform independence when operating on static binaries and libraries. 

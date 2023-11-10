@@ -886,7 +886,14 @@ class MachOFileCommands:
                 for obj_class in objc_image.classlist:
                     print(f'{obj_class.name}')
             elif args.get_swift_types:
-                load_swift_types(image)
+                print(f'Swift Types')
+                swift_image = ktool.ktool.load_swift_metadata(objc_image)
+                for _type in swift_image.types:
+                    if _type is None:
+                        continue
+                    print(f'{_type.name} ({_type.__class__.__name__})')
+                    for field in _type.fields:
+                        print('  ' + str(field))
             elif args.get_protos:
                 for objc_proto in objc_image.protolist:
                     print(f'{objc_proto.name}')

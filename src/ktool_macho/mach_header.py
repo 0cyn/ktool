@@ -150,6 +150,7 @@ LOAD_COMMAND_MAP = {
     LOAD_COMMAND.SOURCE_VERSION: source_version_command,
     LOAD_COMMAND.DYLD_INFO_ONLY: dyld_info_command,
     LOAD_COMMAND.FUNCTION_STARTS: linkedit_data_command,
+    LOAD_COMMAND.DYLD_ENVIRONMENT: dylinker_command,
     LOAD_COMMAND.DATA_IN_CODE: linkedit_data_command,
     LOAD_COMMAND.BUILD_VERSION: build_version_command,
     LOAD_COMMAND.MAIN: entry_point_command,

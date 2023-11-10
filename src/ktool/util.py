@@ -96,7 +96,7 @@ def macho_is_malformed():
         raise MalformedMachOException
 
 
-def uint_to_int(uint, bits):
+def uint_to_int(val, bits):
     """
     Assume an int was read from binary as an unsigned int,
 
@@ -106,10 +106,9 @@ def uint_to_int(uint, bits):
     :param bits:
     :return:
     """
-    if (uint & (1 << (bits - 1))) != 0:  # if sign bit is set e.g., 8bit: 128-255
-        uint = uint - (1 << bits)  # compute negative value
-    return uint  # return positive value as is
-
+    if (val & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
+        val = val - (1 << bits)        # compute negative value
+    return val
 
 def usi32_to_si32(val):
     """

@@ -161,18 +161,41 @@ class MachOFile:
             self.file.close()
 
 
+
+
 class Section:
     """
 
     """
 
-    def __init__(self, segment, cmd):
+    class SectionIterator:
+        def __init__(self, sect: 'Section', vm=False, ptr_size=8):
+            self.ptr_size = ptr_size
+            self.start = sect.vm_address if vm else sect.file_address
+            self.end = (sect.vm_address if vm else sect.file_address) + sect.size
+            self.pos = self.start - self.ptr_size  # TODO presumably i am misunderstanding something but this makes it work
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            self.pos += self.ptr_size
+            if self.pos >= self.end:
+                self.pos = self.start
+                raise StopIteration
+            return self.pos
+
+    def __init__(self, segment, cmd, ptr_size):
         self.cmd = cmd
         self.segment = segment
         self.name = cmd.sectname
         self.vm_address = cmd.addr
         self.file_address = cmd.offset
         self.size = cmd.size
+        self.ptr_size = ptr_size
+
+    def __iter__(self):
+        return Section.SectionIterator(self, False, self.ptr_size)
 
     def serialize(self):
         return {'command': self.cmd.serialize(), 'name': self.name, 'vm_address': self.vm_address,
@@ -216,7 +239,7 @@ class Segment:
 
         for sect in range(0, self.cmd.nsects):
             sect = self.image.read_struct(ea, section_64 if self.is64 else section)
-            sect = Section(self, sect)
+            sect = Section(self, sect, 8 if self.is64 else 4)
             sections[sect.name] = sect
             ea += section_64.SIZE if self.is64 else section.SIZE
 

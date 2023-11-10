@@ -39,13 +39,14 @@ from pygments.formatters.terminal import TerminalFormatter
 from pygments.formatters.terminal256 import Terminal256Formatter
 from pygments.lexers.objective import ObjectiveCLexer
 
+import ktool.ktool
+from ktool.swift import SwiftClass
 from ktool_macho import LOAD_COMMAND
 
 from ktool.macho import MachOFile
 from ktool.loader import MachOImageLoader
 from ktool.objc import ObjCImage
 from ktool.headers import HeaderGenerator
-from ktool.swift import load_swift_types, SwiftClass
 from ktool.util import Table
 
 from ktool.kcache import KernelCache, Kext
@@ -1854,7 +1855,7 @@ class KToolMachOLoader:
         callback(f'Loading Swift Types')
         root_mmci = MainMenuContentItem()
 
-        types = load_swift_types(lib)
+        types = ktool.ktool.load_swift_metadata(lib).types
 
         root_mmci.lines = [f'{i.name}::{i.__class__.__name__}' for i in types]
 

@@ -15,12 +15,16 @@ rule build_bin_arm64
 rule lipo_combine
     command = lipo -create $in -output $out
 
+rule sign
+    command = cp $in $out; codesign -s - --ent src/testent.xml $out --force
+
 rule clean
     command = rm -r $out
 
 
 build bins/testlib1.dylib: build_library_x86 src/testlib1.m
 build bins/testbin1: build_bin_x86 src/testbin1.m
+build bins/testbin1.signed: sign bins/testbin1
 
 build .build/testbin1_arm: build_bin_arm64 src/testbin1.m
 build .build/testbin1_x86: build_bin_x86 src/testbin1.m
