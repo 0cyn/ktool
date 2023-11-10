@@ -572,7 +572,7 @@ class MachOImageHeader(Constructable):
                 for i in range(command.nsects):
                     sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
                                                                                                                                   i + 1) * struct_class.SIZE],
-                                                                        "little")))
+                                                                        "little"), 8 if self.is64 else 4))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
                                                      command.maxprot, command.initprot, command.flags, sects)
@@ -640,7 +640,7 @@ class MachOImageHeader(Constructable):
                 for i in range(command.nsects):
                     sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
                                                                                                                                   i + 1) * struct_class.SIZE],
-                                                                        "little")))
+                                                                        "little"), 8 if self.is64 else 4))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
                                                      command.maxprot, command.initprot, command.flags, sects)
@@ -708,7 +708,7 @@ class MachOImageHeader(Constructable):
                 for i in range(command.nsects):
                     sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
                                                                                                                                   i + 1) * struct_class.SIZE],
-                                                                        "little")))
+                                                                        "little"), 8 if self.is64 else 4))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
                                                      command.maxprot, command.initprot, command.flags, sects)
