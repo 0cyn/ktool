@@ -15,36 +15,9 @@
 import enum
 from lib0cyn.structs import *
 
-"""
-struct _NominalTypeDescriptor {
-    var property1: Int32
-    var property2: Int32
-    var mangledName: Int32
-    var property4: Int32
-    var numberOfFields: Int32
-    var fieldOffsetVector: Int32
-}"""
-
-"""
-type FieldRecord struct {
-    Flags           uint32
-    MangledTypeName int32
-    FieldName       int32
-}
-
-type FieldDescriptor struct {
-    MangledTypeName int32
-    Superclass      int32
-    Kind            uint16
-    FieldRecordSize uint16
-    NumFields       uint32
-    FieldRecords    []FieldRecord
-}
-"""
-
 
 class ProtocolDescriptor(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Flags': uint32_t,
         'Parent': int32_t,
         'Name': int32_t,
@@ -52,27 +25,19 @@ class ProtocolDescriptor(Struct):
         'NumRequirements': uint32_t,
         'AssociatedTypeNames': int32_t
     }
-    SIZE = 24
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class ProtocolConformanceDescriptor(Struct):
-    _FIELDS = {
+    FIELDS = {
         'ProtocolDescriptor': int32_t,
         'NominalTypeDescriptor': int32_t,
         'ProtocolWitnessTable': int32_t,
         'ConformanceFlags': uint32_t
     }
-    SIZE = 16 
-    
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class EnumDescriptor(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Flags': uint32_t,
         'Parent': int32_t,
         'Name': int32_t,
@@ -81,14 +46,10 @@ class EnumDescriptor(Struct):
         'NumPayloadCasesAndPayloadSizeOffset': uint32_t,
         'NumEmptyCases': uint32_t
     }
-    SIZE = 28
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class StructDescriptor(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Flags': uint32_t,
         'Parent': int32_t,
         'Name': int32_t,
@@ -97,14 +58,10 @@ class StructDescriptor(Struct):
         'NumFields': uint32_t,
         'FieldOffsetVectorOffset': uint32_t
     }
-    SIZE = 28
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class ClassDescriptor(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Flags': uint32_t,
         'Parent': int32_t,
         'Name': int32_t,
@@ -116,179 +73,123 @@ class ClassDescriptor(Struct):
         'NumImmediateMembers': uint32_t,
         'NumFields': uint32_t
     }
-    SIZE = 4 * len(_FIELDS.values())
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class FieldDescriptor(Struct):
-    _FIELDNAMES = ['MangledTypeName',
-                   'Superclass',
-                   'Kind',
-                   'FieldRecordSize',
-                   'NumFields']
-    _SIZES = [int32_t, int32_t, uint16_t, int16_t, int32_t]
-    SIZE = 16
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+    FIELDS = {
+        'MangledTypeName': int32_t,
+        'Superclass': int32_t,
+        'Kind': uint16_t,
+        'FieldRecordSize': int16_t,
+        'NumFields': int32_t
+    }
 
 
 class FieldRecord(Struct):
-    _FIELDNAMES = ['Flags', 'MangledTypeName', 'FieldName']
-    _SIZES = [uint32_t, int32_t, int32_t]
-    SIZE = 0xc
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+    FIELDS = {
+        'Flags': uint32_t,
+        'MangledTypeName': int32_t,
+        'FieldName': int32_t
+    }
 
 
 class AssociatedTypeRecord(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Name': int32_t,
         'SubstitutedTypename': int32_t
     }
-    SIZE = 8
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class AssociatedTypeDescriptor(Struct):
-    _FIELDS = {
+    FIELDS = {
         'ConformingTypeName': int32_t,
         'ProtocolTypeName': int32_t,
         'NumAssociatedTypes': uint32_t,
         'AssociatedTypeRecordSize': uint32_t
     }
-    SIZE = 16
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class BuiltinTypeDescriptor(Struct):
-    _FIELDS = {
+    FIELDS = {
         'TypeName': int32_t,
         'Size': uint32_t,
         'AlignmentAndFlags': uint32_t,
         'Stride': uint32_t,
         'NumExtraInhabitants': uint32_t
     }
-    SIZE = 20
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class CaptureTypeRecord(Struct):
-    _FIELDS = {
+    FIELDS = {
         'MangledTypeName': int32_t
     }
-    SIZE = 4
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class MetadataSourceRecord(Struct):
-    _FIELDS = {
+    FIELDS = {
         'MangledTypeName': int32_t,
         'MangledMetadataSource': int32_t
     }
-    SIZE = 8
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class CaptureDescriptor(Struct):
-    _FIELDS = {
+    FIELDS = {
         'NumCaptureTypes': uint32_t,
         'NumMetadataSources': uint32_t,
         'NumBindings': uint32_t
     }
-    SIZE = 12
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class Replacement(Struct):
-    _FIELDS = {
+    FIELDS = {
         'ReplacedFunctionKey': int32_t,
         'NewFunction': int32_t,
         'Replacement': int32_t,
         'Flags': uint32_t
     }
-    SIZE = 16
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class ReplacementScope(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Flags': uint32_t,
         'NumReplacements': uint32_t
     }
-    SIZE = 8
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class AutomaticReplacements(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Flags': uint32_t,
         'NumReplacements': uint32_t,
         'Replacements': int32_t
     }
-    SIZE = 12
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class OpaqueReplacement(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Original': int32_t,
         'Replacement': int32_t
     }
-    SIZE = 8
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class OpaqueAutomaticReplacement(Struct):
-    _FIELDS = {
+    FIELDS = {
         'Flags': uint32_t,
         'NumReplacements': uint32_t,
     }
-    SIZE = 8
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
 
 
 class ClassMethodListTable(Struct):
-    _FIELDNAMES = ['VTableOffset', 'VTableSize']
-    _SIZES = [4, 4]
-    SIZE = 8
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+    FIELDS = {
+        'VTableOffset': uint32_t,
+        'VTableSize': uint32_t
+    }
 
 
 class TargetMethodDescriptor(Struct):
-    _FIELDNAMES = ['Flags', 'Impl']
-    _SIZES = [uint32_t, int32_t]
-    SIZE = 8
-
-    def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+    FIELDS = {
+        'Flags': uint32_t,
+        'Impl': int32_t
+    }
 
 
 class ContextDescriptorKind(enum.Enum):

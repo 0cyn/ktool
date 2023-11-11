@@ -879,7 +879,7 @@ class MachOFileCommands:
                     lc_dat = str(lc)
                     if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB,
                                                 LOAD_COMMAND.SUB_CLIENT]:
-                        lc_dat += '\n"' + image.read_cstr(lc.off + lc.SIZE, vm=False) + '"'
+                        lc_dat += '\n"' + image.read_cstr(lc.off + lc.size(), vm=False) + '"'
                     table.rows.append([str(i), LOAD_COMMAND(lc.cmd).name.ljust(15, ' '), lc_dat])
                 print(table.fetch_all(get_terminal_size().columns - 5))
             elif args.get_classes:

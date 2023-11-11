@@ -2,7 +2,8 @@
 #  ktool | ktool_macho
 #  structs.py
 #
-#
+#  the __init__ defs here are unnecessary and only required for my IDE (pycharm) to recognize and autocomplete
+#   the struct attributes
 #
 #  This file is part of ktool. ktool is free software that
 #  is made available under the MIT license. Consult the
@@ -24,12 +25,15 @@ class fat_header(Struct):
 
         self.nfat_archs: Number of Fat Arch entries after these bytes
     """
-    _FIELDNAMES = ['magic', 'nfat_archs']
-    _SIZES = [uint32_t, uint32_t]
-    SIZE = 8
+    FIELDS = {
+        'magic': uint32_t,
+        'nfat_archs': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
+        self.magic = 0
+        self.nfat_archs = 0
 
 
 class fat_arch(Struct):
@@ -39,12 +43,16 @@ class fat_arch(Struct):
     Attribs:
         cpu_type:
     """
-    _FIELDNAMES = ['cpu_type', 'cpu_subtype', 'offset', 'size', 'align']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 20
+    FIELDS = {
+        'cpu_type': uint32_t,
+        'cpu_subtype': uint32_t,
+        'offset': uint32_t,
+        'size': uint32_t,
+        'align': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cpu_type = 0
         self.cpu_subtype = 0
         self.offset = 0
@@ -53,12 +61,18 @@ class fat_arch(Struct):
 
 
 class mach_header(Struct):
-    _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 28
+    FIELDS = {
+        'magic': uint32_t,
+        'cpu_type': uint32_t,
+        'cpu_subtype': uint32_t,
+        'filetype': uint32_t,
+        'loadcnt': uint32_t,
+        'loadsize': uint32_t,
+        'flags': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.magic = 0
         self.cpu_type = 0
         self.cpu_subtype = 0
@@ -69,12 +83,19 @@ class mach_header(Struct):
 
 
 class mach_header_64(Struct):
-    _FIELDNAMES = ['magic', 'cpu_type', 'cpu_subtype', 'filetype', 'loadcnt', 'loadsize', 'flags', 'reserved']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 32
+    FIELDS = {
+        'magic': uint32_t,
+        'cpu_type': uint32_t,
+        'cpu_subtype': uint32_t,
+        'filetype': uint32_t,
+        'loadcnt': uint32_t,
+        'loadsize': uint32_t,
+        'flags': uint32_t,
+        'reserved': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.magic = 0
         self.cpu_type = 0
         self.cpu_subtype = 0
@@ -86,25 +107,34 @@ class mach_header_64(Struct):
 
 
 class unk_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize']
-    _SIZES = [uint32_t, uint32_t]
-    SIZE = 8
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
 
 
 class segment_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'segname', 'vmaddr', 'vmsize', 'fileoff', 'filesize', 'maxprot', 'initprot',
-                   'nsects', 'flags']
-    _SIZES = [uint32_t, uint32_t, char_t[16], uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
-              uint32_t]
-    SIZE = 56
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'segname': char_t[16],
+        'vmaddr': uint32_t,
+        'vmsize': uint32_t,
+        'fileoff': uint32_t,
+        'filesize': uint32_t,
+        'maxprot': uint32_t,
+        'initprot': uint32_t,
+        'nsects': uint32_t,
+        'flags': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.segname = 0
@@ -119,14 +149,22 @@ class segment_command(Struct):
 
 
 class segment_command_64(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'segname', 'vmaddr', 'vmsize', 'fileoff', 'filesize', 'maxprot', 'initprot',
-                   'nsects', 'flags']
-    _SIZES = [uint32_t, uint32_t, char_t[16], uint64_t, uint64_t, uint64_t, uint64_t, uint32_t, uint32_t, uint32_t,
-              uint32_t]
-    SIZE = 72
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'segname': char_t[16],
+        'vmaddr': uint64_t,
+        'vmsize': uint64_t,
+        'fileoff': uint64_t,
+        'filesize': uint64_t,
+        'maxprot': uint32_t,
+        'initprot': uint32_t,
+        'nsects': uint32_t,
+        'flags': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.segname = 0
@@ -141,14 +179,22 @@ class segment_command_64(Struct):
 
 
 class section(Struct):
-    _FIELDNAMES = ['sectname', 'segname', 'addr', 'size', 'offset', 'align', 'reloff', 'nreloc', 'flags', 'reserved1',
-                   'reserved2']
-    _SIZES = [char_t[16], char_t[16], uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
-              uint32_t]
-    SIZE = 68
+    FIELDS = {
+        'sectname': char_t[16],
+        'segname': char_t[16],
+        'addr': uint32_t,
+        'size': uint32_t,
+        'offset': uint32_t,
+        'align': uint32_t,
+        'reloff': uint32_t,
+        'nreloc': uint32_t,
+        'flags': uint32_t,
+        'reserved1': uint32_t,
+        'reserved2': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.sectname = 0
         self.segname = 0
         self.addr = 0
@@ -163,14 +209,23 @@ class section(Struct):
 
 
 class section_64(Struct):
-    _FIELDNAMES = ['sectname', 'segname', 'addr', 'size', 'offset', 'align', 'reloff', 'nreloc', 'flags', 'reserved1',
-                   'reserved2', 'reserved3']
-    _SIZES = [char_t[16], char_t[16], uint64_t, uint64_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
-              uint32_t, uint32_t]
-    SIZE = 80
+    FIELDS = {
+        'sectname': char_t[16],
+        'segname': char_t[16],
+        'addr': uint64_t,
+        'size': uint64_t,
+        'offset': uint32_t,
+        'align': uint32_t,
+        'reloff': uint32_t,
+        'nreloc': uint32_t,
+        'flags': uint32_t,
+        'reserved1': uint32_t,
+        'reserved2': uint32_t,
+        'reserved3': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.sectname = 0
         self.segname = 0
         self.addr = 0
@@ -186,12 +241,17 @@ class section_64(Struct):
 
 
 class symtab_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'symoff', 'nsyms', 'stroff', 'strsize']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 4 * 6
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'symoff': uint32_t,
+        'nsyms': uint32_t,
+        'stroff': uint32_t,
+        'strsize': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.symoff = 0
@@ -201,15 +261,31 @@ class symtab_command(Struct):
 
 
 class dysymtab_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'ilocalsym', 'nlocalsym', 'iextdefsym', 'nextdefsym', 'iundefsym', 'nundefsym',
-                   'tocoff', 'ntoc', 'modtaboff', 'nmodtab', 'extrefsymoff', 'nextrefsyms', 'indirectsymoff',
-                   'nindirectsyms', 'extreloff', 'nextrel', 'locreloff', 'nlocrel']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
-              uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 80
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'ilocalsym': uint32_t,
+        'nlocalsym': uint32_t,
+        'iextdefsym': uint32_t,
+        'nextdefsym': uint32_t,
+        'iundefsym': uint32_t,
+        'nundefsym': uint32_t,
+        'tocoff': uint32_t,
+        'ntoc': uint32_t,
+        'modtaboff': uint32_t,
+        'nmodtab': uint32_t,
+        'extrefsymoff': uint32_t,
+        'nextrefsyms': uint32_t,
+        'indirectsymoff': uint32_t,
+        'nindirectsyms': uint32_t,
+        'extreloff': uint32_t,
+        'nextrel': uint32_t,
+        'locreloff': uint32_t,
+        'nlocrel': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.ilocalsym = 0
@@ -233,12 +309,15 @@ class dysymtab_command(Struct):
 
 
 class dylib(Struct):
-    _FIELDNAMES = ['name', 'timestamp', 'current_version', 'compatibility_version']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 16
+    FIELDS = {
+        'name': uint32_t,
+        'timestamp': uint32_t,
+        'current_version': uint32_t,
+        'compatibility_version': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.name = 0
         self.timestamp = 0
         self.current_version = 0
@@ -246,60 +325,73 @@ class dylib(Struct):
 
 
 class dylib_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'dylib']
-    _SIZES = [uint32_t, uint32_t, dylib]
-    SIZE = 24
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'dylib': dylib
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.dylib = 0
 
 
 class dylinker_command(Struct):
-    _FIELDNAMES = ["cmd", "cmdsize", "name"]
-    _SIZES = [uint32_t, uint32_t, uint32_t]
-    SIZE = 12
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'name': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.name = 0
 
 
 class sub_client_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'offset']
-    _SIZES = [uint32_t, uint32_t, uint32_t]
-    SIZE = 12
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'offset': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.offset = 0
 
 
 class uuid_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'uuid']
-    _SIZES = [uint32_t, uint32_t, type_bytes | 16]
-    SIZE = 24
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'uuid': bytes_t[16]
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.uuid = 0
 
 
 class build_version_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'platform', 'minos', 'sdk', 'ntools']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 24
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'platform': uint32_t,
+        'minos': uint32_t,
+        'sdk': uint32_t,
+        'ntools': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.platform = 0
@@ -309,12 +401,15 @@ class build_version_command(Struct):
 
 
 class entry_point_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'entryoff', 'stacksize']
-    _SIZES = [uint32_t, uint32_t, uint64_t, uint64_t]
-    SIZE = 24
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'entryoff': uint64_t,
+        'stacksize': uint64_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.entryoff = 0
@@ -322,36 +417,43 @@ class entry_point_command(Struct):
 
 
 class rpath_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'path']
-    _SIZES = [uint32_t, uint32_t, uint32_t]
-    SIZE = 12
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'path': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.path = 0
 
 
 class source_version_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'version']
-    _SIZES = [uint32_t, uint32_t, uint64_t]
-    SIZE = sum(_SIZES)
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'version': uint64_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.version = 0
 
 
 class linkedit_data_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'dataoff', 'datasize']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = sum(_SIZES)
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'dataoff': uint32_t,
+        'datasize': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.dataoff = 0
@@ -359,14 +461,23 @@ class linkedit_data_command(Struct):
 
 
 class dyld_info_command(Struct):
-    _FIELDNAMES = ['cmd', 'cmdsize', 'rebase_off', 'rebase_size', 'bind_off', 'bind_size', 'weak_bind_off',
-                   'weak_bind_size', 'lazy_bind_off', 'lazy_bind_size', 'export_off', 'export_size']
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
-              uint32_t, uint32_t]
-    SIZE = 48
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'rebase_off': uint32_t,
+        'rebase_size': uint32_t,
+        'bind_off': uint32_t,
+        'bind_size': uint32_t,
+        'weak_bind_off': uint32_t,
+        'weak_bind_size': uint32_t,
+        'lazy_bind_off': uint32_t,
+        'lazy_bind_size': uint32_t,
+        'export_off': uint32_t,
+        'export_size': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdisze = 0
         self.rebase_off = 0
@@ -382,12 +493,16 @@ class dyld_info_command(Struct):
 
 
 class symtab_entry_32(Struct):
-    _FIELDNAMES = ["str_index", "type", "sect_index", "desc", "value"]
-    _SIZES = [uint32_t, uint8_t, uint8_t, uint16_t, uint32_t]
-    SIZE = sum(_SIZES)
+    FIELDS = {
+        'str_index': uint32_t,
+        'type': uint8_t,
+        'sect_index': uint8_t,
+        'desc': uint16_t,
+        'value': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.str_index = 0
         self.type = 0
         self.sect_index = 0
@@ -396,12 +511,16 @@ class symtab_entry_32(Struct):
 
 
 class symtab_entry(Struct):
-    _FIELDNAMES = ["str_index", "type", "sect_index", "desc", "value"]
-    _SIZES = [uint32_t, uint8_t, uint8_t, uint16_t, uint64_t]
-    SIZE = sum(_SIZES)
+    FIELDS = {
+        'str_index': uint32_t,
+        'type': uint8_t,
+        'sect_index': uint8_t,
+        'desc': uint16_t,
+        'value': uint64_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.str_index = 0
         self.type = 0
         self.sect_index = 0
@@ -410,12 +529,15 @@ class symtab_entry(Struct):
 
 
 class version_min_command(Struct):
-    _FIELDNAMES = ["cmd", "cmdsize", "version", "reserved"]
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 16
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'version': uint32_t,
+        'reserved': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.version = 0
@@ -423,12 +545,16 @@ class version_min_command(Struct):
 
 
 class encryption_info_command(Struct):
-    _FIELDNAMES = ["cmd", "cmdsize", "cryptoff", "cryptsize", "cryptid"]
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = 20
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'cryptoff': uint32_t,
+        'cryptsize': uint32_t,
+        'cryptid': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.cryptoff = 0
@@ -437,12 +563,17 @@ class encryption_info_command(Struct):
 
 
 class encryption_info_command_64(Struct):
-    _FIELDNAMES = ["cmd", "cmdsize", "cryptoff", "cryptsize", "cryptid", "pad"]
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = sum(_SIZES)
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'cryptoff': uint32_t,
+        'cryptsize': uint32_t,
+        'cryptid': uint32_t,
+        'pad': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.cryptoff = 0
@@ -452,12 +583,15 @@ class encryption_info_command_64(Struct):
 
 
 class thread_command(Struct):
-    _FIELDNAMES = ["cmd", "cmdsize", "flavor", "count"]
-    _SIZES = [uint32_t, uint32_t, uint32_t, uint32_t]
-    SIZE = sum(_SIZES)
+    FIELDS = {
+        'cmd': uint32_t,
+        'cmdsize': uint32_t,
+        'flavor': uint32_t,
+        'count': uint32_t
+    }
 
     def __init__(self, byte_order="little"):
-        super().__init__(fields=self._FIELDNAMES, sizes=self._SIZES, byte_order=byte_order)
+        super().__init__(byte_order=byte_order)
         self.cmd = 0
         self.cmdsize = 0
         self.flavor = 0

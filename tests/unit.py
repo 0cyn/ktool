@@ -342,16 +342,16 @@ class ImageHeaderTestCase(unittest.TestCase):
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 load_command_items.append(Segment(image, command))
             elif isinstance(command, dylib_command):
-                suffix = image.read_cstr(command.off + command.__class__.SIZE)
+                suffix = image.read_cstr(command.off + command.__class__.size())
                 encoded = suffix.encode('utf-8') + b'\x00'
-                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                while (len(encoded) + command.__class__.size()) % 8 != 0:
                     encoded += b'\x00'
                 load_command_items.append(command)
                 load_command_items.append(encoded)
             elif command.__class__ in [dylinker_command, build_version_command]:
                 load_command_items.append(command)
                 actual_size = command.cmdsize
-                dat = image.read_bytearray(command.off + command.SIZE, actual_size - command.SIZE)
+                dat = image.read_bytearray(command.off + command.size(), actual_size - command.size())
                 load_command_items.append(dat)
             else:
                 load_command_items.append(command)
@@ -384,9 +384,9 @@ class ImageHeaderTestCase(unittest.TestCase):
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 load_command_items.append(Segment(image, command))
             elif isinstance(command, dylib_command):
-                suffix = image.read_cstr(command.off + command.__class__.SIZE)
+                suffix = image.read_cstr(command.off + command.__class__.size())
                 encoded = suffix.encode('utf-8') + b'\x00'
-                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                while (len(encoded) + command.__class__.size()) % 8 != 0:
                     encoded += b'\x00'
                 load_command_items.append(command)
                 load_command_items.append(encoded)
@@ -396,7 +396,7 @@ class ImageHeaderTestCase(unittest.TestCase):
             elif command.__class__ in [dylinker_command, build_version_command]:
                 load_command_items.append(command)
                 actual_size = command.cmdsize
-                dat = image.read_bytearray(command.off + command.SIZE, actual_size - command.SIZE)
+                dat = image.read_bytearray(command.off + command.size(), actual_size - command.size())
                 load_command_items.append(dat)
             else:
                 load_command_items.append(command)
@@ -507,7 +507,7 @@ class MachOLoaderTestCase(unittest.TestCase):
         # corrupt the second offset
         header: fat_header = macho._load_struct(0, fat_header, "big")
         for off in range(1, header.nfat_archs):
-            offset = fat_header.SIZE + (off * fat_arch.SIZE)
+            offset = fat_header.size() + (off * fat_arch.size())
             arch_struct: fat_arch = macho._load_struct(offset, fat_arch, "big")
             arch_struct.offset = 0xDEADBEEF
             self.fat.write(arch_struct.off, arch_struct.raw)

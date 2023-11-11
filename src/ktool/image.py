@@ -187,7 +187,7 @@ class LinkedImage:
         return {'install_name': self.install_name, 'load_command': LOAD_COMMAND(self.cmd.cmd).name}
 
     def _get_name(self, cmd) -> str:
-        read_address = cmd.off + dylib_command.SIZE
+        read_address = cmd.off + dylib_command.size()
         return self.source_image.read_cstr(read_address)
 
 
@@ -248,6 +248,7 @@ class Image:
                 self.vm = MisalignedVM()
             else:
                 self.vm_realign()
+            self.ptr_size = self.slice.ptr_size
 
         self.base_name = ""  # copy of self.name
         self.install_name = ""
@@ -397,6 +398,14 @@ class Image:
         if vm:
             offset = self.vm.translate(offset)
         return self.slice.read_uint(offset, length)
+
+    def read_ptr(self, offset: int, vm=False):
+        """ Read a ptr (uint of size self.ptr_size)
+
+        :param offset:
+        :param vm:
+        """
+        return self.read_uint(offset, self.ptr_size, vm=vm)
 
     def read_int(self, offset: int, length: int, vm=False):
         return uint_to_int(self.read_uint(offset, length, vm), length * 8)

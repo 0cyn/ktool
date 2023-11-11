@@ -68,13 +68,13 @@ class SegmentLoadCommand(LoadCommand):
         lc.type = SectionType(S_FLAGS_MASKS.SECTION_TYPE & command.flags)
         lc.is64 = isinstance(command, segment_command_64)
 
-        ea = command.off + command.SIZE
+        ea = command.off + command.size()
 
         for sect in range(command.nsects):
             sect = image.read_struct(ea, section_64 if lc.is64 else section)
             _section = Section(sect)
             lc.sections[sect.name] = _section
-            ea += section_64.SIZE if lc.is64 else section.SIZE
+            ea += section_64.size() if lc.is64 else section.size()
 
         return lc
 
@@ -88,8 +88,8 @@ class SegmentLoadCommand(LoadCommand):
         section_type = section_64 if is_64 else section
         cmd = 0x19 if is_64 else 0x1
 
-        cmdsize = command_type.SIZE
-        cmdsize += (len(sections) * section_type.SIZE)
+        cmdsize = command_type.size()
+        cmdsize += (len(sections) * section_type.size())
 
         command = Struct.create_with_values(command_type,
                                             [cmd, cmdsize, name, vm_addr, vm_size, file_addr, file_size, maxprot,
@@ -148,7 +148,7 @@ class SymtabLoadCommand(LoadCommand):
 
     @classmethod
     def from_values(cls, symtab_offset, symtab_size, string_table_offset, string_table_size):
-        cmd = Struct.create_with_values(symtab_command, [LOAD_COMMAND.SYMTAB.value, symtab_command.SIZE, symtab_offset,
+        cmd = Struct.create_with_values(symtab_command, [LOAD_COMMAND.SYMTAB.value, symtab_command.size(), symtab_offset,
                                                          symtab_size, string_table_offset, string_table_size])
 
         return cls.from_image(cmd)

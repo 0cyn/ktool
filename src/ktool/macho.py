@@ -134,7 +134,7 @@ class MachOFile:
         if self.type == MachOFileType.FAT:
             self.header: fat_header = self._load_struct(0, fat_header, "big")
             for off in range(0, self.header.nfat_archs):
-                offset = fat_header.SIZE + (off * fat_arch.SIZE)
+                offset = fat_header.size() + (off * fat_arch.size())
                 arch_struct: fat_arch = self._load_struct(offset, fat_arch, "big")
 
                 if not self.file.read_int(arch_struct.offset, 4) in [MH_MAGIC, MH_CIGAM, MH_MAGIC_64, MH_CIGAM_64]:
@@ -148,7 +148,7 @@ class MachOFile:
             self.slices.append(Slice(self, self.file, None))
 
     def _load_struct(self, address: int, struct_type, endian="little"):
-        size = struct_type.SIZE
+        size = struct_type.size()
         data = self.file.read_bytes(address, size)
 
         struct = Struct.create_with_bytes(struct_type, data, endian)
@@ -159,8 +159,6 @@ class MachOFile:
     def __del__(self):
         if hasattr(self, 'file') and hasattr(self.file, 'close'):
             self.file.close()
-
-
 
 
 class Section:
@@ -235,13 +233,13 @@ class Segment:
 
     def _process_sections(self) -> Dict[str, Section]:
         sections = {}
-        ea = self.cmd.off + self.cmd.SIZE
+        ea = self.cmd.off + self.cmd.size()
 
         for sect in range(0, self.cmd.nsects):
             sect = self.image.read_struct(ea, section_64 if self.is64 else section)
             sect = Section(self, sect, 8 if self.is64 else 4)
             sections[sect.name] = sect
-            ea += section_64.SIZE if self.is64 else section.SIZE
+            ea += section_64.size() if self.is64 else section.size()
 
         return sections
 
@@ -263,6 +261,10 @@ class Slice:
             self.arch_struct = Struct.create_with_values(fat_arch, [hdr.cpu_type, hdr.cpu_subtype, 0, 0, 0])
             self.type = self._load_type()
             self.subtype = self._load_subtype(self.type)
+
+        self.ptr_size = 8
+        if self.type in [CPUType.ARM, CPUType.X86, CPUType.POWERPC, CPUType.ARM6432]:
+            self.ptr_size = 4
 
         self.size = sliced_backing_file.size
 
@@ -286,10 +288,10 @@ class Slice:
         return self.file.file.find(pattern)
 
     def read_struct(self, addr: int, struct_type, endian="little"):
-        size = struct_type.SIZE
+        size = struct_type.size(self.ptr_size)
         data = self.read_bytearray(addr, size)
 
-        struct = Struct.create_with_bytes(struct_type, data, endian)
+        struct = Struct.create_with_bytes(struct_type, data, endian, ptr_size=self.ptr_size)
         struct.off = addr
 
         return struct
@@ -400,7 +402,7 @@ class MachOImageHeader(Constructable):
             if header.flags & flag.value:
                 image_header.flags.append(flag)
 
-        offset += header.SIZE
+        offset += header.size()
 
         load_commands = []
 
@@ -460,12 +462,12 @@ class MachOImageHeader(Constructable):
 
         lc_count = 0
 
-        off = struct_type.SIZE
+        off = struct_type.size()
 
         for lc in load_commands:
 
             if issubclass(lc.__class__, Struct):
-                assert len(lc.raw) == lc.__class__.SIZE
+                assert len(lc.raw) == lc.__class__.size()
                 assert hasattr(lc, 'cmdsize')
                 lc.off = off
                 lcs.append(lc)
@@ -553,9 +555,9 @@ class MachOImageHeader(Constructable):
                 elif load_command.__class__ in [dylib_command, rpath_command]:
                     assert suffix is not None, "Inserting dylib_command requires suffix"
                     encoded = suffix.encode('utf-8') + b'\x00'
-                    while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
+                    while (len(encoded) + load_command.__class__.size()) % 8 != 0:
                         encoded += b'\x00'
-                    cmdsize = load_command.__class__.SIZE + len(encoded)
+                    cmdsize = load_command.__class__.size() + len(encoded)
                     load_command.cmdsize = cmdsize
                     load_command_items.append(load_command)
                     load_command_items.append(encoded)
@@ -567,11 +569,11 @@ class MachOImageHeader(Constructable):
 
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 sects = []
-                sect_data = self.raw[command.off + command.__class__.SIZE:]
+                sect_data = self.raw[command.off + command.__class__.size():]
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
-                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
-                                                                                                                                  i + 1) * struct_class.SIZE],
+                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.size():(
+                                                                                                                                  i + 1) * struct_class.size()],
                                                                         "little"), 8 if self.is64 else 4))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
@@ -580,18 +582,18 @@ class MachOImageHeader(Constructable):
             elif command.__class__ in [dylib_command, rpath_command]:
                 _suffix = ""
                 i = 0
-                while self.raw[command.off + command.__class__.SIZE + i] != 0:
-                    _suffix += chr(self.raw[command.off + command.__class__.SIZE + i])
+                while self.raw[command.off + command.__class__.size() + i] != 0:
+                    _suffix += chr(self.raw[command.off + command.__class__.size() + i])
                     i += 1
                 encoded = _suffix.encode('utf-8') + b'\x00'
-                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                while (len(encoded) + command.__class__.size()) % 8 != 0:
                     encoded += b'\x00'
                 load_command_items.append(command)
                 load_command_items.append(encoded)
             elif command.__class__ in [dylinker_command, build_version_command]:
                 load_command_items.append(command)
                 actual_size = command.cmdsize
-                dat = self.raw[command.off + command.SIZE:(command.off + command.SIZE) + actual_size - command.SIZE]
+                dat = self.raw[command.off + command.size():(command.off + command.size()) + actual_size - command.size()]
                 load_command_items.append(dat)
             else:
                 load_command_items.append(command)
@@ -604,9 +606,9 @@ class MachOImageHeader(Constructable):
                 load_command_items.append(load_command)
                 assert suffix is not None, f"Inserting {load_command.__class__.__name__} requires suffix"
                 encoded = suffix.encode('utf-8') + b'\x00'
-                while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
+                while (len(encoded) + load_command.__class__.size()) % 8 != 0:
                     encoded += b'\x00'
-                cmdsize = load_command.__class__.SIZE + len(encoded)
+                cmdsize = load_command.__class__.size() + len(encoded)
                 load_command.cmdsize = cmdsize
                 load_command_items.append(encoded)
             elif load_command.__class__ in [dylinker_command, build_version_command]:
@@ -635,11 +637,11 @@ class MachOImageHeader(Constructable):
 
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 sects = []
-                sect_data = self.raw[command.off + command.__class__.SIZE:]
+                sect_data = self.raw[command.off + command.__class__.size():]
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
-                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
-                                                                                                                                  i + 1) * struct_class.SIZE],
+                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.size():(
+                                                                                                                                  i + 1) * struct_class.size()],
                                                                         "little"), 8 if self.is64 else 4))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
@@ -648,18 +650,18 @@ class MachOImageHeader(Constructable):
             elif command.__class__ in [dylib_command, rpath_command]:
                 suffix = ""
                 i = 0
-                while self.raw[command.off + command.__class__.SIZE + i] != 0:
-                    suffix += chr(self.raw[command.off + command.__class__.SIZE + i])
+                while self.raw[command.off + command.__class__.size() + i] != 0:
+                    suffix += chr(self.raw[command.off + command.__class__.size() + i])
                     i += 1
                 encoded = suffix.encode('utf-8') + b'\x00'
-                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                while (len(encoded) + command.__class__.size()) % 8 != 0:
                     encoded += b'\x00'
                 load_command_items.append(command)
                 load_command_items.append(encoded)
             elif command.__class__ in [dylinker_command, build_version_command]:
                 load_command_items.append(command)
                 actual_size = command.cmdsize
-                dat = self.raw[command.off + command.SIZE:(command.off + command.SIZE) + actual_size - command.SIZE]
+                dat = self.raw[command.off + command.size():(command.off + command.size()) + actual_size - command.size()]
                 load_command_items.append(dat)
             else:
                 load_command_items.append(command)
@@ -687,9 +689,9 @@ class MachOImageHeader(Constructable):
                 elif load_command.__class__ in [dylib_command, rpath_command]:
                     assert suffix is not None, "Inserting dylib_command requires suffix"
                     encoded = suffix.encode('utf-8') + b'\x00'
-                    while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
+                    while (len(encoded) + load_command.__class__.size()) % 8 != 0:
                         encoded += b'\x00'
-                    cmdsize = load_command.__class__.SIZE + len(encoded)
+                    cmdsize = load_command.__class__.size() + len(encoded)
                     load_command.cmdsize = cmdsize
                     load_command_items.append(load_command)
                     load_command_items.append(encoded)
@@ -703,11 +705,11 @@ class MachOImageHeader(Constructable):
 
             if isinstance(command, segment_command) or isinstance(command, segment_command_64):
                 sects = []
-                sect_data = self.raw[command.off + command.__class__.SIZE:]
+                sect_data = self.raw[command.off + command.__class__.size():]
                 struct_class = section_64 if isinstance(command, segment_command_64) else section
                 for i in range(command.nsects):
-                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.SIZE:(
-                                                                                                                                  i + 1) * struct_class.SIZE],
+                    sects.append(Section(None, Struct.create_with_bytes(struct_class, sect_data[i * struct_class.size():(
+                                                                                                                                  i + 1) * struct_class.size()],
                                                                         "little"), 8 if self.is64 else 4))
                 seg = SegmentLoadCommand.from_values(isinstance(command, segment_command_64), command.segname,
                                                      command.vmaddr, command.vmsize, command.fileoff, command.filesize,
@@ -716,18 +718,18 @@ class MachOImageHeader(Constructable):
             elif command.__class__ in [dylib_command, rpath_command]:
                 _suffix = ""
                 i = 0
-                while self.raw[command.off + command.__class__.SIZE + i] != 0:
-                    _suffix += chr(self.raw[command.off + command.__class__.SIZE + i])
+                while self.raw[command.off + command.__class__.size() + i] != 0:
+                    _suffix += chr(self.raw[command.off + command.__class__.size() + i])
                     i += 1
                 encoded = _suffix.encode('utf-8') + b'\x00'
-                while (len(encoded) + command.__class__.SIZE) % 8 != 0:
+                while (len(encoded) + command.__class__.size()) % 8 != 0:
                     encoded += b'\x00'
                 load_command_items.append(command)
                 load_command_items.append(encoded)
             elif command.__class__ in [dylinker_command, build_version_command]:
                 load_command_items.append(command)
                 actual_size = command.cmdsize
-                dat = self.raw[command.off + command.SIZE:(command.off + command.SIZE) + actual_size - command.SIZE]
+                dat = self.raw[command.off + command.size():(command.off + command.size()) + actual_size - command.size()]
                 load_command_items.append(dat)
             else:
                 load_command_items.append(command)
@@ -740,9 +742,9 @@ class MachOImageHeader(Constructable):
                 load_command_items.append(load_command)
                 assert suffix is not None, "Inserting dylib_command requires suffix"
                 encoded = suffix.encode('utf-8') + b'\x00'
-                while (len(encoded) + load_command.__class__.SIZE) % 8 != 0:
+                while (len(encoded) + load_command.__class__.size()) % 8 != 0:
                     encoded += b'\x00'
-                cmdsize = load_command.__class__.SIZE + len(encoded)
+                cmdsize = load_command.__class__.size() + len(encoded)
                 load_command.cmdsize = cmdsize
                 load_command_items.append(encoded)
             elif load_command.__class__ in [dylinker_command, build_version_command]:

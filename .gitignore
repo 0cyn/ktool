@@ -17,3 +17,4 @@ poetry.lock
 tests/bins/testbin1
 tests/bins/testbin1.fat
 tests/bins/testlib1.dylib
+/tests/.build/

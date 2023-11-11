@@ -30,7 +30,7 @@ class CodesignInfo(Constructable):
     def from_image(cls, image, codesign_cmd: linkedit_data_command):
         superblob: SuperBlob = image.read_struct(codesign_cmd.dataoff, SuperBlob)
         slots: List[BlobIndex] = []
-        off = codesign_cmd.dataoff + SuperBlob.SIZE
+        off = codesign_cmd.dataoff + SuperBlob.size()
 
         req_dat = None
 
@@ -41,7 +41,7 @@ class CodesignInfo(Constructable):
             blob_index.type = swap_32(blob_index.type)
             blob_index.offset = swap_32(blob_index.offset)
             slots.append(blob_index)
-            off += BlobIndex.SIZE
+            off += BlobIndex.size()
 
         for blob in slots:
             if blob.type == CSSLOT_ENTITLEMENTS:
@@ -50,14 +50,14 @@ class CodesignInfo(Constructable):
                 ent_blob.magic = swap_32(ent_blob.magic)
                 ent_blob.length = swap_32(ent_blob.length)
                 ent_size = ent_blob.length
-                entitlements = image.read_fixed_len_str(start + Blob.SIZE, ent_size - Blob.SIZE)
+                entitlements = image.read_fixed_len_str(start + Blob.size(), ent_size - Blob.size())
 
             elif blob.type == CSSLOT_REQUIREMENTS:
                 start = superblob.off + blob.offset
                 req_blob = image.read_struct(start, Blob)
                 req_blob.magic = swap_32(req_blob.magic)
                 req_blob.length = swap_32(req_blob.length)
-                req_dat = image.read_bytearray(start + Blob.SIZE, req_blob.length - Blob.SIZE)
+                req_dat = image.read_bytearray(start + Blob.size(), req_blob.length - Blob.size())
 
         return cls(superblob, slots, entitlements=entitlements, req_dat=req_dat)
 

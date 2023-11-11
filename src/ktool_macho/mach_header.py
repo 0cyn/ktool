@@ -216,6 +216,7 @@ class SectionAttributesSys(IntEnum):
 
 CPU_ARCH_MASK = 0xff000000  # Mask for architecture bits
 CPU_ARCH_ABI64 = 0x01000000
+CPU_ARCH_ABI6432 = 0x02000000
 
 
 class CPUType(IntEnum):
@@ -228,6 +229,7 @@ class CPUType(IntEnum):
     SPARC = 14
     POWERPC = 18
     POWERPC64 = POWERPC | CPU_ARCH_ABI64
+    ARM6432 = ARM | CPU_ARCH_ABI6432
 
 
 class CPUSubTypeX86(IntEnum):
@@ -281,11 +283,17 @@ class CPUSubTypePowerPC(IntEnum):
     _970 = 100
 
 
+class CPUSubTypeARM6432(IntEnum):
+    ALL = 0
+    V8 = 1
+
+
 CPU_SUBTYPES = {
     CPUType.X86: CPUSubTypeX86,
     CPUType.X86_64: CPUSubTypeX86_64,
     CPUType.POWERPC: CPUSubTypePowerPC,
     CPUType.ARM: CPUSubTypeARM,
     CPUType.ARM64: CPUSubTypeARM64,
+    CPUType.ARM6432: CPUSubTypeARM6432,
     CPUType.SPARC: CPUSubTypeSPARC
 }

@@ -55,7 +55,7 @@ class _FieldDescriptor(Constructable):
         fd = image.read_struct(location, FieldDescriptor, vm=True)
 
         for i in range(fd.NumFields):
-            ea = location + FieldDescriptor.SIZE + (i * 0xc)
+            ea = location + FieldDescriptor.size() + (i * 0xc)
             record = image.read_struct(ea, FieldRecord, vm=True, force_reload=True)
 
             flags = record.Flags

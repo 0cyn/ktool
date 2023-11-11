@@ -3,6 +3,19 @@
 #  objc.py
 #
 #  This file contains utilities for parsing objective C classes within a MachO binary
+#  I dont like it. The structure is bad and it needs gutted and reassembled.
+#
+#  Basically, ktool was originally this horrible hacked together single python script called 'kdump' that
+#  did the bare minimum to try and dump objc metadata and spit out headers, bc we wanted a class dump that worked on
+#  non-apple platforms
+#
+#  I at some point realized "oh this could be like, insanely useful as a portable mach-o introspection lib",
+#  and having to write and use it on a Windows on Arm laptop (when NOTHING worked and all I had was a half-functional
+#  python w/ no pip) solidified that. That constraint may inform other decisions made in this library.
+#
+#  A *lot* of code in specifically this file is a holdover from that crappy original script. It was written before I
+#  had any professional development experience and it shows. Eventually I will gut and rewrite it, but if you need
+#  therapeutic code to go view after digging through this, the new swift stuff is not bad.
 #
 #  This file is part of ktool. ktool is free software that
 #  is made available under the MIT license. Consult the
@@ -53,12 +66,12 @@ class ObjCImage(Constructable):
 
         # cats = []  # meow
         if sect is not None:
-            count = sect.size // 0x8
+            count = sect.size // image.ptr_size
             for offset in range(0, count):
                 try:
                     item = QueueItem()
                     item.func = Category.from_image
-                    item.args = [objc_image, sect.vm_address + offset * 0x8]
+                    item.args = [objc_image, sect.vm_address + offset * image.ptr_size]
                     cat_prot_queue.items.append(item)
                 except Exception as ex:
                     if not ignore.OBJC_ERRORS:
@@ -72,13 +85,13 @@ class ObjCImage(Constructable):
                     sect = image.segments[seg].sections[sec]
 
         if sect is not None:
-            cnt = sect.size // 0x8
+            cnt = sect.size // image.ptr_size
             for i in range(0, cnt):
                 try:
                     # c = Class.from_image(objc_image, sect.vm_address + i * 0x8)
                     item = QueueItem()
                     item.func = Class.from_image
-                    item.args = [objc_image, sect.vm_address + i * 0x8]
+                    item.args = [objc_image, sect.vm_address + i * image.ptr_size]
                     class_queue.items.append(item)
                 except Exception as ex:
                     if not ignore.OBJC_ERRORS:
@@ -92,11 +105,11 @@ class ObjCImage(Constructable):
                     sect = image.segments[seg].sections[sec]
 
         if sect is not None:
-            cnt = sect.size // 0x8
+            cnt = sect.size // image.ptr_size
             for i in range(0, cnt):
-                ptr = sect.vm_address + i * 0x8
+                ptr = sect.vm_address + i * image.ptr_size
                 if objc_image.vm_check(ptr):
-                    loc = image.read_uint(ptr, 0x8, vm=True)
+                    loc = image.read_ptr(ptr)
                     try:
                         proto = image.read_struct(loc, objc2_prot, vm=True)
                         item = QueueItem()
@@ -168,16 +181,19 @@ class ObjCImage(Constructable):
     def vm_check(self, address):
         return self.image.vm.vm_check(address)
 
-    def get_uint_at(self, offset: int, length: int, vm=False, sectname=None):
+    def read_uint(self, offset: int, length: int, vm=False):
         return self.image.read_uint(offset, length, vm)
+    
+    def read_ptr(self, offset: int, vm=False):
+        return self.image.read_ptr(offset, vm)
 
-    def load_struct(self, addr: int, struct_type, vm=True, sectname=None, endian="little"):
+    def read_struct(self, addr: int, struct_type, vm=True, endian="little"):
         return self.image.read_struct(addr, struct_type, vm, endian)
 
-    def get_str_at(self, addr: int, count: int, vm=True, sectname=None):
+    def read_fixed_len_str(self, addr: int, count: int, vm=True):
         return self.image.read_fixed_len_str(addr, count, vm)
 
-    def get_cstr_at(self, addr: int, limit: int = 0, vm=True, sectname=None):
+    def read_cstr(self, addr: int, limit: int = 0, vm=True):
         return self.image.read_cstr(addr, limit, vm)
 
 
@@ -390,8 +406,8 @@ class Ivar(Constructable):
 
     @classmethod
     def from_image(cls, objc_image: ObjCImage, ivar: objc2_ivar):
-        name: str = objc_image.get_cstr_at(ivar.name, 0, True, "__objc_methname")
-        type_string: str = objc_image.get_cstr_at(ivar.type, 0, True, "__objc_methtype")
+        name: str = objc_image.read_cstr(ivar.name, 0, vm=True)
+        type_string: str = objc_image.read_cstr(ivar.type, 0, vm=True)
         return cls(name, type_string, objc_image.tp)
 
     @classmethod
@@ -470,18 +486,18 @@ class MethodList:
 
         uses_relative_methods = self.methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHOD_FLAG != 0
         rms_are_direct = self.methlist_head.entrysize & METHOD_LIST_FLAGS_MASK & RELATIVE_METHODS_SELECTORS_ARE_DIRECT_FLAG != 0
-        ea += objc2_meth_list.SIZE
-        vm_ea += objc2_meth_list.SIZE
+        ea += objc2_meth_list.size(self.objc_image.image.ptr_size)
+        vm_ea += objc2_meth_list.size(self.objc_image.image.ptr_size)
 
         for i in range(1, self.methlist_head.count + 1):
             if uses_relative_methods:
-                sel = self.objc_image.get_uint_at(ea, 4, vm=False)
+                sel = self.objc_image.read_uint(ea, 4, vm=False)
                 sel = usi32_to_si32(sel)
-                types = self.objc_image.get_uint_at(ea + 4, 4, vm=False)
+                types = self.objc_image.read_uint(ea + 4, 4, vm=False)
                 types = usi32_to_si32(types)
             else:
-                sel = self.objc_image.get_uint_at(ea, 8, vm=False)
-                types = self.objc_image.get_uint_at(ea + 8, 8, vm=False)
+                sel = self.objc_image.read_ptr(ea, vm=False)
+                types = self.objc_image.read_ptr(ea + self.objc_image.image.ptr_size, vm=False)
 
             try:
                 method = Method.from_image(self.objc_image, sel, types, self.meta, vm_ea, uses_relative_methods,
@@ -507,11 +523,11 @@ class MethodList:
                 self.load_errors.append(f'Failed to load a method with {str(ex)}')
 
             if uses_relative_methods:
-                ea += objc2_meth_list_entry.SIZE
-                vm_ea += objc2_meth_list_entry.SIZE
+                ea += objc2_meth_list_entry.size(self.objc_image.image.ptr_size)
+                vm_ea += objc2_meth_list_entry.size(self.objc_image.image.ptr_size)
             else:
-                ea += objc2_meth.SIZE
-                vm_ea += objc2_meth.SIZE
+                ea += objc2_meth.size(self.objc_image.image.ptr_size)
+                vm_ea += objc2_meth.size(self.objc_image.image.ptr_size)
 
         return methods
 
@@ -527,40 +543,39 @@ class Method(Constructable):
                         raise AssertionError
                     if not rms_base:
                         rms_base = vm_addr
-                    sel = objc_image.get_cstr_at(sel_addr + rms_base, 0, vm=True, sectname="__objc_methname")
+                    sel = objc_image.read_cstr(sel_addr + rms_base, 0, vm=True)
 
                 except Exception as ex:
                     try:
-                        imp = objc_image.get_uint_at(vm_addr + 8, 4, vm=True)
-                        imp = usi32_to_si32(imp) + vm_addr + 8
+                        imp = objc_image.read_ptr(vm_addr + objc_image.image.ptr_size)
+                        imp = usi32_to_si32(imp) + vm_addr + objc_image.image.ptr_size
                         if imp in objc_image.image.symbols:
                             sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
                         else:
                             raise ex
                     except Exception:
                         raise ex
-                type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True, sectname="__objc_methtype")
+                type_string = objc_image.read_cstr(types_addr + vm_addr + 4, 0, vm=True)
             else:
-                selector_pointer = objc_image.get_uint_at(sel_addr + vm_addr, 8, vm=True)
+                selector_pointer = objc_image.read_ptr(sel_addr + vm_addr, vm=True)
                 try:
                     if opts.USE_SYMTAB_INSTEAD_OF_SELECTORS:
                         raise AssertionError
-                    sel = objc_image.get_cstr_at(selector_pointer, 0, vm=True, sectname="__objc_methname")
+                    sel = objc_image.read_cstr(selector_pointer, 0, vm=True)
                 except Exception as ex:
                     try:
-                        imp = objc_image.get_uint_at(vm_addr + 8, 4, vm=True)
-                        # no idea if this is correct
-                        imp = usi32_to_si32(imp) + vm_addr + 8
+                        imp = objc_image.read_ptr(vm_addr + objc_image.image.ptr_size)
+                        imp = usi32_to_si32(imp) + vm_addr + objc_image.image.ptr_size
                         if imp in objc_image.image.symbols:
                             sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
                         else:
                             raise ex
                     except Exception:
                         raise ex
-                type_string = objc_image.get_cstr_at(types_addr + vm_addr + 4, 0, vm=True, sectname="__objc_methtype")
+                type_string = objc_image.read_cstr(types_addr + vm_addr + 4, 0, vm=True)
         else:
-            sel = objc_image.get_cstr_at(sel_addr, 0, vm=True, sectname="__objc_methname")
-            type_string = objc_image.get_cstr_at(types_addr, 0, vm=True, sectname="__objc_methtype")
+            sel = objc_image.read_cstr(sel_addr, 0, vm=True)
+            type_string = objc_image.read_cstr(types_addr, 0, vm=True)
         return cls(is_meta, sel, type_string, objc_image.tp)
 
     @classmethod
@@ -647,6 +662,7 @@ class Class(Constructable):
 
         load_errors = []
         struct_list = []
+        # FIXME REBASE OPCODES PLEASEEE
         class_ptr = class_ptr & 0xFFFFFFFFF
 
         if not meta:
@@ -655,9 +671,13 @@ class Class(Constructable):
             log.debug_more(f'Loading metaclass From {hex(class_ptr)}')
         if not class_ptr_is_direct:
             if not objc_image.vm_check(class_ptr):
-                objc2_class_location = objc_image.get_uint_at(class_ptr, 8, vm=False)
+                # k this just looks wrong, like this isn't how it works, something is WEIRD here
+                # maybe this is like me horribly misunderstanding chainedfixup rebase opcodes at the time
+                # and it works by some stroke of horrible luck??
+                # TODO RANCID HORRIBLE FIX THIS IMPLEMENT REBASE OPCODES
+                objc2_class_location = objc_image.read_ptr(class_ptr, vm=False)
             else:
-                objc2_class_location = objc_image.get_uint_at(class_ptr, 8, vm=True)
+                objc2_class_location = objc_image.read_ptr(class_ptr, vm=True)
         else:
             objc2_class_location = class_ptr
 
@@ -672,13 +692,13 @@ class Class(Constructable):
             objc_image.class_map[class_ptr] = None
             return None
 
-        objc2_class_item: objc2_class = objc_image.load_struct(objc2_class_location, objc2_class, vm=True)
+        objc2_class_item: objc2_class = objc_image.read_struct(objc2_class_location, objc2_class, vm=True)
 
         superclass = None
 
         if not meta:
-            if objc2_class_location + 8 in objc_image.image.import_table:
-                symbol = objc_image.image.import_table[objc2_class_location + 8]
+            if objc2_class_location + objc_image.image.ptr_size in objc_image.image.import_table:
+                symbol = objc_image.image.import_table[objc2_class_location + objc_image.image.ptr_size]
                 superclass_name = symbol.name[1:]
             elif objc2_class_item.superclass in objc_image.image.export_table:
                 symbol = objc_image.image.export_table[objc2_class_item.superclass]
@@ -687,7 +707,7 @@ class Class(Constructable):
                 if objc_image.vm_check(objc2_class_item.superclass):
                     # noinspection PyBroadException
                     try:
-                        superclass = Class.from_image(objc_image, objc2_class_location + 8)
+                        superclass = Class.from_image(objc_image, objc2_class_location + objc_image.image.ptr_size)
                     except Exception:
                         pass
                 if superclass is not None:
@@ -701,16 +721,17 @@ class Class(Constructable):
         else:
             superclass_name = ''
 
+        # girl what
         ro_location = objc2_class_item.info >> (1 << 1) << 2
 
         try:
-            objc2_class_ro_item = objc_image.load_struct(ro_location, objc2_class_ro, vm=True)
+            objc2_class_ro_item = objc_image.read_struct(ro_location, objc2_class_ro, vm=True)
         except ValueError:
             log.warn("Class Data is off-image")
             return None
         if not meta:
             try:
-                name = objc_image.get_cstr_at(objc2_class_ro_item.name, 0, vm=True)
+                name = objc_image.read_cstr(objc2_class_ro_item.name, 0, vm=True)
             except ValueError:
                 log.warning(f'Classname out of bounds')
                 name = ""
@@ -721,12 +742,12 @@ class Class(Constructable):
         properties = []
 
         if objc2_class_ro_item.base_props != 0:
-            proplist_head = objc_image.load_struct(objc2_class_ro_item.base_props, objc2_prop_list)
+            proplist_head = objc_image.read_struct(objc2_class_ro_item.base_props, objc2_prop_list)
             ea = objc2_class_ro_item.base_props
-            ea += objc2_prop_list.SIZE
+            ea += objc2_prop_list.size(objc_image.image.ptr_size)
 
             for i in range(1, proplist_head.count + 1):
-                prop = objc_image.load_struct(ea, objc2_prop, vm=True)
+                prop = objc_image.read_struct(ea, objc2_prop, vm=True)
 
                 try:
                     property = Property.from_image(objc_image, prop)
@@ -746,10 +767,10 @@ class Class(Constructable):
                     log.warning(f'Failed to load a property in {name} with {ex.__class__.__name__}: {str(ex)}')
                     load_errors.append(f'Failed to load a property with {ex.__class__.__name__}: {str(ex)}')
 
-                ea += objc2_prop.SIZE
+                ea += objc2_prop.size(objc_image.image.ptr_size)
 
         if objc2_class_ro_item.base_meths != 0:
-            methlist_head = objc_image.load_struct(objc2_class_ro_item.base_meths, objc2_meth_list)
+            methlist_head = objc_image.read_struct(objc2_class_ro_item.base_meths, objc2_meth_list)
 
             methlist = MethodList(objc_image, methlist_head, objc2_class_ro_item.base_meths, meta, name)
 
@@ -765,14 +786,14 @@ class Class(Constructable):
 
         prots = []
         if objc2_class_ro_item.base_prots != 0:
-            protlist: objc2_prot_list = objc_image.load_struct(objc2_class_ro_item.base_prots, objc2_prot_list)
+            protlist: objc2_prot_list = objc_image.read_struct(objc2_class_ro_item.base_prots, objc2_prot_list)
             ea = objc2_class_ro_item.base_prots
             for i in range(1, protlist.cnt + 1):
-                prot_loc = objc_image.get_uint_at(ea + i * 8, 8, vm=True)
+                prot_loc = objc_image.read_ptr(ea + i * objc_image.image.ptr_size, vm=True)
                 if prot_loc in objc_image.prot_map:
                     prots.append(objc_image.prot_map[prot_loc])
                 else:
-                    prot = objc_image.load_struct(prot_loc, objc2_prot, vm=True)
+                    prot = objc_image.read_struct(prot_loc, objc2_prot, vm=True)
                     try:
                         p = Protocol.from_image(objc_image, prot, prot_loc)
                         prots.append(p)
@@ -788,11 +809,11 @@ class Class(Constructable):
 
         ivars = []
         if objc2_class_ro_item.ivars != 0:
-            ivarlist: objc2_ivar_list = objc_image.load_struct(objc2_class_ro_item.ivars, objc2_ivar_list)
-            ea = objc2_class_ro_item.ivars + 8
+            ivarlist: objc2_ivar_list = objc_image.read_struct(objc2_class_ro_item.ivars, objc2_ivar_list)
+            ea = objc2_class_ro_item.ivars + objc2_ivar_list.size(objc_image.image.ptr_size)
             for i in range(1, ivarlist.cnt + 1):
-                ivar_loc = ea + objc2_ivar.SIZE * (i - 1)
-                ivar = objc_image.load_struct(ivar_loc, objc2_ivar, vm=True)
+                ivar_loc = ea + objc2_ivar.size(ptr_size=objc_image.image.ptr_size) * (i - 1)
+                ivar = objc_image.read_struct(ivar_loc, objc2_ivar, vm=True)
                 try:
                     ivar_object = Ivar.from_image(objc_image, ivar)
                     ivars.append(ivar_object)
@@ -862,8 +883,8 @@ class Property(Constructable):
 
     @classmethod
     def from_image(cls, objc_image: ObjCImage, property: objc2_prop):
-        name = objc_image.get_cstr_at(property.name, 0, True, "__objc_methname")
-        attr_string = objc_image.get_cstr_at(property.attr, 0, True, "__objc_methname")
+        name = objc_image.read_cstr(property.name, 0, vm=True)
+        attr_string = objc_image.read_cstr(property.attr, 0, vm=True)
         return cls(name, attr_string, objc_image.tp)
 
     @classmethod
@@ -991,16 +1012,16 @@ class Category(Constructable):
     @classmethod
     def from_image(cls, objc_image: ObjCImage, category_ptr):
         try:
-            loc = objc_image.get_uint_at(category_ptr, 8, vm=True)
-            struct: objc2_category = objc_image.load_struct(loc, objc2_category, vm=True)
-            name = objc_image.get_cstr_at(struct.name, vm=True)
+            loc = objc_image.read_ptr(category_ptr, vm=True)
+            struct: objc2_category = objc_image.read_struct(loc, objc2_category, vm=True)
+            name = objc_image.read_cstr(struct.name, vm=True)
         except ValueError as ex:
             log.error("Couldn't load basic info about a Category: " + str(ex))
             return None
 
         classname = ""
         try:
-            sym = objc_image.image.import_table[loc + 8]
+            sym = objc_image.image.import_table[loc + objc_image.image.ptr_size]
             classname = sym.name[1:]
         except KeyError:
             pass
@@ -1012,7 +1033,7 @@ class Category(Constructable):
 
         if struct.inst_meths != 0:
             try:
-                methlist_head = objc_image.load_struct(struct.inst_meths, objc2_meth_list)
+                methlist_head = objc_image.read_struct(struct.inst_meths, objc2_meth_list)
                 methlist = MethodList(objc_image, methlist_head, struct.inst_meths, False, f'{classname}+{name}')
 
                 load_errors += methlist.load_errors
@@ -1023,7 +1044,7 @@ class Category(Constructable):
 
         if struct.class_meths != 0:
             try:
-                methlist_head = objc_image.load_struct(struct.class_meths, objc2_meth_list)
+                methlist_head = objc_image.read_struct(struct.class_meths, objc2_meth_list)
                 methlist = MethodList(objc_image, methlist_head, struct.class_meths, True, f'{classname}+{name}')
 
                 load_errors += methlist.load_errors
@@ -1034,18 +1055,18 @@ class Category(Constructable):
 
         if struct.props != 0:
             try:
-                proplist_head = objc_image.load_struct(struct.props, objc2_prop_list)
+                proplist_head = objc_image.read_struct(struct.props, objc2_prop_list)
 
                 ea = struct.props
-                ea += 8
+                ea += objc_image.image.ptr_size
 
                 for i in range(1, proplist_head.count + 1):
-                    prop = objc_image.load_struct(ea, objc2_prop, vm=True)
+                    prop = objc_image.read_struct(ea, objc2_prop, vm=True)
                     try:
                         properties.append(Property.from_image(objc_image, prop))
                     except Exception as ex:
                         log.warning(f'Failed to load property with {str(ex)}')
-                    ea += objc2_prop.SIZE
+                    ea += objc2_prop.size(objc_image.image.ptr_size)
 
             except ValueError:
                 log.warn("Properties for this category are off-image.")
@@ -1090,7 +1111,7 @@ class Protocol(Constructable):
             return objc_image.prot_map[loc]
 
         try:
-            name = objc_image.get_cstr_at(protocol.name, 0, vm=True)
+            name = objc_image.read_cstr(protocol.name, 0, vm=True)
         except ValueError as ex:
             log.error("Couldn't load basic info about a Category: " + str(ex))
             return None
@@ -1123,18 +1144,18 @@ class Protocol(Constructable):
         opt_methods += methlist.methods
 
         if protocol.inst_props != 0:
-            proplist_head = objc_image.load_struct(protocol.inst_props, objc2_prop_list)
+            proplist_head = objc_image.read_struct(protocol.inst_props, objc2_prop_list)
 
             ea = protocol.inst_props
-            ea += 8
+            ea += objc_image.image.ptr_size
 
             for i in range(1, proplist_head.count + 1):
-                prop = objc_image.load_struct(ea, objc2_prop, vm=True)
+                prop = objc_image.read_struct(ea, objc2_prop, vm=True)
                 try:
                     properties.append(Property.from_image(objc_image, prop))
                 except Exception as ex:
                     log.warning(f'Failed to load property with {str(ex)}')
-                ea += objc2_prop.SIZE
+                ea += objc2_prop.size(objc_image.image.ptr_size)
 
         return cls(name, methods, opt_methods, properties, load_errors, struct_list, loc=loc)
 

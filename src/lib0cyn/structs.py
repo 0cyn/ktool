@@ -14,6 +14,9 @@
 #
 from typing import List
 
+# At a glance this looks insane for python,
+# But size calc is *very* hot code, and if we can reduce the computation of sizes to bit manipulation,
+#   it provides a sizable speedup.
 type_mask = 0xffff0000
 size_mask = 0xffff
 
@@ -32,8 +35,29 @@ int16_t = type_sint | 2
 int32_t = type_sint | 4
 int64_t = type_sint | 8
 
+# "wtf is going on here?"
+# this is a bit cursed, but makes it possible to specify an arbitrary length of characters/bytes in a field
+#   by passing, e.g. char_t[16] for the size. This is just making an array of size values with a str type
+#   and size between 1 and 64
+#   if you need more than 64 just pass `(type_str | n)` where `n` is your size, as the size.
 char_t = [type_str | i for i in range(65)]
 bytes_t = [type_bytes | i for i in range(65)]
+# can you tell I miss C
+
+
+class uintptr_t:
+    pass
+
+
+class pad_for_64_bit_only:
+    """ Sometimes, arm64/x64 variations of structures may differ from 32 bit ones only in variables to pad
+        things out for the sake of byte-aligned reads. This allows us to account for that without having to make
+        a separate 64 and 32 bit struct.
+
+        This acts as a variable length field, and will have a size of 0 if ptr_size passed to struct code isn't 8
+    """
+    def __init__(self, size=4):
+        self.size = size
 
 
 class Bitfield:
@@ -83,7 +107,6 @@ class StructUnion:
             valueIWant = unionInst.my_struct_1.someFieldInIt
 
     """
-    SIZE = 0
 
     def __init__(self, size: int, types: List[object]):
         self.size = size
@@ -98,7 +121,7 @@ class StructUnion:
                 getattr(self, t.__name__).load_from_bytes(data)
 
     def __int__(self):
-        return self.__class__.SIZE
+        return self.__class__.size()
 
 
 def _bytes_to_hex(data) -> str:
@@ -133,14 +156,69 @@ class Struct:
 
     """
 
+    @classmethod
+    def size(cls, ptr_size=None):
+        if not hasattr(cls, 'FIELDS'):
+            return cls.SIZE
+        if not hasattr(cls, '___SIZE'):
+            size = 0
+            for _, value in cls.FIELDS.items():
+                if isinstance(value, int):
+                    size += value & size_mask
+                elif isinstance(value, Bitfield):
+                    size += value.size
+                elif isinstance(value, pad_for_64_bit_only):
+                    if ptr_size is None:
+                        from lib0cyn.log import log
+                        err = "Trying to get size on variable (ptr) sized type directly without a ptr_size! This is programmer error!"
+                        print(err)
+                        log.error(err)
+                        import traceback
+                        traceback.print_stack()
+                        print(err)
+                        log.error(err)
+                        log.error("Exiting now. Go fix this.")
+                        exit(404)
+                    if ptr_size == 8:
+                        size += value.size
+                elif issubclass(value, uintptr_t):
+                    if ptr_size is None:
+                        from lib0cyn.log import log
+                        err = "Trying to get size on variable (ptr) sized type directly without a ptr_size! This is programmer error!"
+                        print(err)
+                        log.error(err)
+                        import traceback
+                        traceback.print_stack()
+                        print(err)
+                        log.error(err)
+                        log.error("Exiting now. Go fix this.")
+                        exit(404)
+                    size += ptr_size
+                    setattr(cls, '___VARIABLE_SIZE', True)
+                elif issubclass(value, StructUnion):
+                    size += value.size
+                elif issubclass(value, Struct):
+                    if value == cls:
+                        raise AssertionError(f"Recursive type definition on {cls.__name__}")
+                    if hasattr(value, 'FIELDS'):
+                        size += value.size(ptr_size=ptr_size)
+                    else:
+                        size += value.size(ptr_size=ptr_size)
+            if not hasattr(cls, '___VARIABLE_SIZE'):
+                setattr(cls, "___SIZE", size)
+            return size
+        else:
+            return getattr(cls, "___SIZE")
+
     # noinspection PyProtectedMember
     @staticmethod
-    def create_with_bytes(struct_class, raw, byte_order="little"):
+    def create_with_bytes(struct_class, raw, byte_order="little", ptr_size=8):
         """
         Unpack a struct from raw bytes
 
         :param struct_class: Struct subclass
         :param raw: Bytes
+        :param ptr_size:
         :param byte_order: Little/Big Endian Struct Unpacking
         :return: struct_class Instance
         """
@@ -150,7 +228,7 @@ class Struct:
         inst_raw = bytearray()
 
         # I *Genuinely* cannot figure out where in the program the size mismatch is happening. This should hotfix?
-        raw = raw[:struct_class.SIZE]
+        raw = raw[:struct_class.size(ptr_size=ptr_size)]
 
         for field in instance._fields:
             value = instance._field_sizes[field]
@@ -186,6 +264,20 @@ class Struct:
                     setattr(instance, f, fv)
                 field_value = None
 
+            elif isinstance(value, pad_for_64_bit_only):
+                size = value.size if ptr_size == 8 else 0
+                if size != 0:
+                    data = raw[current_off:current_off + size]
+                    field_value = int.from_bytes(data, byte_order)
+                else:
+                    data = bytearray()
+                    field_value = 0
+
+            elif issubclass(value, uintptr_t):
+                size = ptr_size
+                data = raw[current_off:current_off + size]
+                field_value = int.from_bytes(data, byte_order)
+
             elif issubclass(value, StructUnion):
                 data = raw[current_off:current_off + value.SIZE]
                 size = value.SIZE
@@ -193,7 +285,7 @@ class Struct:
                 field_value.load_from_bytes(data)
 
             elif issubclass(value, Struct):
-                size = value.SIZE
+                size = value.size(ptr_size=ptr_size)
                 data = raw[current_off:current_off + size]
                 field_value = Struct.create_with_bytes(value, data)
 
@@ -350,16 +442,21 @@ class Struct:
         return struct_dict
 
     def __init__(self, fields=None, sizes=None, byte_order="little"):
-        if sizes is None:
-            raise AssertionError(
-                "Do not use the bare Struct class; it must be implemented in an actual type; Missing Sizes")
+        if hasattr(self.__class__, 'FIELDS'):
+            # new method
+            fields = list(self.__class__.FIELDS.keys())
+            sizes = list(self.__class__.FIELDS.values())
+        else:
+            if sizes is None:
+                raise AssertionError(
+                    "Do not use the bare Struct class; it must be implemented in an actual type; Missing Sizes")
 
-        if fields is None:
-            raise AssertionError(
-                "Do not use the bare Struct class; it must be implemented in an actual type; Missing Fields")
+            if fields is None:
+                raise AssertionError(
+                    "Do not use the bare Struct class; it must be implemented in an actual type; Missing Fields")
 
-        fields = list(fields)
-        sizes = list(sizes)
+            fields = list(fields)
+            sizes = list(sizes)
 
         self.initialized = False
 

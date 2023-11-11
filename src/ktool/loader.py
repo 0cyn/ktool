@@ -355,7 +355,7 @@ class SymbolTable:
         typing = symtab_entry if self.image.macho_header.is64 else symtab_entry_32
 
         for i in range(0, self.cmd.nsyms):
-            entry = self.image.read_struct(read_address + typing.SIZE * i, typing)
+            entry = self.image.read_struct(read_address + typing.size() * i, typing)
             symbol = Symbol.from_image(self.image, self.cmd, entry)
             symbol_table.append(symbol)
 
@@ -381,7 +381,7 @@ class ChainedFixups(Constructable):
             log.error("Unknown Fixup Format")
             return cls([])
 
-        import_table_size = fixup_header.imports_count * dyld_chained_import.SIZE
+        import_table_size = fixup_header.imports_count * dyld_chained_import.size()
         if import_table_size > chained_fixup_cmd.datasize:
             log.error("Chained fixup import table is larger than chained fixup linkedit region")
             return cls([])
@@ -753,7 +753,7 @@ class BindingTable:
                     import_stack.append(
                         record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
                                special_dylib))
-                    seg_offset += 8
+                    seg_offset += self.image.ptr_size
                     o, read_address = self.image.read_uleb128(read_address)
                     seg_offset += o
 
@@ -761,7 +761,7 @@ class BindingTable:
                     import_stack.append(
                         record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
                                special_dylib))
-                    seg_offset = seg_offset + (value * 8) + 8
+                    seg_offset = seg_offset + (value * self.image.ptr_size) + self.image.ptr_size
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
                     count, read_address = self.image.read_uleb128(read_address)
@@ -771,18 +771,18 @@ class BindingTable:
                         import_stack.append(
                             record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
                                    special_dylib))
-                        seg_offset += skip + 8
+                        seg_offset += skip + self.image.ptr_size
 
                 elif binding_opcode == BINDING_OPCODE.DO_BIND:
                     if not uses_threaded_bind:
                         import_stack.append(
                             record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
                                    special_dylib))
-                        seg_offset += 8
+                        seg_offset += self.image.ptr_size
                     else:
                         threaded_stack.append(
                             record(cmd_start_addr, seg_index, seg_offset, lib_ordinal, btype, flags, name, addend,
                                    special_dylib))
-                        seg_offset += 8
+                        seg_offset += self.image.ptr_size
 
         return import_stack

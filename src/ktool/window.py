@@ -2,9 +2,7 @@
 #  ktool | ktool
 #  window.py
 #
-#  This file houses Command Line GUI rendering code. A lot of it.
-#  If you're looking to contribute to this right now, and are lost, please hit me up;
-#       this file is a slight mess, and the entire UI framework is custom.
+#  This is what happens when you work retail for like a year and try to stay sane.
 #
 #  This file is part of ktool. ktool is free software that
 #  is made available under the MIT license. Consult the
