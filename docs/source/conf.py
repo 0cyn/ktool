@@ -18,11 +18,11 @@ sys.path.insert(0, os.path.abspath('../../'))
 # -- Project information -----------------------------------------------------
 
 project = 'ktool'
-copyright = '2022, kat'
+copyright = '2023, 0cyn'
 author = 'cynder'
 
 # The full version, including alpha/beta/rc tags
-release = '1.2.0'
+release = '2.0.0'
 
 # -- General configuration ---------------------------------------------------
 
@@ -50,8 +50,8 @@ html_theme = 'furo'
 html_theme_options = {
     "sidebar_hide_name": True,
     "navigation_with_keys": True,
-    "light_logo": "logo.png",
-    "dark_logo": "logo.png",
+    "light_logo": "ktool2.png",
+    "dark_logo": "ktool2.png",
     'navigation_depth': 4,
 }
 html_css_files = [

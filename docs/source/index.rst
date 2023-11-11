@@ -6,6 +6,7 @@ ktool
    :maxdepth: 2
    :caption: ktool Library:
 
+   quickstart
    ktool
 
 

@@ -376,6 +376,24 @@ class Slice:
 
 
 class MachOImageHeader(Constructable):
+
+    class MachOLoadCommandIterator:
+        def __init__(self, hdr: 'MachOImageHeader'):
+            self.pos = -1
+            self.hdr = hdr
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            self.pos += 1
+            if self.pos >= len(self.hdr.load_commands):
+                self.pos = -1
+                raise StopIteration
+            return self.hdr.load_commands[self.pos]
+
+
+
     """
     This class represents the Mach-O Header
     It contains the basic header info along with all load commands within it.
@@ -527,6 +545,9 @@ class MachOImageHeader(Constructable):
         self.flags: List[MH_FLAGS] = []
         self.load_commands = []
         self.raw = bytearray()
+
+    def __iter__(self):
+        return MachOImageHeader.MachOLoadCommandIterator(self)
 
     def serialize(self):
         return {'filetype': self.filetype.name, 'flags': [flag.name for flag in self.flags], 'is_64_bit': self.is64,
