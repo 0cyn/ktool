@@ -9,17 +9,17 @@ Basic Concepts to understand:
     * There are a lot of subfiles and a few modules, but :python:`import ktool` will import all of the stuff you most likely need.
     * My struct system emulates C's. Or if you don't know C, it's like someone smashed together python structs and namedtuples.
 
-On the github, :sh:`src/ktool/ktool_script.py` is a fairly standard client for this library, and you can reference it to
+On the github, `src/ktool/ktool_script.py` is a fairly standard client for this library, and you can reference it to
 figure out how to do a lot of the basic stuff this library is capable of.
 
 Install The Library
 =======================
 
-:sh:`python3 -m pip install k2l`
+`python3 -m pip install k2l`
 
 To install new updates:
 
-:sh:`python3 -m pip install --upgrade k2l`
+`python3 -m pip install --upgrade k2l`
 
 
 Code Examples

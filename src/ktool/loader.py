@@ -373,6 +373,7 @@ class ChainedFixups(Constructable):
     def from_image(cls, image: Image, chained_fixup_cmd: linkedit_data_command):
 
         syms = []
+        rebases = {}
 
         fixup_header = image.read_struct(chained_fixup_cmd.dataoff, dyld_chained_fixups_header)
         log.debug_tm(f'{fixup_header.render_indented()}')
@@ -421,6 +422,7 @@ class ChainedFixups(Constructable):
             stride_size: int = 0
             ptr_format: ChainedFixupPointerGeneric = ChainedFixupPointerGeneric.Error
 
+            log.debug_tm(f"Pointer Format: {ptr_format.name}")
             if starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E.value,
                                          dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND.value,
                                          dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24.value]:
@@ -449,6 +451,7 @@ class ChainedFixups(Constructable):
                 log.error(f'{hex(fixup_header.off)} @ {fixup_header.render_indented()}')
                 log.error(f"{starts.render_indented()}")
                 return cls([])
+            log.debug_tm(f"Stride Size: {stride_size}")
 
             page_start_offsets: List[List[int]] = []
             for i in range(0, starts.page_count):
@@ -537,6 +540,33 @@ class ChainedFixups(Constructable):
                                 sym = Symbol.from_values(entry.name, target_addr, external=True, ordinal=entry.ord)
                                 syms.append(sym)
 
+                        else: #rebase
+                            entry_offset = 0
+                            if starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E,
+                                                         dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_KERNEL,
+                                                         dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND,
+                                                         dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24]:
+                                if pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_rebase.auth == 1:
+                                    entry_offset = pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_rebase.target
+                                else:
+                                    entry_offset = pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_rebase.target
+
+                                if starts.pointer_format != dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E or pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_rebase.auth:
+                                    entry_offset += image.vm.vm_base_addr
+                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64:
+                                entry_offset = pointer64.generic64.ChainedPointerGeneric64.dyld_chained_ptr_64_rebase.target
+                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET:
+                                entry_offset = pointer64.generic64.ChainedPointerGeneric64.dyld_chained_ptr_64_rebase.target + image.vm.vm_base_addr
+                            #elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_KERNEL_CACHE or \
+                            #    starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_X86_64_KERNEL_CACHE:
+                            #    entry_offset = pointer64.
+                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32 or starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_CACHE:
+                                entry_offset = pointer32.generic32.dyld_chained_ptr_32_rebase.target
+                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_CACHE:
+                                entry_offset = pointer32.generic32.dyld_chained_ptr_32_firmware_rebase.target
+
+                            rebases[pointer64.off] = entry_offset
+
                         chain_entry_address += next_entry_stride_count * stride_size
                         if (chain_entry_address > page_addr + starts.page_size):
                             log.error("Pointer left page, bailing fixup processing, binary is malformed")
@@ -544,7 +574,7 @@ class ChainedFixups(Constructable):
                         if next_entry_stride_count == 0:
                             fixups_done = True
 
-        return cls(syms)
+        return cls(syms, rebases)
 
     @classmethod
     def from_values(cls, *args, **kwargs):
@@ -553,8 +583,11 @@ class ChainedFixups(Constructable):
     def raw_bytes(self):
         pass
 
-    def __init__(self, symbols):
+    def __init__(self, symbols, rebases=None):
+        if rebases is None:
+            rebases = {}
         self.symbols = symbols
+        self.rebases = rebases
 
 
 export_node = namedtuple("export_node", ['text', 'offset', 'flags'])
