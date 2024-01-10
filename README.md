@@ -14,7 +14,7 @@ MachO/ObjC Analysis + Editing toolkit.
     <image src="https://readthedocs.org/projects/ktool/badge/?version=latest">
   </a>
   <a href="https://pypi.org/project/k2l/">
-    <image src="https://badge.fury.io/py/k2l.svg">
+    <image src="https://badge.fury.io/py/k2l.svg?asdf">
   </a>
     <br>
 </p>
