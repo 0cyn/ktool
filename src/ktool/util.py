@@ -281,9 +281,13 @@ class Table:
         :return:
         """
 
-        cgrey = '\33[38;5;242m'
-        cwhite = '\33[37m'
-        cend = '\33[39m'
+        cgrey = '\33[0m\33[38;5;242m'
+        reset = '\33[0m'
+        cwhitebold = '\33[0m\33[1m'
+        cend = '\33[0m\33[39m'
+        if opts.DISABLE_COLOR:
+            cgrey = reset
+            cend = reset
 
         if row_count == 0:
             return ""
@@ -305,14 +309,14 @@ class Table:
 
         if self.dividers:
             rows_text = rows_text[:-1]  # cut off the "\n"
-            sep_line = '┠━'
+            sep_line = '┣━'
             for size in self.most_recent_adjusted_maxes:
-                sep_line += ''.ljust(size - 2, '━') + '╀━'
+                sep_line += ''.ljust(size - 2, '━') + '╋━'
             sep_line = cgrey + sep_line[:-self.column_pad].ljust(screen_width - 1, '━')[
-                               :-self.column_pad] + '━━━┦' + cend
+                               :-self.column_pad] + '━━━┫' + cend
 
             rows_text = rows_text[:-(len(sep_line))]  # Use our calculated sep_line length to cut off the last one
-            rows_text += sep_line.replace('┠', '└').replace('╀', '┸').replace('┦', '┘')
+            rows_text += sep_line.replace('┣', '┗').replace('╋', '┻').replace('┫', '┛')
 
         if screen_width in self.header_cache:
             rows_text = self.header_cache[screen_width] + rows_text
@@ -321,7 +325,7 @@ class Table:
             for i, title in enumerate(self.titles):
                 if self.dividers:
                     try:
-                        title_row += cgrey + '│ ' + cwhite + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[
+                        title_row += cgrey + '┃ ' + cwhitebold + title.ljust(self.most_recent_adjusted_maxes[i], ' ')[
                                                              :-(self.column_pad - 1)]
                     except IndexError:
                         # I have no idea what causes this
@@ -333,15 +337,15 @@ class Table:
                         title_row = ""
             header_text = ""
             if self.dividers:
-                header_text += cgrey + sep_line.replace('┠', '┌').replace('╀', '┬').replace('┦', '┐') + cwhite + '\n'
+                header_text += cgrey + sep_line.replace('┣', '┏').replace('╋', '┳').replace('┫', '┓') + cwhitebold + '\n'
             header_text += title_row.ljust(screen_width - 1)[
-                           :-1] + cgrey + '  │\n' + cwhite if self.dividers else title_row + '\n'
+                           :-1] + cgrey + '  ┃\n' + cwhitebold if self.dividers else cwhitebold + title_row + reset + '\n'
             if self.dividers:
                 header_text += sep_line + '\n'
             self.header_cache[screen_width] = header_text
             rows_text = header_text + rows_text
 
-        rows_text = rows_text.replace('┠', cgrey + '┠').replace('┦', '┦' + cend)
+        rows_text = rows_text.replace('┣', cgrey + '┣').replace('┫', '┫' + cend)
         return rows_text
 
     # noinspection PyUnreachableCode
@@ -365,6 +369,10 @@ class Table:
 
         column_maxes = [*self.column_maxes]
 
+        # if column widths aren't large enough for the width, fill out the last col.
+        if sum(column_maxes) < width:
+            column_maxes[-1] += width - sum(column_maxes) + 1
+
         # Minimum Column Size
         col_min = min(column_maxes)
 
@@ -384,68 +392,70 @@ class Table:
 
         self.most_recent_adjusted_maxes = [*column_maxes]
 
+        def split_handling_ansi(input_string, split_length):
+            """
+            Splits the input_string into chunks of split_length, taking into account
+            ANSI escape sequences and trying to wrap whole words.
+            """
+            parts = []
+            current_part = ''
+            current_length = 0
+            current_color = '\x1b[0m'
+            i = 0
+            while i < len(input_string):
+                match = ansi_escape.match(input_string, i)
+                if match:
+                    # Include the ANSI sequence without adding to the length
+                    current_color = match.group()
+                    current_part += match.group()
+                    i += len(match.group())
+                else:
+                    space_pos = input_string.find(' ', i)
+                    newline_pos = input_string.find('\n', i)
+                    next_break = min(space_pos if space_pos != -1 else len(input_string),
+                                     newline_pos if newline_pos != -1 else len(input_string))
+                    word_end = next_break if next_break != -1 else len(input_string)
+                    word_length = strip_ansi(input_string[i:word_end]).__len__()
+
+                    if current_length + word_length + 6 <= split_length or current_length == 0:
+                        # Add the word to the current line
+                        current_part += input_string[i:word_end]
+                        current_length += word_length
+                        i = word_end
+                    else:
+                        # Finish the current line and start a new one
+                        parts.append(current_part)
+                        current_part = current_color  # Reset with the current ANSI color
+                        current_length = 0
+
+                    if input_string[i:i + 1] == ' ':
+                        # Include the space in the current part if it's not at the end
+                        current_part += ' '
+                        i += 1
+                    elif input_string[i:i + 1] == '\n':
+                        # Handle newline: finish the current part and reset
+                        parts.append(current_part)
+                        current_part = current_color  # Reset with the current ANSI color
+                        current_length = 0
+                        i += 1
+
+            if strip_ansi(current_part):
+                parts.append(current_part)
+            return parts
+
         rows = []
-
-        # bit complex, this just wraps strings within their columns, to create the illusion of 'cells'
         for row_i, row in enumerate(_rows):
-            # cols is going to be an array of columns in this row
-            # each column is going to be an array of lines
             cols = []
-
             max_line_count_in_row = 0
             for col_i, col in enumerate(row):
-                if chr(27) in col:
-                    col = col
-                    print(str(col))
                 lines = []
                 column_width = column_maxes[col_i] - self.column_pad
-                string_cursor = 0
-                while len(col) - string_cursor > column_width:
-                    first_line_of_column = str(col)[string_cursor:string_cursor + column_width].split('\n')[0]
-                    lines.append(first_line_of_column)
-                    string_cursor += len(first_line_of_column)
-                    if str(col)[string_cursor] == '\n':
-                        string_cursor += 1
-                while string_cursor <= len(col):
-                    first_line_of_column = str(col)[string_cursor:len(col)].split('\n')[0]
-                    lines.append(first_line_of_column)
-                    string_cursor += len(first_line_of_column)
-                    if string_cursor == len(col):
-                        break
-                    if str(col)[string_cursor] == '\n':
-                        string_cursor += 1
-
-                if 1 == 0:
-                    print(col.attrs)
-                    string_cursor = 0
-                    rehighlighted_lines = []
-                    for line in lines:
-                        line_colors = []
-                        re_line = ""
-                        for attr in col.attrs:
-                            if attr[0][0] <= string_cursor + len(line):
-                                if not attr[0][1] <= string_cursor:
-                                    line_colors.append(attr)
-                        for attr in line_colors:
-                            if attr[0][0] <= string_cursor:
-                                re_line += f'\33[{attr[1]}m'
-
-                        for index, c in enumerate(line):
-                            for attr in line_colors:
-                                if index + string_cursor == attr[0][1]:
-                                    re_line = f'\33[0m'
-                            for attr in line_colors:
-                                if index + string_cursor == attr[0][0]:
-                                    re_line += f'\33[{attr[1]}m'
-                            re_line += c
-                        rehighlighted_lines.append(re_line + f'\33[0m')
-                        string_cursor += len(line)
-                    lines = rehighlighted_lines
+                wrapped_lines = split_handling_ansi(col, column_width)
+                for line in wrapped_lines:
+                    # Splitting further if there are newline characters in the wrapped line
+                    lines.extend(line.split('\n'))
                 max_line_count_in_row = max(len(lines), max_line_count_in_row)
                 cols.append(lines)
-
-            # if any other columns in this row have more than one line,
-            #   add empty lines to this column to even them out
             for col in cols:
                 while len(col) < max_line_count_in_row:
                     col.append('')
@@ -454,15 +464,18 @@ class Table:
         lines = ""
         sep_line = ""
 
-        cgrey = '\33[38;5;242m'
-        cwhite = '\33[37m'
-        cend = '\33[39m'
+        cgrey = '\33[0m\33[38;5;242m'
+        reset = '\33[0m'
+        cend = '\33[0m\33[39m'
+        if opts.DISABLE_COLOR:
+            cgrey = reset
+            cend = reset
 
         if self.dividers:
-            sep_line = '┠━'
+            sep_line = '┣━'
             for size in column_maxes:
-                sep_line += ''.ljust(size - 2, '━') + '╀━'
-            sep_line = sep_line[:-self.column_pad].ljust(width, '━')[:-self.column_pad] + '━━━┦'
+                sep_line += ''.ljust(size - 2, '━') + '╋━'
+            sep_line = sep_line[:-self.column_pad].ljust(width, '━')[:-self.column_pad] + '━━━┫'
 
         if self.dividers:
             lines += sep_line + '\n'
@@ -473,12 +486,14 @@ class Table:
             for i in range(0, column_count):
                 line = ""
                 for j, col in enumerate(row):
-                    line += col[i].ljust(column_maxes[j], ' ')
+                    diff = column_maxes[j] - len(strip_ansi(col[i]))
+                    line += col[i] + (' ' * diff)
                     if self.dividers:
-                        line = line[:-self.column_pad] + ' │ '
+                        line = line[:-self.column_pad] + f' ┃ '
                 if self.dividers:
-                    line = cgrey + '│ ' + cwhite + line.ljust(width, ' ')[:-self.column_pad] + cgrey + ' │ ' + cend
-                    line = line.replace('│', cgrey + '│' + cwhite)
+                    diff = width - len(strip_ansi(line))
+                    line = cgrey + '┃ ' + reset + (line + (' ' * diff))[:-self.column_pad] + cgrey + ' ┃ ' + cend
+                    line = line.replace('┃', cgrey + '┃' + reset)
                 else:
                     line = ' ' + line[:-self.column_pad].ljust(width, ' ')[:-self.column_pad] + (' ' * self.column_pad)
                 row_lines.append(line)
