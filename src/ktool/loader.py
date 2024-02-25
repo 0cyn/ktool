@@ -640,6 +640,7 @@ class ExportTrie(Constructable):
             log.debug_tm(f'TERM: 0')
             size, cursor = image.read_uleb128(cursor)
             flags = image.read_uint(cursor, 1)
+            log.debug_tm(f'FLAGS: {hex(flags)}')
             cursor += 1
             offset, cursor = image.read_uleb128(cursor)
             results.append(export_node(string, offset, flags))

@@ -17,8 +17,6 @@
 import json
 import os
 import os.path
-import pprint
-import shutil
 import sys
 import threading
 import urllib.request
@@ -26,7 +24,6 @@ from argparse import ArgumentParser
 from collections import namedtuple
 from enum import Enum
 from typing import Union
-from kimg4.img4 import IM4P
 
 try:
     # noinspection PyProtectedMember
@@ -229,32 +226,12 @@ def main():
 
     parser_lipo.set_defaults(func=commands.lipo, out="", combine=False)
 
-    # img4 command: because why not. wrote an img4 library for iBootLoader and it can definitely be useful elsewhere.
-    parser_img4 = subparsers.add_parser('img4', help='img4/IM4P parsing utilities')
-
-    parser_img4.add_argument('filename', nargs='?', default='')
-
-    parser_img4.add_argument('--kbag', dest='get_kbag', action='store_true', help="Decode keybags in an im4p file")
-    parser_img4.add_argument('--dec', dest='do_decrypt', action='store_true', help="Decrypt an im4p file with iv/key")
-    parser_img4.add_argument('--iv', dest='aes_iv', type=str, help='IV for decryption')
-    parser_img4.add_argument('--key', dest='aes_key', type=str, help='Key for decryption')
-    parser_img4.add_argument('--out', dest='out', help="Output file destination for decryption")
-
-    parser_img4.set_defaults(func=commands.img4, get_kbag=False, do_decrypt=False, aes_iv=None, aes_key=None, out=None)
-
-    # file command: super basic info about a file (thin/fat, and if fat, what slices are contained)
-    #               replaces the relevant usage of the `file` command on macos
-    parser_file = subparsers.add_parser('file', help='Print File Type (thin/fat MachO)')
-
-    parser_file.add_argument('filename', nargs='?', default='')
-
-    parser_file.set_defaults(func=commands._file)
-
     # info command: prints the VM map (this is honestly just for me when debugging shit)
     parser_info = subparsers.add_parser('info', help='Print Info about a MachO image')
 
     parser_info.add_argument('--slice', dest='slice_index', type=int,
                              help="Specify Index of Slice (in FAT MachO) to examine")
+    parser_info.add_argument('--file', dest='get_fileinfo', action='store_true', help='Print basic file info')
     parser_info.add_argument('--vm', dest='get_vm', action='store_true', help="Print VM Mapping for MachO image")
     parser_info.add_argument('filename', nargs='?', default='')
 
@@ -441,10 +418,6 @@ MachO Analysis ---
     list - Print various lists (ObjC Classes, etc.)
     symbols - Print various tables (Symbols, imports, exports)
     info - Print misc info about the target mach-o
-
-Misc Utilities ---
-    file - Print very basic info about the MachO
-    img4 - IMG4 Utilities
 
 Run `ktool [command]` for info/examples on using that command
 
@@ -752,40 +725,6 @@ class MachOFileCommands:
                     fd.write(patched_libraries[0].slice.full_bytes_for_slice())
 
     @staticmethod
-    def img4(args):
-        """
-    ----------
-    IMG4 Utilities
-
-    Getting keybags
-    > ktool img4 --kbag <filename>
-
-    Decrypting an im4p
-    > ktool img4 --dec --iv AES_IV --key AES_KEY [--out <output-filename>] <filename>
-        """
-
-        require_args(args, one_of=['get_kbag', 'do_decrypt'])
-
-        if args.get_kbag:
-            with open(args.filename, 'rb') as fp:
-                im4p = IM4P(fp.read())
-                for bag in im4p.kbag.keybags:
-                    print(f'{bag.iv.hex()}{bag.key.hex()}')
-
-        if args.do_decrypt:
-            require_args(args, always=['aes_key', 'aes_iv'])
-
-            out = args.out
-            if not out:
-                out = args.filename + '.dec'
-            with open(args.filename, 'rb') as fp:
-                with open(out, 'wb') as out_fp:
-                    im4p = IM4P(fp.read())
-                    out_fp.write(im4p.decrypt_data(args.aes_iv, args.aes_key))
-
-            print(f'Attempted decrypt of data with key/iv and saved to {out}')
-
-    @staticmethod
     def lipo(args):
         """
     ----------
@@ -898,26 +837,6 @@ class MachOFileCommands:
                     print(f'{hex(addr)} -> {image.symbols[addr].fullname if addr in image.symbols else ""}')
 
     @staticmethod
-    def _file(args):
-        """
-    ----------
-
-    Print basic information about a file (e.g 'Thin MachO Binary')
-    > ktool file [filename]
-        """
-        with open(args.filename, 'rb') as fp:
-            macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
-
-            table = Table()
-            table.titles = ['Address', 'CPU Type', 'CPU Subtype']
-
-            for macho_slice in macho_file.slices:
-                table.rows.append(
-                    [f'{hex(macho_slice.offset)}', f'{macho_slice.type.name}', f'{macho_slice.subtype.name}'])
-
-            print(table.fetch_all(get_terminal_size().columns))
-
-    @staticmethod
     def info(args):
         """
     ----------
@@ -925,6 +844,9 @@ class MachOFileCommands:
 
     Print generic info about a MachO file
     > ktool info [--slice n] [filename]
+
+    Print info about slices
+    > ktool info --file [filename]
 
     Print VM -> Slice -> Filename address mapping for a slice
     of a MachO file
@@ -936,6 +858,19 @@ class MachOFileCommands:
 
             if args.get_vm:
                 print(image.vm)
+
+            elif args.get_fileinfo:
+                with open(args.filename, 'rb') as fp:
+                    macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
+
+                    table = Table()
+                    table.titles = ['Address', 'CPU Type', 'CPU Subtype']
+
+                    for macho_slice in macho_file.slices:
+                        table.rows.append(
+                            [f'{hex(macho_slice.offset)}', f'{macho_slice.type.name}', f'{macho_slice.subtype.name}'])
+
+                    print(table.fetch_all(get_terminal_size().columns))
 
             else:
                 message = (f'\033[32m{image.base_name} \33[37m--- \n'
@@ -988,7 +923,6 @@ class MachOFileCommands:
                     print(f'{args.get_class} not found', file=sys.stderr)
 
         if args.do_headers:
-
             if args.hard_fail:
                 ignore.OBJC_ERRORS = False
 
