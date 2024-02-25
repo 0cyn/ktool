@@ -517,7 +517,10 @@ class MachOFileCommands:
                 image = ktool.load_image(fd, args.slice_index, load_symtab=False, load_imports=False,
                                          use_mmaped_io=MMAP_ENABLED)
                 ents = image.codesign_info.entitlements
-                print(ents)
+                if ktool.util.OUT_IS_TTY:
+                    print(ktool.util.highlight_xml(ents))
+                else:
+                    print(ents)
 
     @staticmethod
     def symbols(args):
@@ -873,14 +876,14 @@ class MachOFileCommands:
                     print(table.fetch_all(get_terminal_size().columns))
 
             else:
-                message = (f'\033[32m{image.base_name} \33[37m--- \n'
-                           f'\033[34mInstall Name: \33[37m{image.install_name}\n'
-                           f'\033[34mFiletype: \33[37m{image.macho_header.filetype.name}\n'
-                           f'\033[34mFlags: \33[37m{", ".join([i.name for i in image.macho_header.flags])}\n'
-                           f'\033[34mUUID: \33[37m{image.uuid.hex().upper()}\n'
-                           f'\033[34mPlatform: \33[37m{image.platform.name}\n'
-                           f'\033[34mMinimum OS: \33[37m{image.minos.x}.{image.minos.y}.{image.minos.z}\n'
-                           f'\033[34mSDK Version: \33[37m{image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}')
+                message = (f'\x1b[38;5;109m{image.base_name} \x1b[38;5;110m--- \n'
+                           f'\x1b[38;5;109mInstall Name: \x1b[38;5;110m{image.install_name}\n'
+                           f'\x1b[38;5;109mFiletype: \x1b[38;5;110m{image.macho_header.filetype.name}\n'
+                           f'\x1b[38;5;109mFlags: \x1b[38;5;110m{", ".join([i.name for i in image.macho_header.flags])}\n'
+                           f'\x1b[38;5;109mmUUID: \x1b[38;5;110m{image.uuid.hex().upper()}\n'
+                           f'\x1b[38;5;109mPlatform: \x1b[38;5;110m{image.platform.name}\n'
+                           f'\x1b[38;5;109mMinimum OS: \x1b[38;5;110m{image.minos.x}.{image.minos.y}.{image.minos.z}\n'
+                           f'\x1b[38;5;109mSDK Version: \x1b[38;5;110m{image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}')
 
                 print(message)
 
@@ -916,7 +919,10 @@ class MachOFileCommands:
                 found = False
                 for header_name, header in objc_headers.items():
                     if args.get_class.lower() == header_name[:-2].lower():
-                        print(header.generate_highlighted_text())
+                        if ktool.util.OUT_IS_TTY:
+                            print(header.generate_highlighted_text())
+                        else:
+                            print(ktool.util.strip_ansi(header.generate_highlighted_text()))
                         found = True
                         break
                 if not found:
@@ -956,9 +962,11 @@ class MachOFileCommands:
         elif args.do_tbd:
             with open(args.filename, 'rb') as fp:
                 image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
-
-                with open(image.name + '.tbd', 'w') as out_fp:
-                    out_fp.write(ktool.generate_text_based_stub(image, compatibility=True))
+                if hasattr(args, 'filename'):
+                    if ktool.util.OUT_IS_TTY:
+                        print(ktool.generate_text_based_stub(image, compatibility=True))
+                    else:
+                        print(ktool.util.strip_ansi(ktool.generate_text_based_stub(image, compatibility=True)))
 
     @staticmethod
     def kcache(args):

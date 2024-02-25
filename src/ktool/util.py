@@ -28,6 +28,15 @@ import pkg_resources
 
 import lib0cyn.log as log
 
+from pygments import highlight
+from pygments.formatters.terminal import TerminalFormatter
+try:
+    from pygments.lexers.data import YamlLexer
+    from pygments.lexers.html import XmlLexer
+except:
+    YamlLexer = None
+    XmlLexer = None
+
 try:
     KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
 except pkg_resources.DistributionNotFound:
@@ -98,6 +107,14 @@ class Queue:
             self.returns = [f.result() for f in futures]
         else:
             self.returns = [self.process_item(item) for item in self.items]
+
+
+def highlight_xml(input):
+    if XmlLexer:
+        formatter = TerminalFormatter()
+        return highlight(input, XmlLexer(), formatter)
+    else:
+        return input
 
 
 def macho_is_malformed():
@@ -172,7 +189,9 @@ class TapiYAMLWriter:
         for arch in tapi_dict['exports']:
             text.append(TapiYAMLWriter.serialize_export_arch(arch))
         text.append('...')
-        return '\n'.join(text)
+        formatter = TerminalFormatter()
+        highlighted_text = highlight('\n'.join(text), YamlLexer(), formatter)
+        return highlighted_text
 
     @staticmethod
     def serialize_export_arch(export_dict):
