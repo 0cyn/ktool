@@ -13,6 +13,13 @@
 #  Copyright (c) 0cyn 2022.
 #
 from typing import List
+import inspect
+import enum
+import re
+ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
+
+def strip_ansi(msg):
+    return ansi_escape.sub('', msg)
 
 # At a glance this looks insane for python,
 # But size calc is *very* hot code, and if we can reduce the computation of sizes to bit manipulation,
@@ -155,6 +162,33 @@ class Struct:
         byte representation of the struct, accessible via the .raw attribute
 
     """
+
+    class StructFieldColorType(enum.IntEnum):
+        BASETYPE_ITEM = 0
+        TOKEN_ITEM = 1
+        NAME_ITEM = 2
+
+    @staticmethod
+    def t(ty: 'Struct.StructFieldColorType', st):
+        colors = {
+            Struct.StructFieldColorType.BASETYPE_ITEM: 141,
+            Struct.StructFieldColorType.TOKEN_ITEM: 189,
+            Struct.StructFieldColorType.NAME_ITEM: 60,
+        }
+        code = f'\x1b[38;5;{colors[ty]}m'
+        return f'{code}{str(st)}\x1b[0m'
+
+    @staticmethod
+    def t_base(st):
+        return Struct.t(Struct.StructFieldColorType.BASETYPE_ITEM, st)
+
+    @staticmethod
+    def t_token(st):
+        return Struct.t(Struct.StructFieldColorType.TOKEN_ITEM, st)
+
+    @staticmethod
+    def t_name(st):
+        return Struct.t(Struct.StructFieldColorType.NAME_ITEM, st)
 
     @classmethod
     def size(cls, ptr_size=None):
@@ -376,52 +410,68 @@ class Struct:
     def __repr__(self):
         return str(self)
 
-    def __str__(self):
-        text = f'{self.__class__.__name__}('
-        for field in self._fields:
-            field_item = None
-            try:
-                attr = getattr(self, field)
-            except AttributeError:
-                attr = self._field_sizes[field]
-            if isinstance(attr, str):
-                field_item = attr
-            elif isinstance(attr, bytearray) or isinstance(attr, bytes):
-                field_item = attr
-            elif isinstance(attr, int):
-                field_item = hex(attr)
-            elif isinstance(attr, Bitfield):
-                attr: Bitfield = attr
-                field_item = ''
-                for subfield in attr.fields:
-                    field_item += subfield + '=' + str(getattr(self, subfield)) + ', '
-            elif issubclass(attr.__class__, Struct):
-                field_item = str(attr)
-            text += f'{field}={field_item}, '
-        return text[:-2] + ')'
-
-    def render_indented(self, indent_size=2) -> str:
-        text = f'{self.__class__.__name__}\n'
-        for field in self._fields:
-            try:
-                attr = getattr(self, field)
-            except AttributeError:
-                attr = self._field_sizes[field]
-            field_item = None
-            if isinstance(attr, str):
-                field_item = attr
-            elif isinstance(attr, bytearray) or isinstance(attr, bytes):
-                field_item = attr
-            elif isinstance(attr, int):
-                field_item = hex(attr)
-            elif isinstance(attr, Bitfield):
+    @staticmethod
+    def _default_field_render(struct, field, indent_size=2, newline_breaks=False):
+        try:
+            attr = getattr(struct, field)
+        except AttributeError:
+            attr = struct._field_sizes[field]
+        if isinstance(attr, str):
+            field_item = struct.t_base(f'"{attr}"')
+        elif isinstance(attr, bytearray) or isinstance(attr, bytes):
+            field_item = struct.t_base(attr)
+        elif isinstance(attr, int):
+            field_item = struct.t_base(hex(attr))
+        elif isinstance(attr, Bitfield):
+            if newline_breaks:
                 attr: Bitfield = attr
                 field_item = '\n'
                 for subfield in attr.fields:
-                    field_item += " " * (indent_size + 2) + subfield + '=' + str(getattr(self, subfield)) + '\n'
-            elif issubclass(attr.__class__, Struct):
+                    field_item += " " * (indent_size + 2) + subfield + '=' + str(getattr(struct, subfield)) + '\n'
+            else:
+                attr: Bitfield = attr
+                field_item = ''
+                for subfield in attr.fields:
+                    field_item += subfield + '=' + str(getattr(struct, subfield)) + ', '
+        elif issubclass(attr.__class__, Struct):
+            if newline_breaks:
                 field_item = '\n' + " " * (indent_size + 2) + attr.render_indented(indent_size + 2)
-            text += f'{" " * indent_size}{field}={field_item}\n'
+            else:
+                field_item = attr.render_color()
+        else:
+            field_item = str(attr)
+        return field_item
+
+    def __str__(self):
+        return strip_ansi(self.render_color())
+
+    def render_color(self):
+        text = f'{Struct.t_name(self.__class__.__name__)} {Struct.t_token("{")} '
+        for field in self._fields:
+            composer = self._field_composers[field] if field in self._field_composers else self._default_field_render
+            composer_args = inspect.getfullargspec(composer).args
+            args = {}
+            if 'indent_size' in composer_args:
+                args['indent_size'] = 0
+            if 'newline_breaks' in composer_args:
+                args['newline_breaks'] = False
+            field_item = composer(self, field, **args)
+            has_end_comma = self._fields.index(field) + 1 != len(self._fields)
+            text += f'{Struct.t_token(field)}{Struct.t_token("=")}{field_item}{Struct.t_token(",") if has_end_comma else ""} '
+        return text + Struct.t_token("}")
+
+    def render_indented(self, indent_size=2) -> str:
+        text = f'{Struct.t_name(self.__class__.__name__)}\n'
+        for field in self._fields:
+            composer = self._field_composers[field] if field in self._field_composers else self._default_field_render
+            composer_args = inspect.getfullargspec(composer).args
+            args = {}
+            if 'indent_size' in composer_args:
+                args['indent_size'] = indent_size
+            if 'newline_breaks' in composer_args:
+                args['newline_breaks'] = True
+            field_item = composer(self, field, **args)
+            text += f'{" " * indent_size}{field}{Struct.t_token("=")}{field_item}\n'
         return text
 
     def serialize(self):
@@ -466,11 +516,15 @@ class Struct:
 
         self._field_sizes = {}
         self._field_offsets = {}
+        self._field_composers = {}
 
         for index, i in enumerate(fields):
             self._field_sizes[i] = sizes[index]
 
         self.off = 0
+
+    def add_field_composer(self, field, func):
+        self._field_composers[field] = func
 
     def pre_init(self):
         """stub for subclasses. gets called before patch code is enabled"""

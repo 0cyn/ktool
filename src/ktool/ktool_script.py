@@ -171,6 +171,7 @@ def main():
     parser.add_argument('--bench', dest='bench', action='store_true')
     parser.add_argument('--membench', dest='membench', action='store_true')
     parser.add_argument('-v', dest='logging_level', type=int)
+    parser.add_argument('-c', dest='no_color', action='store_true')
     parser.add_argument('-f', dest='force_load', action='store_true')
     parser.add_argument('-V', dest='get_vers', action='store_true')
     parser.add_argument('--mmap', dest='mmap', action='store_true', help='Enable mmaped IO')
@@ -347,6 +348,9 @@ def main():
     if args.get_vers:
         version_output()
         exit()
+
+    if args.no_color:
+        opts.DISABLE_COLOR = True
 
     if not hasattr(args, 'filename'):
         # this is our default function, bc it has no .filename attribute default set
@@ -865,10 +869,10 @@ class MachOFileCommands:
                 table.titles = ['Index', 'Load Command', 'Data']
                 table.size_pinned_columns = [0, 1]
                 for i, lc in enumerate(image.macho_header.load_commands):
-                    lc_dat = str(lc)
+                    lc_dat = str(lc) if opts.DISABLE_COLOR else lc.render_color()
                     if LOAD_COMMAND(lc.cmd) in [LOAD_COMMAND.LOAD_DYLIB, LOAD_COMMAND.ID_DYLIB,
                                                 LOAD_COMMAND.SUB_CLIENT]:
-                        lc_dat += '\n"' + image.read_cstr(lc.off + lc.size(), vm=False) + '"'
+                        lc_dat += ' \n"' + image.read_cstr(lc.off + lc.size(), vm=False) + '"'
                     table.rows.append([str(i), LOAD_COMMAND(lc.cmd).name.ljust(15, ' '), lc_dat])
                 print(table.fetch_all(get_terminal_size().columns - 5))
             elif args.get_classes:

@@ -12,8 +12,22 @@
 #
 #  Copyright (c) 0cyn 2021.
 #
-
+import ktool_macho
 from lib0cyn.structs import *
+
+
+def os_tuple_composer(struct: Struct, field: str):
+    value = struct.__getattribute__(field)
+    x = (value >> 16) & 0xFFFF
+    y = (value >> 8) & 0xFF
+    z = value & 0xff
+    dot = Struct.t_token('.')
+    return f'{Struct.t_base(x)}{dot}{Struct.t_base(y)}{dot}{Struct.t_base(z)}'
+
+
+def cmd_composer(struct: Struct, field: str):
+    value = struct.__getattribute__(field)
+    return f'{Struct.t_base(ktool_macho.LOAD_COMMAND(value).name)} {Struct.t_token("(")}{Struct.t_base(hex(value))}{Struct.t_token(")")}'
 
 
 class fat_header(Struct):
@@ -115,6 +129,7 @@ class unk_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
 
 
@@ -136,6 +151,7 @@ class segment_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.segname = 0
         self.vmaddr = 0
@@ -166,6 +182,7 @@ class segment_command_64(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.segname = 0
         self.vmaddr = 0
@@ -253,6 +270,7 @@ class symtab_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.symoff = 0
         self.nsyms = 0
@@ -287,6 +305,7 @@ class dysymtab_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.ilocalsym = 0
         self.nlocalsym = 0
@@ -322,6 +341,8 @@ class dylib(Struct):
         self.timestamp = 0
         self.current_version = 0
         self.compatibility_version = 0
+        self.add_field_composer('current_version', os_tuple_composer)
+        self.add_field_composer('compatibility_version', os_tuple_composer)
 
 
 class dylib_command(Struct):
@@ -334,6 +355,7 @@ class dylib_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.dylib = 0
 
@@ -348,6 +370,7 @@ class dylinker_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.name = 0
 
@@ -362,6 +385,7 @@ class sub_client_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.offset = 0
 
@@ -376,8 +400,20 @@ class uuid_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.uuid = 0
+        self.add_field_composer('uuid', uuid_command.uuid_field_composer)
+
+    @staticmethod
+    def uuid_field_composer(struct, field):
+        assert field == "uuid"
+        byte_array = struct.uuid
+        return Struct.t_base(f'"{byte_array[0]:02x}{byte_array[1]:02x}{byte_array[2]:02x}{byte_array[3]:02x}-' \
+           f'{byte_array[4]:02x}{byte_array[5]:02x}-' \
+           f'{byte_array[6]:02x}{byte_array[7]:02x}-' \
+           f'{byte_array[8]:02x}{byte_array[9]:02x}-' \
+           f'{byte_array[10]:02x}{byte_array[11]:02x}{byte_array[12]:02x}{byte_array[13]:02x}{byte_array[14]:02x}{byte_array[15]:02x}"')
 
 
 class build_version_command(Struct):
@@ -393,11 +429,14 @@ class build_version_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.platform = 0
         self.minos = 0
         self.sdk = 0
         self.ntools = 0
+        self.add_field_composer('minos', os_tuple_composer)
+        self.add_field_composer('sdk', os_tuple_composer)
 
 
 class entry_point_command(Struct):
@@ -411,6 +450,7 @@ class entry_point_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.entryoff = 0
         self.stacksize = 0
@@ -426,6 +466,7 @@ class rpath_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.path = 0
 
@@ -440,8 +481,10 @@ class source_version_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.version = 0
+        self.add_field_composer('version', os_tuple_composer)
 
 
 class linkedit_data_command(Struct):
@@ -455,6 +498,7 @@ class linkedit_data_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.dataoff = 0
         self.datasize = 0
@@ -479,6 +523,7 @@ class dyld_info_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdisze = 0
         self.rebase_off = 0
         self.rebase_size = 0
@@ -539,9 +584,11 @@ class version_min_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.version = 0
         self.reserved = 0
+        self.add_field_composer('version', os_tuple_composer)
 
 
 class encryption_info_command(Struct):
@@ -556,6 +603,7 @@ class encryption_info_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.cryptoff = 0
         self.cryptsize = 0
@@ -575,6 +623,7 @@ class encryption_info_command_64(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.cryptoff = 0
         self.cryptsize = 0
@@ -593,6 +642,7 @@ class thread_command(Struct):
     def __init__(self, byte_order="little"):
         super().__init__(byte_order=byte_order)
         self.cmd = 0
+        self.add_field_composer('cmd', cmd_composer)
         self.cmdsize = 0
         self.flavor = 0
         self.count = 0

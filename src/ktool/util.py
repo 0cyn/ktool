@@ -63,6 +63,7 @@ class ignore:
 
 
 class opts:
+    DISABLE_COLOR = False
     USE_SYMTAB_INSTEAD_OF_SELECTORS = False
     OBJC_LOAD_ERRORS_SEND_TO_DEBUG = False
 
