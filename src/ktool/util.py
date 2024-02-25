@@ -19,6 +19,7 @@ import time
 from enum import Enum
 from typing import List, Union
 import re
+import shutil
 
 from ktool_macho import Struct, FAT_CIGAM, FAT_MAGIC, MH_CIGAM, MH_CIGAM_64, MH_MAGIC, MH_MAGIC_64
 from ktool.exceptions import *
@@ -36,6 +37,17 @@ THREAD_COUNT = os.cpu_count() - 1
 OUT_IS_TTY = sys.stdout.isatty()
 
 MY_DIR = __file__
+
+
+def get_terminal_size():
+    # We use this instead of shutil.get_terminal_size, because when output is being piped, it returns column width 80
+    # We want to make sure if output is being piped (for example, to grep), that no wrapping occurs, so greps will
+    # always display all relevant info on a single line. This also helps if it's being piped into a file,
+    # for processing purposes among everything else.
+    try:
+        return os.get_terminal_size()
+    except OSError:
+        return shutil.get_terminal_size()
 
 
 def version_output():

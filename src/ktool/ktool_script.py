@@ -46,7 +46,7 @@ from ktool.swift import *
 
 from ktool.exceptions import *
 from ktool.generator import FatMachOGenerator
-from ktool.util import opts, version_output, ktool_print
+from ktool.util import opts, version_output, ktool_print, get_terminal_size
 from ktool.window import KToolScreen, external_hard_fault_teardown
 
 from ktool.kcache import KernelCache, Kext, EmbeddedKext
@@ -59,17 +59,6 @@ MMAP_ENABLED = False
 
 # noinspection PyShadowingBuiltins
 print = ktool_print
-
-
-def get_terminal_size():
-    # We use this instead of shutil.get_terminal_size, because when output is being piped, it returns column width 80
-    # We want to make sure if output is being piped (for example, to grep), that no wrapping occurs, so greps will
-    # always display all relevant info on a single line. This also helps if it's being piped into a file,
-    # for processing purposes among everything else.
-    try:
-        return os.get_terminal_size()
-    except OSError:
-        return shutil.get_terminal_size()
 
 
 def handle_version(version: str):

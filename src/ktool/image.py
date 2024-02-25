@@ -6,7 +6,7 @@ from ktool_macho import LOAD_COMMAND, dylib_command, dyld_info_command, Struct, 
 from ktool_macho.base import Constructable
 from ktool.codesign import CodesignInfo
 from ktool.exceptions import VMAddressingError, MachOAlignmentError
-from ktool.util import bytes_to_hex, uint_to_int
+from ktool.util import bytes_to_hex, uint_to_int, Table, get_terminal_size
 from lib0cyn.log import log
 from ktool.macho import Slice, SlicedBackingFile, MachOImageHeader, Segment, PlatformType, ToolType
 
@@ -25,6 +25,7 @@ class VM:
         self.page_size_bits = (self.page_size - 1).bit_length()
         self.page_table = {}
         self.tlb = {}
+        self.segs = {}
         self.vm_base_addr = None
         self.dirty = False
 
@@ -32,6 +33,15 @@ class VM:
 
         self.detag_kern_64 = False
         self.detag_64 = False
+
+    def __str__(self):
+        table = Table(dividers=True, avoid_wrapping_titles=True)
+        table.titles = ['VM Start', 'VM End', 'File Start', 'File End', 'Size']
+        table.size_pinned_columns = [0, 1]
+        for vm_addr in self.segs.keys():
+            table.rows.append([hex(vm_addr), hex(vm_addr + self.segs[vm_addr][1]), hex(self.segs[vm_addr][0]),
+                               hex(self.segs[vm_addr][0] + self.segs[vm_addr][1]), hex(self.segs[vm_addr][1])])
+        return table.fetch_all(get_terminal_size().columns - 5)
 
     def vm_check(self, address):
         try:
@@ -98,6 +108,7 @@ class VM:
                     i * self.page_size)
 
         seg = _fakeseg(vm_address=virtual_addr, file_address=physical_addr, size=size)
+        self.segs[virtual_addr] = [physical_addr, size]
         self.fallback.add_segment(seg)
 
 
@@ -115,11 +126,21 @@ class MisalignedVM:
 
         self.fallback = None
 
+        self.segs = {}
         self.map = {}
         self.stats = {}
         self.vm_base_addr = 0
         self.sorted_map = {}
         self.cache = {}
+
+    def __str__(self):
+        table = Table(dividers=True, avoid_wrapping_titles=True)
+        table.titles = ['VM Start', 'VM End', 'File Start', 'File End', 'Size']
+        table.size_pinned_columns = [0, 1]
+        for vm_addr in self.segs.keys():
+            table.rows.append([hex(vm_addr), hex(vm_addr + self.segs[vm_addr][1]), hex(self.segs[vm_addr][0]),
+                               hex(self.segs[vm_addr][0] + self.segs[vm_addr][1]), hex(self.segs[vm_addr][1])])
+        return table.fetch_all(get_terminal_size().columns - 5)
 
     def vm_check(self, vm_address):
         try:
@@ -172,6 +193,7 @@ class MisalignedVM:
         seg_obj = vm_obj(segment.vm_address, segment.vm_address + segment.size, segment.size, segment.file_address)
         log.info(str(seg_obj))
         self.map[segment.vm_address] = seg_obj
+        self.segs[segment.vm_address] = [segment.file_address, segment.size]
 
 
 class LinkedImage:
