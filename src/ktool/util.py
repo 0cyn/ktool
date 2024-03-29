@@ -31,11 +31,12 @@ import lib0cyn.log as log
 from pygments import highlight
 from pygments.formatters.terminal import TerminalFormatter
 try:
-    from pygments.lexers.data import YamlLexer
+    from pygments.lexers.data import YamlLexer, JsonLexer
     from pygments.lexers.html import XmlLexer
 except:
     YamlLexer = None
     XmlLexer = None
+    JsonLexer = None
 
 try:
     KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
@@ -113,6 +114,14 @@ def highlight_xml(input):
     if XmlLexer:
         formatter = TerminalFormatter()
         return highlight(input, XmlLexer(), formatter)
+    else:
+        return input
+
+
+def highlight_json(input):
+    if JsonLexer:
+        formatter = TerminalFormatter()
+        return highlight(input, JsonLexer(), formatter)
     else:
         return input
 

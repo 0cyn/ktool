@@ -542,7 +542,7 @@ class ChainedFixups(Constructable):
 
                         else: #rebase
                             entry_offset = 0
-                            if starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E,
+                            if dyld_chained_ptr_format(starts.pointer_format) in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E,
                                                          dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_KERNEL,
                                                          dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND,
                                                          dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24]:
@@ -551,21 +551,23 @@ class ChainedFixups(Constructable):
                                 else:
                                     entry_offset = pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_rebase.target
 
-                                if starts.pointer_format != dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E or pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_rebase.auth:
+                                if dyld_chained_ptr_format(starts.pointer_format) != dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E or pointer64.generic64.ChainedPointerArm64E.dyld_chained_ptr_arm64e_auth_rebase.auth:
                                     entry_offset += image.vm.vm_base_addr
-                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64:
+                            elif dyld_chained_ptr_format(starts.pointer_format) == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64:
                                 entry_offset = pointer64.generic64.ChainedPointerGeneric64.dyld_chained_ptr_64_rebase.target
-                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET:
+                            elif dyld_chained_ptr_format(starts.pointer_format) == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET:
                                 entry_offset = pointer64.generic64.ChainedPointerGeneric64.dyld_chained_ptr_64_rebase.target + image.vm.vm_base_addr
                             #elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_KERNEL_CACHE or \
                             #    starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_X86_64_KERNEL_CACHE:
                             #    entry_offset = pointer64.
-                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32 or starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_CACHE:
+                            elif dyld_chained_ptr_format(starts.pointer_format) == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32 or dyld_chained_ptr_format(starts.pointer_format) == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_CACHE:
                                 entry_offset = pointer32.generic32.dyld_chained_ptr_32_rebase.target
-                            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_CACHE:
+                            elif dyld_chained_ptr_format(starts.pointer_format) == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_CACHE:
                                 entry_offset = pointer32.generic32.dyld_chained_ptr_32_firmware_rebase.target
+                            else:
+                                print(f"Unknown rebase pointer format {starts.pointer_format}")
 
-                            rebases[pointer64.off] = entry_offset
+                            rebases[pointer64.off + image.vm.vm_base_addr] = entry_offset
 
                         chain_entry_address += next_entry_stride_count * stride_size
                         if (chain_entry_address > page_addr + starts.page_size):

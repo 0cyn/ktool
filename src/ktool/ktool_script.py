@@ -498,8 +498,10 @@ class MachOFileCommands:
             if args.with_objc:
                 objc_image = ktool.load_objc_metadata(image)
                 out_dict['objc'] = objc_image.serialize()
-
-            print(json.dumps(out_dict, indent=4, sort_keys=True))
+            if ktool.util.OUT_IS_TTY:
+                print(ktool.util.highlight_json(json.dumps(out_dict, indent=4, sort_keys=True)))
+            else:
+                print(json.dumps(out_dict, indent=4, sort_keys=True))
 
     @staticmethod
     def ent(args):
@@ -697,9 +699,7 @@ class MachOFileCommands:
         patched_libraries = []
 
         if args.iname:
-
             new_iname = args.iname
-
             with open(args.filename, 'rb') as fp:
                 macho_file = ktool.load_macho_file(fp, use_mmaped_io=MMAP_ENABLED)
                 for macho_slice in macho_file.slices:
@@ -955,10 +955,8 @@ class MachOFileCommands:
                         os.makedirs(args.outdir, exist_ok=True)
                         with open(args.outdir + '/' + header_name, 'w') as out:
                             out.write(str(header))
-
                     if args.bench:
                         pass  # pprint(image.bench_stats)
-
         elif args.do_tbd:
             with open(args.filename, 'rb') as fp:
                 image = ktool.load_image(fp, args.slice_index, use_mmaped_io=MMAP_ENABLED)
