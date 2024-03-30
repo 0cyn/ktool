@@ -184,7 +184,8 @@ class MisalignedVM:
             file_end = o.fileaddr + o.size
             if file_start <= file_address <= file_end:
                 return o.vmaddr + (file_address - file_start)
-        raise VMAddressingError("Could not de_translate address")
+        log.debug(f'\n\n{str(self)}\n\n')
+        raise VMAddressingError(f"Could not de_translate address {file_address}")
 
     def add_segment(self, segment: Union[Segment, _fakeseg]):
         if segment.file_address == 0 and segment.size != 0:

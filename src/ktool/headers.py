@@ -30,6 +30,31 @@ except ImportError:
 class HeaderUtils:
 
     @staticmethod
+    def header_head_html(image: Image) -> str:
+        """
+        This is the prefix comments at the very top of the headers generated
+
+        :param image: MachO Image
+        :return: Newline delimited string to be placed at the top of the header.
+        """
+        try:
+            prefix = """
+<div class="highlight"><pre><span></span><span class="c1">// Headers generated with ktool v{}</span>
+<span class="c1">// <a href="https://github.com/0cyn/ktool">https://github.com/0cyn/ktool</a> | pip3 install k2l</span>
+<span class="c1">// Platform: {} | Minimum OS: {} | SDK: {}</span>""".format(KTOOL_VERSION, image.platform.name,
+                                                                            f'{image.minos.x}.{image.minos.y}.{image.minos.z}',
+                                                                             f'{image.sdk_version.x}.{image.sdk_version.y}.{image.sdk_version.z}')
+        except AttributeError:
+            prefix = """
+<div class="highlight"><pre><span></span><span class="c1">// Headers generated with ktool v{}</span>
+<span class="c1">// https://github.com/0cyn/ktool | pip3 install k2l</span>
+<span class="c1">// Issue loading image metadata""".format(KTOOL_VERSION)
+        return prefix
+
+
+
+
+    @staticmethod
     def header_head(image: Image) -> str:
         """
         This is the prefix comments at the very top of the headers generated
@@ -192,6 +217,49 @@ class Header:
         self.highlighted_text = highlight(self.text, ObjectiveCLexer(), formatter)
 
         return self.highlighted_text
+
+    def generate_html(self, generate_address_links=False):
+        text = [HeaderUtils.header_head_html(self.objc_image.image)]
+        for i in self.objc_class.load_errors:
+            text.append(f'<span class="c1">// err: {i}</span>')
+        if len(self.objc_class.load_errors) > 0:
+            text.append('')
+        if len(self.forward_declaration_classes) > 0:
+            text.append(f'<span class="k">@class</span> ' + ', '.join(self.forward_declaration_classes) + ';')
+        if len(self.forward_declaration_protocols) > 0:
+            text.append(f'<span class="k">@protocol</span> ' + ', '.join(self.forward_declaration_protocols) + ';')
+        text.append('')
+        imported_classes = {}
+        for objc_class, install_name in self.imported_classes.items():
+            if '/Frameworks/' in install_name:
+                nam = install_name.split("/")[-1]
+                if nam not in imported_classes:
+                    imported_classes[nam] = nam
+            else:
+                if self.forward_declare_private_imports:
+                    text.append(f'<span class="k">@class</span> {objc_class};')
+                else:
+                    imported_classes[objc_class] = install_name
+        for objc_class, install_name in imported_classes.items():
+            text.append(f'<span class="k">#import</span> &lt;{install_name.split("/")[-1]}/{objc_class}.h&gt;')
+        text.append('')
+        if self.forward_declare_private_imports:
+            for objc_class in self.locally_imported_classes:
+                text.append(f'<span class="k">@class</span> {objc_class};')
+            for objc_protocol in self.locally_imported_protocols:
+                text.append(f'<span class="k">@protocol</span> {objc_protocol};')
+        else:
+            for objc_class in self.locally_imported_classes:
+                objc_class_text = f'&quot;{objc_class}.h&quot;'
+                text.append(f'<span class="cp">#import {objc_class_text}</span>')
+            for objc_protocol in self.locally_imported_protocols:
+                objc_proto_text = f'&quot;{objc_protocol}-Protocol.h&quot;'
+                text.append(f'<span class="cp">#import {objc_proto_text}</span>')
+
+        text.append('')
+        text.append(self.interface.generate_html(generate_address_links))
+        text.append('')
+        return '\n'.join(text)
 
     def _generate_text(self) -> str:
         """
@@ -413,6 +481,118 @@ class Interface:
         self._process_properties()
         self._process_methods()
         self._process_ivars()
+
+    def generate_html(self, generate_address_links=False):
+        if generate_address_links:
+            head = f'<span class="k">@interface</span> <span class="k"><a href="addr/{self.objc_class.loc}">{self.objc_class.name}</a></span>'
+        else:
+            head = f'<span class="k">@interface</span> <span class="k">{self.objc_class.name}</span>'
+        superclass = "NSObject"
+        if self.objc_class.superclass != "":
+            superclass = self.objc_class.superclass.split('_')[-1]
+        head += f' : <span class="bp">{superclass}</span>'
+        if len(self.objc_class.protocols) > 0:
+            head += '<span class="o">&lt;</span>'
+            for protocol in self.objc_class.protocols:
+                head += f'<span class="n">{protocol}</span><span class="p">,</span> '
+            head = head[:-len('<span class="p">,</span> ')]
+            head += '<span class="o">&gt;</span>'
+
+        ivars = ""
+        if len(self.ivars) > 0:
+            ivars = "<span class='o'>{</span>\n"
+            for ivar in self.ivars:
+                ptr_count = ivar.type.count('*')
+                type_text = ivar.type.replace("*", "")
+                if generate_address_links:
+                    type_text = f'<a href="type/{type_text}">{type_text}</a>'
+                ivars += f'\t<span class="bp">{type_text}</span>'
+                for i in range(ptr_count):
+                    ivars += '<span class="o">*</span>'
+                ivar_name = ivar.name
+                if generate_address_links:
+                    ivar_name = f'<a href="ivar/{self.objc_class.name}/{ivar_name}">{ivar_name}</a>'
+                ivars += f' <span class="n">{ivar_name}</span><span class="p">;</span>\n'
+            ivars += '<span class="o">}</span>'
+
+        props = ""
+        for prop in self.properties:
+            props += f'<span class="k">@property</span> '
+
+            if len(prop.attributes):
+                props += '<span class="p">(</span>'
+                for attr in prop.attributes:
+                    props += f'<span class="p">{attr}</span>, '
+                props = props[:-2]
+                props += '<span class="k">)</span> '
+
+            prop_type = prop.type
+            if generate_address_links:
+                prop_type = f'<a href="type/{prop_type}">{prop_type}</a>'
+            props += f'<span class="bp">{prop_type}</span> '
+            for i in range(prop.type.count('*')):
+                props += '<span class="o">*</span>'
+            if prop.is_id:
+                props += '<span class="o">*</span>'
+            props += f'<span class="n">{prop.name}</span><span class="p">;</span>'
+
+            if generate_address_links or prop.ivarname != "":
+                props += '<span class="c1"> // '
+
+            if generate_address_links:
+                getter = prop.attr.getter
+                if getter == "" or getter is None:
+                    getter = prop.name
+                setter = prop.attr.setter
+                if setter == "" or setter is None:
+                    setter = f'set{prop.name[0].upper()}{prop.name[1:]}:'
+                getter = f'<a href="meth/{self.objc_class.name}/{getter}">Getter</a>'
+                setter = f'<a href="meth/{self.objc_class.name}/{setter}">Setter</a>'
+                props += f'{getter} | '
+                if 'readonly' not in prop.attributes:
+                    props += f'{setter} | '
+            if prop.ivarname != "":
+                ivarname = prop.ivarname
+                if generate_address_links:
+                    ivarname = f'<a href="ivar/{self.objc_class.name}/{ivarname}">{ivarname}</a>'
+                props += f' ivar: {ivarname}'
+            else:
+                props = props[:-3]
+            if generate_address_links or prop.ivarname != "":
+                props += '</span>'
+            props += '\n'
+
+        meths = ""
+        for meth in self.methods:
+            if meth.sel.strip() != "":
+                meths += f'<span class="p">{"+" if meth.meta else "-"}</span> '
+                meths += f'<span class="p">(</span>'
+                meths += f'<span class="p">{meth.return_string}</span>'
+                meths += f'<span class="p">)</span> '
+                if generate_address_links:
+                    meths += f'<a href="addr/{meth.imp}">'
+                if len(meth.arguments) == 0:
+                    meths += f'<span class="nf">{meth.sel}</span> '
+                else:
+                    segments = []
+                    for i, item in enumerate(meth.sel.split(':')):
+                        if item == "":
+                            continue
+                        try:
+                            segments.append(f'<span class="nf">{item}:</span>' + '<span class="p">(</span>'
+                                            + f'<span class="nv">{meth.arguments[i + 2]}</span>' + '<span class="p">)</span>'
+                                            + 'arg' + str(i) + ' ')
+                        except IndexError:
+                            segments.append(item)
+
+                    sig = ''.join(segments)
+                    meths += sig
+                meths += f'<span class="p">;</span>\n'
+                if generate_address_links:
+                    meths += '</a>'
+
+        foot = "<span class='k'>@end</span>"
+        return '\n'.join([head, ivars, props, meths, foot])
 
     def __str__(self):
         head = "@interface " + self.objc_class.name + ' : '

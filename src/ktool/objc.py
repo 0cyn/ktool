@@ -408,18 +408,19 @@ class Ivar(Constructable):
     def from_image(cls, objc_image: ObjCImage, ivar: objc2_ivar):
         name: str = objc_image.read_cstr(ivar.name, 0, vm=True)
         type_string: str = objc_image.read_cstr(ivar.type, 0, vm=True)
-        return cls(name, type_string, objc_image.tp)
+        offset = ivar.offs
+        return cls(name, type_string, objc_image.tp, offset=offset)
 
     @classmethod
-    def from_values(cls, name, type_encoding, type_processor=None):
+    def from_values(cls, name, type_encoding, type_processor=None, offset=0):
         if not type_processor:
             type_processor = TypeProcessor()
-        return cls(name, type_encoding, type_processor)
+        return cls(name, type_encoding, type_processor, offset=offset)
 
     def raw_bytes(self):
         pass
 
-    def __init__(self, name, type_encoding, type_processor):
+    def __init__(self, name, type_encoding, type_processor, offset=0):
         self.name: str = name
         type_string: str = type_encoding
         self.typestr = type_string
@@ -434,6 +435,7 @@ class Ivar(Constructable):
             self.type: str = '?'
         except TypeError:
             self.type: str = '?'
+        self.offset = offset
 
     def serialize(self):
         return {'name': self.name, 'type': self.type, 'type_is_id': self.type, 'typestring': self.typestr,
@@ -495,12 +497,14 @@ class MethodList:
                 sel = usi32_to_si32(sel)
                 types = self.objc_image.read_uint(ea + 4, 4, vm=False)
                 types = usi32_to_si32(types)
+                imp = self.objc_image.read_uint(ea + 8, 4, vm=False)
             else:
                 sel = self.objc_image.read_ptr(ea, vm=False)
                 types = self.objc_image.read_ptr(ea + self.objc_image.image.ptr_size, vm=False)
+                imp = self.objc_image.read_ptr(ea + self.objc_image.image.ptr_size * 2, vm=False)
 
             try:
-                method = Method.from_image(self.objc_image, sel, types, self.meta, vm_ea, uses_relative_methods,
+                method = Method.from_image(self.objc_image, sel, types, imp, self.meta, vm_ea, uses_relative_methods,
                                            rms_are_direct, MethodList.CUSTOM_RMS_BASE)
                 methods.append(method)
                 if method.types:
@@ -534,7 +538,7 @@ class MethodList:
 
 class Method(Constructable):
     @classmethod
-    def from_image(cls, objc_image: ObjCImage, sel_addr, types_addr, is_meta, vm_addr, rms, rms_are_direct,
+    def from_image(cls, objc_image: ObjCImage, sel_addr, types_addr, imp, is_meta, vm_addr, rms, rms_are_direct,
                    rms_base=None):
         if rms:
             if rms_are_direct:
@@ -547,8 +551,6 @@ class Method(Constructable):
 
                 except Exception as ex:
                     try:
-                        imp = objc_image.read_ptr(vm_addr + objc_image.image.ptr_size)
-                        imp = usi32_to_si32(imp) + vm_addr + objc_image.image.ptr_size
                         if imp in objc_image.image.symbols:
                             sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
                         else:
@@ -564,8 +566,6 @@ class Method(Constructable):
                     sel = objc_image.read_cstr(selector_pointer, 0, vm=True)
                 except Exception as ex:
                     try:
-                        imp = objc_image.read_ptr(vm_addr + objc_image.image.ptr_size)
-                        imp = usi32_to_si32(imp) + vm_addr + objc_image.image.ptr_size
                         if imp in objc_image.image.symbols:
                             sel = objc_image.image.symbols[imp].fullname.split(" ")[-1][:-1]
                         else:
@@ -576,22 +576,23 @@ class Method(Constructable):
         else:
             sel = objc_image.read_cstr(sel_addr, 0, vm=True)
             type_string = objc_image.read_cstr(types_addr, 0, vm=True)
-        return cls(is_meta, sel, type_string, objc_image.tp)
+        return cls(is_meta, sel, type_string, objc_image.tp, imp)
 
     @classmethod
-    def from_values(cls, sel, type_string, is_meta=False, type_processor=None):
+    def from_values(cls, sel, type_string, is_meta=False, type_processor=None, imp=None):
         if not type_processor:
             type_processor = TypeProcessor()
-        return cls(is_meta, sel, type_string, type_processor)
+        return cls(is_meta, sel, type_string, type_processor, imp)
 
     def raw_bytes(self):
         pass
 
-    def __init__(self, meta, sel, type_string, type_processor):
+    def __init__(self, meta, sel, type_string, type_processor, imp):
         self.meta = meta
         self.sel = sel
         self.type_string = type_string
         self.types = type_processor.process(type_string)
+        self.imp = imp
 
         try:
             self.return_string = self._renderable_type(self.types[0])
