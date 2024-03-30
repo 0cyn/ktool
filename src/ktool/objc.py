@@ -498,6 +498,7 @@ class MethodList:
                 types = self.objc_image.read_uint(ea + 4, 4, vm=False)
                 types = usi32_to_si32(types)
                 imp = self.objc_image.read_uint(ea + 8, 4, vm=False)
+                imp = usi32_to_si32(imp)
             else:
                 sel = self.objc_image.read_ptr(ea, vm=False)
                 types = self.objc_image.read_ptr(ea + self.objc_image.image.ptr_size, vm=False)
@@ -541,12 +542,13 @@ class Method(Constructable):
     def from_image(cls, objc_image: ObjCImage, sel_addr, types_addr, imp, is_meta, vm_addr, rms, rms_are_direct,
                    rms_base=None):
         if rms:
+            if not rms_base:
+                rms_base = vm_addr
+            imp = imp + 8 + rms_base
             if rms_are_direct:
                 try:
                     if opts.USE_SYMTAB_INSTEAD_OF_SELECTORS:
                         raise AssertionError
-                    if not rms_base:
-                        rms_base = vm_addr
                     sel = objc_image.read_cstr(sel_addr + rms_base, 0, vm=True)
 
                 except Exception as ex:
