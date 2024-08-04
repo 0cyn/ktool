@@ -578,11 +578,11 @@ class MachOFileCommands:
 
                 for addr, sym in image.import_table.items():
                     try:
-                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname,
+                        import_symbols[hex(addr)] = symbol(hex(addr), sym.fullname,
                                                               image.linked_images[int(sym.ordinal) - 1].install_name,
                                                               sym.attr)
                     except IndexError:
-                        import_symbols[sym.fullname] = symbol(hex(addr), sym.fullname,
+                        import_symbols[hex(addr)] = symbol(hex(addr), sym.fullname,
                                                               "ordinal: " + str(int(sym.ordinal)), sym.attr)
 
                 table = Table()

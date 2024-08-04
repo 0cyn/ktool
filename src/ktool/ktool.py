@@ -144,7 +144,7 @@ def load_objc_metadata(image: Image) -> ObjCImage:
         data_io.write(image.slice.file.read_bytes(0, image.slice.file.size))
         data_io.seek(0)
         for rebase in image.chained_fixups.rebases.items():
-            data_io.seek(image.vm.translate(rebase[0]) + image.slice.offset)
+            data_io.seek(image.vm.translate(rebase[0]))
             data_io.write(rebase[1].to_bytes(8, 'little'))
         data_io.seek(0)
         image = load_image(data_io)

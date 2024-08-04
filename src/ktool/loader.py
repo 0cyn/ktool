@@ -15,6 +15,7 @@
 from collections import namedtuple
 from typing import List, Union, Dict
 
+import ktool
 from ktool_macho import (MH_FLAGS, MH_FILETYPE, LOAD_COMMAND, BINDING_OPCODE, LOAD_COMMAND_MAP,
                     BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB, BIND_SUBOPCODE_THREADED_APPLY,
                     MH_MAGIC_64, CPUType, CPUSubTypeARM64, MH_MAGIC)
@@ -117,7 +118,11 @@ class MachOImageLoader:
 
                 if load_exports:
                     log.info("Loading Export Trie")
-                    image.export_trie = ExportTrie.from_image(image, cmd.export_off, cmd.export_size)
+                    try:
+                        image.export_trie = ExportTrie.from_image(image, cmd.export_off, cmd.export_size)
+                    except Exception as e:
+                        log.error(f'Error loading export trie: {e}')
+                        image.export_trie = None
 
             elif load_command == LOAD_COMMAND.FUNCTION_STARTS:
                 fs_start = cmd.dataoff
@@ -742,6 +747,12 @@ class BindingTable:
                 log.debug_tm(f'{BINDING_OPCODE(binding_opcode).name}: {hex(value)}')
                 cmd_start_addr = read_address
                 read_address += 1
+
+                # this is a strenuous calc to be running rn, so only do it if we HAVE TO
+                if log.LOG_LEVEL == ktool.LogLevel.DEBUG_TOO_MUCH:
+                    segment = list(self.image.segments.values())[seg_index]
+                    vm_address = segment.vm_address + seg_offset
+                    log.debug_tm(f'@ {hex(cmd_start_addr)} (-> {hex(vm_address)}) op->{BINDING_OPCODE(binding_opcode).name} current->{name}')
 
                 if binding_opcode == BINDING_OPCODE.THREADED:
                     if value == BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB:
