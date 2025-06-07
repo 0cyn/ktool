@@ -13,7 +13,7 @@
 #  Copyright (c) 0cyn 2021.
 #
 from collections import namedtuple
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Tuple, Optional
 
 import ktool
 from ktool_macho import (MH_FLAGS, MH_FILETYPE, LOAD_COMMAND, BINDING_OPCODE, LOAD_COMMAND_MAP,
@@ -122,6 +122,9 @@ class MachOImageLoader:
                         image.export_trie = ExportTrie.from_image(image, cmd.export_off, cmd.export_size)
                     except Exception as e:
                         log.error(f'Error loading export trie: {e}')
+                        # print traceback.format_exc())
+                        import traceback
+                        print(traceback.format_exc())
                         image.export_trie = None
 
             elif load_command == LOAD_COMMAND.FUNCTION_STARTS:
@@ -596,28 +599,29 @@ class ChainedFixups(Constructable):
         self.symbols = symbols
         self.rebases = rebases
 
-
 export_node = namedtuple("export_node", ['text', 'offset', 'flags'])
+
+class ExportNode:
+    """
+    Tree node for export trie entries, with name segment, offset, flags, and children.
+    """
+    def __init__(self, name: str, offset: Optional[int], flags: Optional[int]):
+        self.name = name
+        self.offset = offset
+        self.flags = flags
+        self.children: List['ExportNode'] = []
+
+    def __repr__(self):
+        return f"ExportNode(name={self.name!r}, offset={self.offset}, flags={self.flags}, children={len(self.children)})"
 
 
 class ExportTrie(Constructable):
-    @classmethod
-    def from_image(cls, image: Image, export_start: int, export_size: int) -> 'ExportTrie':
-        trie = ExportTrie()
 
-        endpoint = export_start + export_size
-        nodes = ExportTrie.read_node(image, export_start, '', export_start, endpoint)
-        symbols = []
-
-        for node in nodes:
-            if node.text:
-                symbols.append(Symbol.from_values(node.text, node.offset, False))
-
-        trie.nodes = nodes
-        trie.symbols = symbols
-        trie.raw = image.read_bytearray(export_start, export_size)
-
-        return trie
+    def __init__(self):
+        self.raw = bytearray()
+        self.nodes: List[export_node] = []
+        self.symbols: List[Symbol] = []
+        self.root: Optional[ExportNode] = None
 
     @classmethod
     def from_values(cls, *args, **kwargs):
@@ -626,45 +630,104 @@ class ExportTrie(Constructable):
     def raw_bytes(self):
         return self.raw
 
-    def __init__(self):
-        self.raw = bytearray()
-        self.nodes: List[export_node] = []
-        self.symbols: List[Symbol] = []
+    @classmethod
+    def from_image(cls, image: Image, export_start: int, export_size: int) -> 'ExportTrie':
+        trie = ExportTrie()
+        endpoint = export_start + export_size
+
+        # build hierarchical tree iteratively
+        trie.root = cls._read_node_tree_iter(image, export_start, endpoint)
+
+        # flatten nodes and symbols iteratively
+        flat: List[export_node] = []
+        symbols: List[Symbol] = []
+        stack = [trie.root]
+        while stack:
+            node = stack.pop()
+            if node.offset is not None:
+                flat.append(export_node(node.name, node.offset, node.flags))
+                symbols.append(Symbol.from_values(node.name, node.offset, False))
+            # push children so that we traverse in preorder
+            stack.extend(node.children[::-1])
+
+        trie.nodes = flat
+        trie.symbols = symbols
+        trie.raw = image.read_bytearray(export_start, export_size)
+        return trie
 
     @classmethod
-    def read_node(cls, image: Image, trie_start: int, string: str, cursor: int, endpoint: int) -> List[export_node]:
+    def _read_node_tree_iter(
+        cls,
+        image: Image,
+        trie_start: int,
+        endpoint: int
+    ) -> ExportNode:
+        """
+        Read a trie node and build an ExportNode tree using an explicit stack
+        instead of recursion.
+        """
+        root = ExportNode('', None, None)
+        stack: List[(ExportNode, int)] = [(root, trie_start)]
 
-        if cursor > endpoint:
-            log.error("Node offset greater than size of export trie")
-            macho_is_malformed()
+        while stack:
+            node, cursor = stack.pop()
+            terminal_size, cursor = image.read_uleb128(cursor)
+            child_start = cursor + terminal_size
 
-        start = cursor
-        terminal_size, cursor = image.read_uleb128(cursor)
-        results = []
-        log.debug_tm(f'@ {hex(start)} node: {hex(terminal_size)} current_symbol: {string}')
-        child_start = cursor + terminal_size
-        if terminal_size != 0:
-            log.debug_tm(f'TERM: 0')
-            size, cursor = image.read_uleb128(cursor)
-            flags = image.read_uint(cursor, 1)
-            log.debug_tm(f'FLAGS: {hex(flags)}')
-            cursor += 1
-            offset, cursor = image.read_uleb128(cursor)
-            results.append(export_node(string, offset, flags))
-        cursor = child_start
-        branches = image.read_uint(cursor, 1)
-        log.debug_tm(f'BRAN {branches}')
-        for i in range(0, branches):
-            if i == 0:
+            if terminal_size != 0:
+                _, cursor = image.read_uleb128(cursor)               # size (ignored)
+                flags = image.read_uint(cursor, 1)
                 cursor += 1
-            proc_str = image.read_cstr(cursor)
-            cursor += len(proc_str) + 1
-            offset, cursor = image.read_uleb128(cursor)
-            log.debug_tm(f'({i}) string: {string + proc_str} next_node: {hex(trie_start + offset)}')
-            results += ExportTrie.read_node(image, trie_start, string + proc_str, trie_start + offset, endpoint)
+                offset, cursor = image.read_uleb128(cursor)
+                node.offset = offset
+                node.flags = flags
 
-        return results
+            cursor = child_start
+            branches = image.read_uint(cursor, 1)
+            cursor += 1
 
+            branch_infos: List[(str, int)] = []
+            for _ in range(branches):
+                proc_str = image.read_cstr(cursor)
+                cursor += len(proc_str) + 1
+                offset_loc, cursor = image.read_uleb128(cursor)
+                if offset_loc == 0:
+                    log.error("Export trie has zero offset, table is malformed and unparsable")
+                    return ExportNode('', None, None)
+                branch_infos.append((proc_str, offset_loc))
+
+            # create each child node and push onto stack
+            # reverse so that the first branch is processed first
+            for proc_str, offset_loc in reversed(branch_infos):
+                child = ExportNode(node.name + proc_str, None, None)
+                node.children.append(child)
+                stack.append((child, trie_start + offset_loc))
+
+        return root
+
+    def print_tree(self):
+        """
+        Print the export trie as an ASCII tree starting from the root,
+        using an explicit stack instead of recursion.
+        """
+        if not self.root:
+            print("<empty export trie>")
+            return
+
+        stack = [(self.root, '', True)]
+        while stack:
+            node, prefix, is_last = stack.pop()
+            connector = '└── ' if is_last else '├── '
+            if node.offset is not None:
+                label = f"{node.name} (offset=0x{node.offset:x}, flags=0x{node.flags:x})"
+            else:
+                label = node.name or '<root>'
+            print(prefix + connector + label)
+
+            child_prefix = prefix + ('    ' if is_last else '│   ')
+            for idx, child in enumerate(reversed(node.children)):
+                last = (idx == 0)
+                stack.append((child, child_prefix, last))
 
 action = namedtuple("action", ["vmaddr", "libname", "item"])
 record = namedtuple("record", ["off", "seg_index", "seg_offset", "lib_ordinal", "type", "flags", "name", "addend",

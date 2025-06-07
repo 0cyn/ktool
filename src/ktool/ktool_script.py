@@ -307,6 +307,14 @@ def main():
 
     parser_ent.set_defaults(func=commands.ent, get_ent=False, slice_index=0)
 
+    parser_trie_unwrap = subparsers.add_parser('untrie', help='Unwrap export trie')
+    parser_trie_unwrap.add_argument('filename', nargs='?', default='')
+
+    parser_trie_unwrap.add_argument('--slice', dest='slice_index', type=int,
+                                    help="Specify Index of Slice (in FAT MachO) to examine")
+
+    parser_trie_unwrap.set_defaults(func=commands.trie_unwrap, slice_index=0)
+
     # process the arguments the user passed us.
     # it is worth noting i set the default for `func` on each command parser to a function named without ();
     # this means when that command is used, calling args.func() will branch off to that function.
@@ -1027,6 +1035,18 @@ class MachOFileCommands:
                     out.write(kext.image.slice.full_bytes_for_slice())
             else:
                 print('Kext Not Found')
+
+    @staticmethod
+    def trie_unwrap(args):
+        """
+
+        :return:
+        """
+
+        require_args(args, one_of=['filename'])
+        with open(args.filename, 'rb') as fd:
+            image = ktool.load_image(fd, args.slice_index, use_mmaped_io=MMAP_ENABLED)
+            image.export_trie.print_tree()
 
 
 if __name__ == "__main__":
