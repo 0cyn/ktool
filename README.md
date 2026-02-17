@@ -4,7 +4,7 @@
 </a>
 </p>
 <h4 align="center">
-MachO/ObjC Analysis + Editing toolkit.
+MachO/ObjC Analysis analysis tool.
 </h4>
 <p align="center">
   <a href="https://github.com/kritantadev/ktool/actions/workflows/tests.yml">
@@ -97,6 +97,8 @@ Tested on:
 
 #### Special thanks to
 
+Everyone who has contributed in the past and helped make this into a tool that is actually useful for people other than myself. 
+
 JLevin and *OS Internals for existing
 
 arandomdev for guidance + code
@@ -104,3 +106,6 @@ arandomdev for guidance + code
 Blacktop for their amazing ipsw project: https://github.com/blacktop/ipsw  
 
 Artists behind the images used in this project's logo: https://github.com/0cyn/ktool/tree/master/EXTERNAL_LICENSES#image-notes
+
+Dani R* who helped motivate me to make this tech demo project into something, and everything else I ever managed to start, to chase lofty unreachable goals in spite of myself; to whom this project is dedicated, and to whom I promise I will find something more interesting to dedicate. 
+
