@@ -106,7 +106,8 @@ class ChainedFixupPointerGeneric(Enum):
     Generic64FixupFormat = 1
     Generic32FixupFormat = 2
     Firmware32FixupFormat = 3
-    Error = 4
+    Kernel64FixupFormat = 4
+    Error = 5
 
 
 class dyld_chained_import(Struct):
@@ -315,6 +316,15 @@ class ChainedFixupPointer32(Struct):
 
 class ChainedFixupPointer64(Struct):
     _FIELDS = {'generic64': ChainedFixupPointer64Union}
+    SIZE = 8
+
+    def __init__(self, byte_order="little"):
+        super().__init__(fields=self._FIELDS.keys(), sizes=self._FIELDS.values(), byte_order=byte_order)
+
+
+class ChainedFixupKernel64(Struct):
+    _FIELDS = {'value': Bitfield({'target': 30, 'cacheLevel': 2, 'diversity': 16, 'addrDiv': 1, 'key': 2, 'next': 12,
+                                  'auth': 1})}
     SIZE = 8
 
     def __init__(self, byte_order="little"):

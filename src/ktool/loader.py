@@ -430,7 +430,6 @@ class ChainedFixups(Constructable):
             stride_size: int = 0
             ptr_format: ChainedFixupPointerGeneric = ChainedFixupPointerGeneric.Error
 
-            log.debug_tm(f"Pointer Format: {ptr_format.name}")
             if starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E.value,
                                          dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND.value,
                                          dyld_chained_ptr_format.DYLD_CHAINED_PTR_ARM64E_USERLAND24.value]:
@@ -440,8 +439,7 @@ class ChainedFixups(Constructable):
                 stride_size = 4
                 ptr_format = ChainedFixupPointerGeneric.GenericArm64eFixupFormat
             elif starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_64.value,
-                                           dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET.value,
-                                           dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_KERNEL_CACHE.value]:
+                                           dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_OFFSET.value]:
                 stride_size = 4
                 ptr_format = ChainedFixupPointerGeneric.Generic64FixupFormat
             elif starts.pointer_format in [dyld_chained_ptr_format.DYLD_CHAINED_PTR_32.value,
@@ -451,14 +449,18 @@ class ChainedFixups(Constructable):
             elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_32_FIRMWARE.value:
                 stride_size = 4
                 ptr_format = ChainedFixupPointerGeneric.Generic64FixupFormat
+            elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_64_KERNEL_CACHE.value:
+                stride_size = 4
+                ptr_format = ChainedFixupPointerGeneric.Kernel64FixupFormat
             elif starts.pointer_format == dyld_chained_ptr_format.DYLD_CHAINED_PTR_x86_64_KERNEL_CACHE.value:
                 stride_size = 1
-                ptr_format = ChainedFixupPointerGeneric.Generic64FixupFormat
+                ptr_format = ChainedFixupPointerGeneric.Kernel64FixupFormat
             else:
                 log.error(f"Unsupported Pointer Format {starts.pointer_format}")
                 log.error(f'{hex(fixup_header.off)} @ {fixup_header.render_indented()}')
                 log.error(f"{starts.render_indented()}")
                 return cls([])
+            # log.debug_tm(f"Pointer Format: {ptr_format.name} | starts.ptr_format: {dyld_chained_ptr_format(starts.pointer_format).name} | ")
             log.debug_tm(f"Stride Size: {stride_size}")
 
             page_start_offsets: List[List[int]] = []
@@ -497,10 +499,13 @@ class ChainedFixups(Constructable):
                         mapped_cursor = image.vm.de_translate(cursor)
                         pointer32: ChainedFixupPointer32 = None
                         pointer64: ChainedFixupPointer64 = None
+                        pointerKern64: ChainedFixupKernel64 = None
 
                         if ptr_format in [ChainedFixupPointerGeneric.Generic32FixupFormat,
                                           ChainedFixupPointerGeneric.Firmware32FixupFormat]:
                             pointer32 = image.read_struct(cursor, ChainedFixupPointer32)
+                        elif ptr_format == ChainedFixupPointerGeneric.Kernel64FixupFormat:
+                            pointerKern64 = image.read_struct(cursor, ChainedFixupKernel64)
                         else:
                             pointer64 = image.read_struct(cursor, ChainedFixupPointer64)
 
@@ -518,6 +523,9 @@ class ChainedFixups(Constructable):
                         elif ptr_format == ChainedFixupPointerGeneric.Firmware32FixupFormat:
                             bind = False
                             next_entry_stride_count = pointer32.generic32.dyld_chained_ptr_32_firmware_rebase
+                        elif ptr_format == ChainedFixupPointerGeneric.Kernel64FixupFormat:
+                            bind = False
+                            next_entry_stride_count = pointerKern64.next
                         else:
                             log.error("unreachable")
                             return cls([])
@@ -547,6 +555,7 @@ class ChainedFixups(Constructable):
                                 target_addr = mapped_cursor
                                 sym = Symbol.from_values(entry.name, target_addr, external=True, ordinal=entry.ord)
                                 syms.append(sym)
+                                rebases[mapped_cursor + image.vm.vm_base_addr] = 0
 
                         else: #rebase
                             entry_offset = 0
@@ -599,7 +608,9 @@ class ChainedFixups(Constructable):
         self.symbols = symbols
         self.rebases = rebases
 
+
 export_node = namedtuple("export_node", ['text', 'offset', 'flags'])
+
 
 class ExportNode:
     """

@@ -665,22 +665,13 @@ class Class(Constructable):
 
         load_errors = []
         struct_list = []
-        # FIXME REBASE OPCODES PLEASEEE
-        class_ptr = class_ptr & 0xFFFFFFFFF
 
         if not meta:
             log.debug_more(f'Loading Class From {hex(class_ptr)}')
         else:
             log.debug_more(f'Loading metaclass From {hex(class_ptr)}')
         if not class_ptr_is_direct:
-            if not objc_image.vm_check(class_ptr):
-                # k this just looks wrong, like this isn't how it works, something is WEIRD here
-                # maybe this is like me horribly misunderstanding chainedfixup rebase opcodes at the time
-                # and it works by some stroke of horrible luck??
-                # TODO RANCID HORRIBLE FIX THIS IMPLEMENT REBASE OPCODES
-                objc2_class_location = objc_image.read_ptr(class_ptr, vm=False)
-            else:
-                objc2_class_location = objc_image.read_ptr(class_ptr, vm=True)
+            objc2_class_location = objc_image.read_ptr(class_ptr, vm=True)
         else:
             objc2_class_location = class_ptr
 
@@ -688,10 +679,10 @@ class Class(Constructable):
 
             if opts.OBJC_LOAD_ERRORS_SEND_TO_DEBUG:
                 log.debug(
-                    f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '-'} failed")
+                    f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '`?`'} failed")
             else:
                 log.error(
-                    f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '-'} failed")
+                    f"Loading a class @ {hex(class_ptr)} {objc_image.image.symbols[class_ptr] if class_ptr in objc_image.image.symbols else '`?`'} failed")
             objc_image.class_map[class_ptr] = None
             return None
 
@@ -724,13 +715,12 @@ class Class(Constructable):
         else:
             superclass_name = ''
 
-        # girl what
-        ro_location = objc2_class_item.info >> (1 << 1) << 2
+        ro_location = (objc2_class_item.info >> 2) << 2
 
         try:
             objc2_class_ro_item = objc_image.read_struct(ro_location, objc2_class_ro, vm=True)
         except ValueError:
-            log.warn("Class Data is off-image")
+            log.warn(f"Class Data (c: {hex(objc2_class_item.off)}) is off-image")
             return None
         if not meta:
             try:
@@ -751,6 +741,9 @@ class Class(Constructable):
 
             for i in range(1, proplist_head.count + 1):
                 prop = objc_image.read_struct(ea, objc2_prop, vm=True)
+                if proplist_head.count > 1000:
+                    log.warning(f'Class {name} has too many properties ({proplist_head.count}), skipping loading properties')
+                    break
 
                 try:
                     property = Property.from_image(objc_image, prop)
@@ -774,6 +767,9 @@ class Class(Constructable):
 
         if objc2_class_ro_item.base_meths != 0:
             methlist_head = objc_image.read_struct(objc2_class_ro_item.base_meths, objc2_meth_list)
+            if methlist_head.count > 1000:
+                log.warning(f'Class {name} has too many methods ({methlist_head.count}), skipping loading methods')
+                return None
 
             methlist = MethodList(objc_image, methlist_head, objc2_class_ro_item.base_meths, meta, name)
 
