@@ -25,12 +25,7 @@ from collections import namedtuple
 from enum import Enum
 from typing import Union
 
-try:
-    # noinspection PyProtectedMember
-    from pkg_resources import packaging
-except ImportError:
-    # noinspection PyProtectedMember
-    from pkg_resources._vendor import packaging
+import packaging
 
 import ktool
 from ktool_macho import LOAD_COMMAND

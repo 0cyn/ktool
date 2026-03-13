@@ -24,7 +24,7 @@ import shutil
 from ktool_macho import Struct, FAT_CIGAM, FAT_MAGIC, MH_CIGAM, MH_CIGAM_64, MH_MAGIC, MH_MAGIC_64
 from ktool.exceptions import *
 
-import pkg_resources
+import importlib.metadata
 
 import lib0cyn.log as log
 
@@ -39,8 +39,8 @@ except:
     JsonLexer = None
 
 try:
-    KTOOL_VERSION = pkg_resources.get_distribution('k2l').version
-except pkg_resources.DistributionNotFound:
+    KTOOL_VERSION = importlib.metadata.version('k2l')
+except importlib.metadata.PackageNotFoundError:
     KTOOL_VERSION = '1.0.0'
 THREAD_COUNT = os.cpu_count() - 1
 
